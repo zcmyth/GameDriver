@@ -57,14 +57,15 @@ class Game(object):
     open_cv_image = numpy.array(pil_image)
     self.frame = cv2.cvtColor(open_cv_image, cv2.COLOR_BGR2GRAY)
 
-  def showScreenshot(self, image=None):
+  def showScreenshot(self, image=None, threshold=THRESHOLD):
     self.screenshot()
     img_copy = self.frame.copy()
     if image:
       if isinstance(image, str):
         image = loadImage(image)
       w, h = image.shape[::-1]
-      center = match(self.frame, image)
+      center = match(self.frame, image, threshold)
+      print center
       if center:
         cv2.rectangle(img_copy,
                       (center[0] - w / 2,center[1] - h / 2),

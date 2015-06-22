@@ -5,29 +5,19 @@ BBOX = (0, 0, 1440, 900)
 IMAGES = [
     'login',
     'login2',
-    'ok'
+    'ok',
+    'ghost',
+    'begin_ghost'
 ]
 
-class GhostHandler(ImageMatchEventHandler):
-  def __init__(self):
-    self.image = loadImage('ghost')
-    self.begin = loadImage('begin_ghost')
-
-  def handle(self, game):
-    game.click(self.center)
-    time.sleep(2)
-    begin_center = match(game.frame, self.begin)
-    if begin_center:
-      game.click(begin_center)
-
-
 def main():
-  game = Game(BBOX, 5)
+  game = Game(BBOX, 3)
   for image in IMAGES:
     game.addEventHandler(ImageMatchEventHandler(image))
-  game.addEventHandler(GhostHandler())
   game.start()
 
 
 if __name__ == "__main__":
   main()
+  #game = Game((0,0,1440,900))
+  #game.showScreenshot('begin_ghost', 0.9)
