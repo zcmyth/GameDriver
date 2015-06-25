@@ -1,7 +1,6 @@
 import time
 from game import ImageMatchEventHandler, Game, match, loadImage
 
-BBOX = (0, 0, 1440, 900)
 IMAGES = [
     'login',
     'login2',
@@ -33,13 +32,9 @@ class BuyHandler(ImageMatchEventHandler):
     if close:
       game.click(close)
 
-class Mhxy(Game):
-  def next(self):
-    self.tabKey('1')
-
 
 def main():
-  game = Mhxy(BBOX, 5)
+  game = Game(5)
   for image in IMAGES:
     game.addEventHandler(ImageMatchEventHandler(image))
   game.addEventHandler(BuyHandler())

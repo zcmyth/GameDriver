@@ -1,7 +1,6 @@
 import time
 from game import ImageMatchEventHandler, Game, match, loadImage
 
-BBOX = (0, 0, 1440, 900)
 IMAGES = [
     'login',
     'login2',
@@ -10,8 +9,14 @@ IMAGES = [
     'begin_ghost'
 ]
 
+
+class Mhxy(Game):
+  def next(self):
+    pass
+
+
 def main():
-  game = Game(BBOX, 3)
+  game = Mhxy(3)
   for image in IMAGES:
     game.addEventHandler(ImageMatchEventHandler(image))
   game.start()
@@ -19,5 +24,5 @@ def main():
 
 if __name__ == "__main__":
   main()
-  #game = Game((0,0,1440,900))
-  #game.showScreenshot('begin_ghost', 0.9)
+  #game = Game()
+  #game.showScreenshot('begin_ghost', 0.8)

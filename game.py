@@ -1,17 +1,19 @@
 import cv2
 import numpy
 import time
-import pyscreenshot as ImageGrab
 from matplotlib import pyplot as plt
-from pymouse import PyMouse
-from pykeyboard import PyKeyboard
+from com.dtmilano.android.viewclient import ViewClient
 
-
-THRESHOLD = 0.9
+DEFAULT_RESOLUTION = 1440.0
+CURRENT_RESOLUTION = 1280
+ACTION = (1200, 200)
+SCALE = CURRENT_RESOLUTION / DEFAULT_RESOLUTION
+THRESHOLD = 0.8
 
 
 def loadImage(name):
-  return cv2.imread('images/' + name + '.bmp', 0)
+  original = cv2.imread('images/' + name + '.bmp', 0)
+  return cv2.resize(original, (0,0), fx=SCALE, fy=SCALE) 
 
 
 def match(screenshot, query_image, threshold=THRESHOLD):
@@ -35,25 +37,22 @@ class ImageMatchEventHandler(object):
     
 
 class Game(object):
-  def __init__(self, bbox, delay=2):
-    self.bbox = bbox
-    self.mouse = PyMouse()
-    self.keyboard = PyKeyboard()
+  def __init__(self, delay=2):
+    self.device, _ = ViewClient.connectToDeviceOrExit(verbose=False)
     self.handlers = []
     self.delay = delay
 
-  def click(self, point):
-    self.mouse.click(self.bbox[0] + point[0],
-                self.bbox[1] + point[1], 1)
-
-  def tabKey(self, key):
-    self.keyboard.tap_key(key)
+  def click(self, point1, point2=None):
+    center = point1
+    if point2:
+      center = ((point1[0] + point2[0])/2, (point1[1] + point2[1])/2)
+    self.device.touch(center[0], center[1])
 
   def addEventHandler(self, handler):
     self.handlers.append(handler)
 
   def screenshot(self):
-    pil_image = ImageGrab.grab(self.bbox).convert('RGB')
+    pil_image = self.device.takeSnapshot(True)
     open_cv_image = numpy.array(pil_image)
     self.frame = cv2.cvtColor(open_cv_image, cv2.COLOR_BGR2GRAY)
 
@@ -65,7 +64,6 @@ class Game(object):
         image = loadImage(image)
       w, h = image.shape[::-1]
       center = match(self.frame, image, threshold)
-      print center
       if center:
         cv2.rectangle(img_copy,
                       (center[0] - w / 2,center[1] - h / 2),
@@ -75,7 +73,7 @@ class Game(object):
     plt.show()
     
   def next(self):
-    pass
+    self.click(ACTION)
 
   def start(self):
     while True:
