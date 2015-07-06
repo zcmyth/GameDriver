@@ -6,7 +6,8 @@ IMAGES = [
     'login2',
     'ok',
     'ghost',
-    'begin_ghost'
+    'begin_ghost',
+    'close'
 ]
 
 
