@@ -11,7 +11,8 @@ IMAGES = [
     'submit',
     'gang_task',
     'gang_fight',
-    'gang_read'
+    'gang_read',
+    'shoufu'
 ]
 
 class BuyHandler(ImageMatchEventHandler):
@@ -34,7 +35,7 @@ class BuyHandler(ImageMatchEventHandler):
 
 
 def main():
-  game = Game(5)
+  game = Game(3)
   for image in IMAGES:
     game.addEventHandler(ImageMatchEventHandler(image))
   game.addEventHandler(BuyHandler())

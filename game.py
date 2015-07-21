@@ -4,16 +4,16 @@ import time
 from matplotlib import pyplot as plt
 from com.dtmilano.android.viewclient import ViewClient
 
-DEFAULT_RESOLUTION = 1440.0
-CURRENT_RESOLUTION = 1280
-ACTION = (1200, 200)
+DEFAULT_RESOLUTION = 1440
+CURRENT_RESOLUTION = 1440
+ACTION = (1400, 230)
 SCALE = CURRENT_RESOLUTION / DEFAULT_RESOLUTION
 THRESHOLD = 0.8
 
 
 def loadImage(name):
-  original = cv2.imread('images/' + name + '.bmp', 0)
-  return cv2.resize(original, (0,0), fx=SCALE, fy=SCALE) 
+  return cv2.imread('images/' + name + '.bmp', 0)
+  #return cv2.resize(original, (0,0), fx=SCALE, fy=SCALE) 
 
 
 def match(screenshot, query_image, threshold=THRESHOLD):
