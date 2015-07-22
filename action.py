@@ -19,8 +19,8 @@ class MultiClickAction(object):
 
     def __call__(self, game):
         for name in self._names:
+            game.screenshot()
             if not game.clickImage(name):
                 return False
-            game.screenshot()
         game.setStatus(self._status)
         return True

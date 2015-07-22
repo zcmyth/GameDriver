@@ -9,12 +9,14 @@ DEFAULT_RESOLUTION = 1440.0
 
 class Game(object):
 
-    def __init__(self, width=1440, delay=2, threshold=0.8):
+    def __init__(self, delay=2, width=1440, threshold=0.8):
         self._device, _ = ViewClient.connectToDeviceOrExit(verbose=False)
         self._actions = []
         self._delay = delay
         self._scale = width / DEFAULT_RESOLUTION
         self._image_cache = {}
+        self._threshold = threshold
+        self._status = None
 
     def _getImage(self, name):
         if name in self._image_cache:
@@ -27,7 +29,7 @@ class Game(object):
     def screenshot(self):
         # wait the screen to be stable
         time.sleep(self._delay)
-        pil_image = self.device.takeSnapshot(True)
+        pil_image = self._device.takeSnapshot(True)
         open_cv_image = numpy.array(pil_image)
         self._screen = cv2.cvtColor(open_cv_image, cv2.COLOR_BGR2GRAY)
 
