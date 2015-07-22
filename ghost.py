@@ -1,5 +1,5 @@
-import time
-from game import ImageMatchEventHandler, Game, match, loadImage
+from game import Game
+from action import SingleClickAction
 
 IMAGES = [
     'login',
@@ -11,19 +11,12 @@ IMAGES = [
 ]
 
 
-class Mhxy(Game):
-  def next(self):
-    pass
-
-
 def main():
-  game = Mhxy(3)
-  for image in IMAGES:
-    game.addEventHandler(ImageMatchEventHandler(image))
-  game.start()
+    game = Game(3)
+    for image in IMAGES:
+        game.addAction(SingleClickAction(image))
+    game.start()
 
 
 if __name__ == "__main__":
-  main()
-  #game = Game()
-  #game.showScreenshot('begin_ghost', 0.8)
+    main()

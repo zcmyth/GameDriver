@@ -1,5 +1,5 @@
-import time
-from game import ImageMatchEventHandler, Game, match, loadImage
+from game import Game
+from action import SingleClickAction, MultiClickAction
 
 IMAGES = [
     'login',
@@ -12,37 +12,21 @@ IMAGES = [
     'gang_task',
     'gang_fight',
     'gang_read',
-    'shoufu'
+    'shoufu',
+    'close'
 ]
 
-class BuyHandler(ImageMatchEventHandler):
-  def __init__(self):
-    self.image = loadImage('buy')
-    self.need = loadImage('need')
-    self.close = loadImage('close')
-
-  def handle(self, game):
-    time.sleep(2)
-    need_center = match(game.frame, self.need)
-    if need_center:
-      game.click(need_center)
-      time.sleep(2)
-    game.click(self.center)
-    time.sleep(2)
-    close = match(game.frame, self.close)
-    if close:
-      game.click(close)
+ACTION = (1400, 230)
 
 
 def main():
-  game = Game(3)
-  for image in IMAGES:
-    game.addEventHandler(ImageMatchEventHandler(image))
-  game.addEventHandler(BuyHandler())
-  game.start()
+    game = Game(3)
+    for image in IMAGES:
+        game.addAction(SingleClickAction(image))
+    game.addAction(MultiClickAction('buy', 'need', 'close'))
+    game.addAction(lambda g: g.click(ACTION))
+    game.start()
 
 
 if __name__ == "__main__":
-  main()
-  #game = Mhxy((0,0,100,100))
-  #game.showScreenshot()
+    main()
