@@ -12,7 +12,7 @@ IMAGES = [
 
 
 def main():
-    game = Game(3)
+    game = Game()
     for image in IMAGES:
         game.addAction(SingleClickAction(image))
     game.start()

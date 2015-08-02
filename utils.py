@@ -1,4 +1,4 @@
-＃ Credit to gregburek@ and andresriancho@
+# Credit to gregburek@ and andresriancho@
 import time
 
 from functools import wraps
@@ -15,7 +15,6 @@ def rate_limited(max_per_second):
 
         @wraps(func)
         def rate_limited_function(*args, **kwargs):
-            nonlocal last_time_called
             elapsed = time.clock() - last_time_called[0]
             left_to_wait = min_interval - elapsed
 
