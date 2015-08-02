@@ -1,6 +1,6 @@
 import cv2
 import numpy
-import time
+import utils
 from com.dtmilano.android.viewclient import ViewClient
 
 # the screenshot is taken under the resolution below
@@ -9,10 +9,9 @@ DEFAULT_RESOLUTION = 1440.0
 
 class Game(object):
 
-    def __init__(self, delay=2, width=1440, threshold=0.8):
+    def __init__(self, width=1440, threshold=0.8):
         self._device, _ = ViewClient.connectToDeviceOrExit(verbose=False)
         self._actions = []
-        self._delay = delay
         self._scale = width / DEFAULT_RESOLUTION
         self._image_cache = {}
         self._threshold = threshold
@@ -26,9 +25,9 @@ class Game(object):
         self._image_cache[name] = resized
         return resized
 
+    @utils.rate_limited(0.5)
     def screenshot(self):
         # wait the screen to be stable
-        time.sleep(self._delay)
         pil_image = self._device.takeSnapshot(True)
         open_cv_image = numpy.array(pil_image)
         self._screen = cv2.cvtColor(open_cv_image, cv2.COLOR_BGR2GRAY)

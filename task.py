@@ -19,7 +19,7 @@ ACTION = (1400, 230)
 
 
 def main():
-    game = Game(3)
+    game = Game()
     game.addAction(MultiClickAction(['need', 'buy', 'close'], 'buy'))
     for image in IMAGES:
         game.addAction(SingleClickAction(image))
