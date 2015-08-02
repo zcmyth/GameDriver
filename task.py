@@ -7,11 +7,10 @@ IMAGES = [
     'ok',
     'task',
     'fight',
-    'use_book',
+    'use',
     'submit',
     'gang_task',
     'gang_fight',
-    'gang_read',
     'shoufu',
     'close'
 ]
