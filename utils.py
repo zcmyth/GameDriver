@@ -4,7 +4,7 @@ import time
 from functools import wraps
 
 
-def rate_limited(max_per_second):
+def rate_limited(max_per_second, block=True):
     """
     Decorator that make functions not be called faster than
     """
@@ -18,12 +18,12 @@ def rate_limited(max_per_second):
             elapsed = time.clock() - last_time_called[0]
             left_to_wait = min_interval - elapsed
 
+            if left_to_wait > 0 and not block:
+                return
             if left_to_wait > 0:
                 time.sleep(left_to_wait)
-
-            ret = func(*args, **kwargs)
             last_time_called[0] = time.clock()
-            return ret
+            return func(*args, **kwargs)
 
         return rate_limited_function
 

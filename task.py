@@ -5,17 +5,17 @@ IMAGES = [
     'login',
     'login2',
     'ok',
-    'task',
     'fight',
     'use',
     'submit',
+    'task',
     'gang_task',
     'gang_fight',
     'shoufu',
     'close'
 ]
 
-ACTION = (1400, 230)
+ACTION = (1100, 230)
 
 
 def main():
