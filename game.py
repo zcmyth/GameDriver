@@ -9,7 +9,7 @@ DEFAULT_RESOLUTION = 1440.0
 
 class Game(object):
 
-    def __init__(self, width=1196, threshold=0.8):
+    def __init__(self, width=1280, threshold=0.8):
         self._device, _ = ViewClient.connectToDeviceOrExit(verbose=False)
         self._actions = []
         self._scale = width / DEFAULT_RESOLUTION

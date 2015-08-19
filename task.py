@@ -15,7 +15,7 @@ IMAGES = [
     'close'
 ]
 
-ACTION = (1100, 230)
+ACTION = (1200, 230)
 
 
 def main():

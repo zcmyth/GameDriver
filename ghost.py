@@ -13,6 +13,7 @@ IMAGES = [
 def startGhost(g):
     if g.clickImage('ghost'):
         for i in range(10):
+            g.screenshot()
             if g.clickImage('begin_ghost'):
                 break
 
