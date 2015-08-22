@@ -60,9 +60,9 @@ class Game(object):
         self._actions.append(action)
 
     def setStatus(self, status):
-        if self._status != status:
-            self._status = status
-            print status
+        #if self._status != status:
+        #    self._status = status
+        print status
 
     def start(self):
         while True:
