@@ -25,7 +25,7 @@ class Game(object):
         self._image_cache[name] = resized
         return resized
 
-    @utils.rate_limited(0.5)
+    @utils.rate_limited(0.3)
     def screenshot(self):
         # wait the screen to be stable
         pil_image = self._device.takeSnapshot(True)
