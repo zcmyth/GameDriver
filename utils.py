@@ -15,14 +15,14 @@ def rate_limited(max_per_second, block=True):
 
         @wraps(func)
         def rate_limited_function(*args, **kwargs):
-            elapsed = time.clock() - last_time_called[0]
+            elapsed = time.time() - last_time_called[0]
             left_to_wait = min_interval - elapsed
 
             if left_to_wait > 0 and not block:
                 return
             if left_to_wait > 0:
                 time.sleep(left_to_wait)
-            last_time_called[0] = time.clock()
+            last_time_called[0] = time.time()
             return func(*args, **kwargs)
 
         return rate_limited_function
