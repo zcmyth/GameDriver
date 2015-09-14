@@ -2,6 +2,7 @@ from game import Game
 from action import SingleClickAction, MultiClickAction
 
 IMAGES = [
+    'ok1',
     'login',
     'login2',
     'ok',

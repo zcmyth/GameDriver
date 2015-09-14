@@ -3,6 +3,7 @@ from utils import rate_limited
 from action import SingleClickAction
 
 IMAGES = [
+    'ok1',
     'login',
     'login2',
     'ok',
