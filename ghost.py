@@ -11,17 +11,17 @@ IMAGES = [
 
 
 def startGhost(g):
-    if g.clickImage('ghost'):
+    if g.clickImage('task'):
         for i in range(3):
             g.screenshot()
-            print 'try click begin_ghost'
-            if g.clickImage('begin_ghost'):
+            print 'try click ghost'
+            if g.clickImage('ghost'):
                 print 'clicked'
 
 
 @rate_limited(0.03, block=False)
 def clickBeginGhost(g):
-    if g.clickImage('begin_ghost'):
+    if g.clickImage('ghost'):
         print 'dumb ass move'
 
 
