@@ -17,9 +17,24 @@ IMAGES = [
 
 ACTION = (1200, 230)
 
+def click(g, image):
+    g.screenshot()
+    g.clickImage(image)
+    g.screenshot()
+    g.clickImage(image)
+
+def guaji_if_no_money(g):
+    if g.find('nomoney'):
+        click(g, 'nmclose')
+        click(g, 'close')
+        click(g, 'guaji')
+        click(g, 'hell')
+        exit()
+
 
 def main():
     game = Game()
+    game.addAction(guaji_if_no_money)
     game.addAction(MultiClickAction(['need', 'buy', 'close'], 'buy'))
     for image in IMAGES:
         game.addAction(SingleClickAction(image))
