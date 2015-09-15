@@ -1,5 +1,6 @@
 from game import Game
 from action import SingleClickAction, MultiClickAction
+import time
 
 IMAGES = [
     'ok1',
@@ -29,7 +30,8 @@ def guaji_if_no_money(g):
         click(g, 'close')
         click(g, 'guaji')
         click(g, 'hell')
-        exit()
+        print 'chuang shuo 20 mins'
+        time.sleep(20 * 60)
 
 
 def main():
