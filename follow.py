@@ -2,9 +2,9 @@ from game import Game
 from action import SingleClickAction
 
 IMAGES = [
+    'ok',
     'login',
     'login2',
-    'ok',
     'close'
 ]
 

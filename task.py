@@ -3,10 +3,9 @@ from action import SingleClickAction, MultiClickAction
 import time
 
 IMAGES = [
-    'ok1',
+    'ok',
     'login',
     'login2',
-    'ok',
     'fight',
     'use',
     'submit',
