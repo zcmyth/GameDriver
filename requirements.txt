@@ -1,5 +1,2 @@
-six
-pymouse
-pykeyboard
 Pillow
-pyscreenshot
+androidviewclient
