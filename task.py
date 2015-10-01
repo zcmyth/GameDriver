@@ -25,6 +25,7 @@ def click(g, image):
 
 def guaji_if_no_money(g):
     if g.find('nomoney'):
+        print '\a'
         click(g, 'nmclose')
         click(g, 'close')
         click(g, 'guaji')
