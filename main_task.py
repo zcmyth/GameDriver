@@ -9,12 +9,16 @@ IMAGES = [
   'continue'
 ]
 
-ACTION = (1200, 230)
+ACTION = (1200, 330)
 
 def task(g):
+    point = g.find('bang_help')
+    if point:
+        g.click((point[0], point[1] - 70))
+        return
     point = g.find('video')
     if point:
-        g.click((point[0], point[1] - 130))
+        g.click((point[0], point[1] - 70))
 
 @rate_limited(0.2, block=False)
 def clickNext(g):
