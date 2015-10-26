@@ -1,13 +1,8 @@
 from game import Game
 from action import SingleClickAction
 import time
+import utils
 
-IMAGES = [
-    'login',
-    'login2',
-    'ok',
-    'close'
-]
 
 def baby(g):
   if g.find('baby'):
@@ -29,7 +24,7 @@ def defence_for_target(g):
 
 def main():
     game = Game()
-    for image in IMAGES:
+    for image in utils.COMMON:
         game.addAction(SingleClickAction(image))
     game.addAction(defence_for_target)
     game.start()

@@ -1,6 +1,15 @@
 # Credit to gregburek@ and andresriancho@
 import time
 
+COMMON = [
+    'ok',
+    'login',
+    'login2',
+    'submit',
+    'close',
+    'close2'
+]
+
 from functools import wraps
 
 

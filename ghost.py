@@ -1,14 +1,6 @@
 from game import Game
-from utils import rate_limited
+from utils import rate_limited, COMMON
 from action import SingleClickAction
-
-IMAGES = [
-    'ok',
-    'login',
-    'login2',
-    'close'
-]
-
 
 def startGhost(g):
     if g.clickImage('task'):
@@ -27,7 +19,7 @@ def clickBeginGhost(g):
 
 def main():
     game = Game()
-    for image in IMAGES:
+    for image in COMMON:
         game.addAction(SingleClickAction(image))
     game.addAction(startGhost)
     game.addAction(clickBeginGhost)

@@ -1,44 +1,20 @@
 from game import Game
 from action import SingleClickAction, MultiClickAction
 import time
-
-IMAGES = [
-    'ok',
-    'login',
-    'login2',
-    'fight',
-    'use',
-    'submit',
-    'task',
-    'gang_fight',
-    'shoufu',
-    'close'
-]
+import utils
 
 ACTION = (1200, 230)
 
-def click(g, image):
-    g.screenshot()
-    g.clickImage(image)
-    g.screenshot()
-    g.clickImage(image)
-
-def guaji_if_no_money(g):
-    if g.find('nomoney'):
-        print '\a'
-        click(g, 'nmclose')
-        click(g, 'close')
-        click(g, 'guaji')
-        click(g, 'hell')
-        print 'chuang shuo 20 mins'
-        time.sleep(20 * 60)
-
+def task(g):
+    point = g.find('choose')
+    if point:
+        g.click((point[0], point[1] + 80))
 
 def main():
     game = Game()
-    game.addAction(guaji_if_no_money)
+    game.addAction(task)
     game.addAction(MultiClickAction(['need', 'buy', 'close'], 'buy'))
-    for image in IMAGES:
+    for image in utils.COMMON:
         game.addAction(SingleClickAction(image))
     game.addAction(lambda g: g.click(ACTION))
     game.start()

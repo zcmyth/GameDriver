@@ -1,17 +1,11 @@
 from game import Game
 from action import SingleClickAction
-
-IMAGES = [
-    'ok',
-    'login',
-    'login2',
-    'close'
-]
+import utils
 
 
 def main():
     game = Game()
-    for image in IMAGES:
+    for image in utils.COMMON:
         game.addAction(SingleClickAction(image))
     game.start()
 

@@ -1,16 +1,14 @@
 from game import Game
-from utils import rate_limited
+from utils import rate_limited, COMMON
 from action import SingleClickAction, MultiClickAction
 import time
 
-IMAGES = [
+IMAGES = COMMON + [
   'main',
-  'use',
-  'close2',
   'continue'
 ]
 
-ACTION = (1200, 330)
+ACTION = (1200, 230)
 
 def task(g):
     point = g.find('choose')
