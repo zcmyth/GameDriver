@@ -1,5 +1,5 @@
 from game import Game
-from utils import rate_limited, COMMON
+from utils import rate_limited, NON_LOGIN as common
 from action import SingleClickAction
 
 def startGhost(g):
@@ -19,7 +19,7 @@ def clickBeginGhost(g):
 
 def main():
     game = Game()
-    for image in COMMON:
+    for image in common:
         game.addAction(SingleClickAction(image))
     game.addAction(startGhost)
     game.addAction(clickBeginGhost)

@@ -14,7 +14,7 @@ def main():
     game = Game()
     game.addAction(task)
     game.addAction(MultiClickAction(['need', 'buy', 'close'], 'buy'))
-    for image in utils.COMMON:
+    for image in utils.COMMON + ['use']:
         game.addAction(SingleClickAction(image))
     game.addAction(lambda g: g.click(ACTION))
     game.start()

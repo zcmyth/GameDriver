@@ -10,6 +10,13 @@ COMMON = [
     'close2'
 ]
 
+NON_LOGIN = [
+    'ok',
+    'submit',
+    'close',
+    'close2'
+]
+
 from functools import wraps
 
 
