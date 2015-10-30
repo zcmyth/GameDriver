@@ -1,5 +1,5 @@
 from game import Game
-from utils import rate_limited, NON_LOGIN as common
+from utils import rate_limited, COMMON as common
 from action import SingleClickAction
 
 def startGhost(g):

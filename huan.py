@@ -10,15 +10,17 @@ BLACKLIST = [
     'neidan'
 ]
 
-@rate_limited(0.01, block=False)
+@rate_limited(0.03, block=False)
 def clickTask(g):
     if click(g, 'huan'):
         print 'dumb ass move'
+        return True
 
 def task(g):
     point = g.find('choose')
     if point:
         g.click((point[0], point[1] + 80))
+        return True
 
 def click(g, image):
     g.screenshot()
@@ -29,13 +31,14 @@ def guaji(g):
     click(g, 'hell4')
     print '\a'
     print 'chuang shuo 20 mins'
-    time.sleep(20 * 60)
+    time.sleep(5 * 60)
 
 def guaji_if_no_money(g):
     if g.find('nomoney'):
         click(g, 'nmclose')
         click(g, 'close')
         guaji(g)
+        return True
 
 def buy(g):
     point = g.find('buy')
@@ -45,28 +48,25 @@ def buy(g):
         if not need:
             g.click(point)
             click(g, 'close')
-            click(g, 'huan')
-            click(g, 'huan')
-            return
+            return True
         for item in BLACKLIST:
             if g.find(item):
                 click(g, 'close')
                 guaji(g)
-                return
+                return True
         click(g, 'need')
         click(g, 'buy')
         click(g, 'close')
-        click(g, 'huan')
-        click(g, 'huan')
+        return True
 
 def main():
     game = Game()
-    game.addAction(clickTask)
     game.addAction(task)
     game.addAction(guaji_if_no_money)
     game.addAction(buy)
     for image in COMMON:
         game.addAction(SingleClickAction(image))
+    game.addAction(clickTask)
     game.start()
 
 if __name__ == "__main__":
