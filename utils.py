@@ -1,21 +1,18 @@
 # Credit to gregburek@ and andresriancho@
 import time
+from functools import wraps
+
 
 COMMON = [
     'ok',
+    'submit',
+    'close',
+]
+
+LOGIN = [
     'login',
     'login2',
-    'submit',
-    'close',
 ]
-
-NON_LOGIN = [
-    'ok',
-    'submit',
-    'close',
-]
-
-from functools import wraps
 
 
 def rate_limited(max_per_second, block=True):
@@ -42,3 +39,4 @@ def rate_limited(max_per_second, block=True):
         return rate_limited_function
 
     return decorate
+

@@ -1,26 +1,34 @@
 from game import Game
-from action import SingleClickAction
+from action import SimpleAction
 import time
 import utils
+from devices import create
+
+TASKS = [
+    'mowang',
+    'digua'
+]
 
 @utils.rate_limited(0.1, block=False)
 def next(g):
-    if g.clickImage('mowang') or g.clickImage('digua'):
-        time.sleep(2)
-        return True
+    for task in TASKS:
+        if g.click(task):
+            time.sleep(3)
+            return True
+    return False
 
-def task(g):
+def choose(g):
     point = g.find('choose')
     if point:
-        g.click((point[0], point[1] + 80))
-        return True
+        return g.click((point[0], point[1] + 80))
+    return False
 
 def main():
-    game = Game()
+    game = Game(create())
+    game.addAction(choose)
     game.addAction(next)
-    game.addAction(task)
     for image in ['continue'] + utils.COMMON:
-        game.addAction(SingleClickAction(image))
+        game.addAction(SimpleAction(image))
     game.start()
 
 if __name__ == "__main__":

@@ -1,26 +1,23 @@
-class SingleClickAction(object):
+import time
 
-    def __init__(self, name, status=None):
-        self._name = name
-        self._status = status if status else name
+
+def multiClick(game, names, retry=5):
+    for name in names:
+        if not game.click(name, retry=retry):
+            return False
+        time.sleep(1)
+    return True
+
+
+class SimpleAction(object):
+    """Simple action that clicks the given names one by one"""
+    def __init__(self, names):
+        if not isinstance(names, list):
+            self._names = [names]
+        else:
+            self._names = names
 
     def __call__(self, game):
-        if game.clickImage(self._name):
-            game.setStatus(self._name)
-            return True
+        if game.click(self._names[0]):
+            return multiClick(game, self._names[1:], 5)
         return False
-
-
-class MultiClickAction(object):
-
-    def __init__(self, names, status):
-        self._names = names
-        self._status = status
-
-    def __call__(self, game):
-        for name in self._names:
-            game.screenshot()
-            if not game.clickImage(name):
-                return False
-        game.setStatus(self._status)
-        return True

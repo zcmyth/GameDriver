@@ -1,7 +1,8 @@
 from game import Game
-import sys
+from adb_device import AdbDevice
+
 
 if __name__ == "__main__":
-    game = Game()
+    game = Game(AdbDevice())
     game.screenshot()
     print game.find('digua')

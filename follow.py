@@ -1,12 +1,13 @@
 from game import Game
-from action import SingleClickAction
+from action import SimpleAction
+from devices import create
 import utils
 
 
 def main():
-    game = Game()
-    for image in utils.COMMON:
-        game.addAction(SingleClickAction(image))
+    game = Game(create())
+    for image in ['use'] + utils.COMMON:
+        game.addAction(SimpleAction(image))
     game.start()
 
 

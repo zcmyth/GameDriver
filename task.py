@@ -1,31 +1,30 @@
 from game import Game
-from action import SingleClickAction, MultiClickAction
+from action import SimpleAction
 import time
 import utils
+from devices import create
 
 ACTION = (1200, 230)
 
 def task(g):
     point = g.find('choose')
     if point:
-        g.click((point[0], point[1] + 80))
-        return True
+        return g.click((point[0], point[1] + 80))
+    return False
 
 def next(g):
     g.click(ACTION)
-    time.sleep(2)
+    time.sleep(10)
+    return True
 
 def main():
-    game = Game()
+    game = Game(create())
     game.addAction(task)
-    game.addAction(MultiClickAction(['need', 'buy', 'close'], 'buy'))
+    game.addAction(SimpleAction(['need', 'buy', 'close']))
     for image in ['use'] + utils.COMMON:
-        game.addAction(SingleClickAction(image))
+        game.addAction(SimpleAction(image))
     game.addAction(next)
     game.start()
 
 if __name__ == "__main__":
     main()
-    #game = Game()
-    #game.screenshot()
-    #print game.find('task')

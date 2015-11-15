@@ -1,7 +1,9 @@
 from game import Game
-from utils import rate_limited, COMMON
-from action import SingleClickAction, MultiClickAction
+from utils import COMMON
+from action import SimpleAction, multiClick
 import time
+from devices import Builder
+from adb_device import AdbDevice
 
 BLACKLIST = [
     'jinlanhua',
@@ -10,67 +12,60 @@ BLACKLIST = [
     'neidan'
 ]
 
-@rate_limited(0.03, block=False)
-def clickTask(g):
-    if click(g, 'huan'):
-        print 'dumb ass move'
-        return True
-
-def task(g):
+def choose(g):
     point = g.find('choose')
     if point:
-        g.click((point[0], point[1] + 80))
-        return True
-
-def click(g, image):
-    g.screenshot()
-    return g.clickImage(image)
+        return g.click((point[0], point[1] + 80))
+    return False
 
 def guaji(g):
-    click(g, 'guaji')
-    click(g, 'hell4')
-    print '\a'
-    print 'chuang shuo 20 mins'
-    time.sleep(5 * 60)
+    if multiClick(g, ['guaji', 'hell4']):
+        print '\a'
+        print 'chuang shuo 20 mins'
+        start = time.time()
+        while time.time() - start < 20 * 60:
+            if g.click('choose'):
+                return True
+            time.sleep(60)
+        print '\a'
+        print 'cannot chuang shuo'
+        exit()
 
 def guaji_if_no_money(g):
     if g.find('nomoney'):
-        click(g, 'nmclose')
-        click(g, 'close')
-        guaji(g)
-        return True
+        multiClick(g, ['nmclose', 'close'])
+        return guaji(g)
+    return False
 
 def buy(g):
     point = g.find('buy')
     if point:
+        time.sleep(1)
         g.screenshot()
         need = g.find('need')
         if not need:
-            g.click(point)
-            click(g, 'close')
-            return True
+            return multiClick(g, [point, 'close'])
         for item in BLACKLIST:
             if g.find(item):
-                click(g, 'close')
-                guaji(g)
-                return True
-        click(g, 'need')
-        click(g, 'buy')
-        click(g, 'close')
-        return True
+                g.click('close')
+                return guaji(g)
+        return multiClick(g, ['need', 'buy', 'close'])
+    return False
+
 
 def main():
-    game = Game()
-    game.addAction(task)
+    device = (Builder().with_device(AdbDevice)
+        .with_limit(1) # one action per second
+        .with_blur(5)  # random change click point
+        .build())
+    game = Game(device)
+    game.addAction(choose)
     game.addAction(guaji_if_no_money)
     game.addAction(buy)
     for image in COMMON:
-        game.addAction(SingleClickAction(image))
-    game.addAction(clickTask)
+        game.addAction(SimpleAction(image))
+    game.idle = lambda g : g.click('huan')
     game.start()
 
 if __name__ == "__main__":
     main()
-    #game = Game()
-    #game.screenshot()
-    #print game.find('task')
