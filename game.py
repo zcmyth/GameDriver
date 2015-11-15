@@ -61,6 +61,7 @@ class Game(object):
     def start(self):
         last_action_time = 0
         while True:
+            time.sleep(1)
             self.screenshot()
             for action in self._actions:
                 result = action(self)
