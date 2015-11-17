@@ -24,12 +24,15 @@ def guaji(g):
         print 'chuang shuo 20 mins'
         start = time.time()
         while time.time() - start < 20 * 60:
-            if g.click('choose'):
+            print 'check chuang shuo'
+            g.screenshot()
+            if choose(g):
                 return True
             time.sleep(60)
         print '\a'
         print 'cannot chuang shuo'
         exit()
+    return False
 
 def guaji_if_no_money(g):
     if g.find('nomoney'):

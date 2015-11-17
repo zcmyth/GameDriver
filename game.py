@@ -6,7 +6,8 @@ import time
 
 class Game(object):
 
-    def __init__(self, device, target_width=1280, threshold=0.8):
+    def __init__(self, device, target_width=1280,
+                 threshold=0.8, idle_time=30):
         self._device = device
         self._actions = []
         self._image_cache = {}
@@ -16,6 +17,7 @@ class Game(object):
         else:
             self._scale = float(device.width) / float(target_width)
         self.idle = None
+        self._idle_time = idle_time
 
     def _getImage(self, name):
         if name in self._image_cache:
@@ -38,21 +40,19 @@ class Game(object):
         for pt in zip(*loc[::-1]):
             return (pt[0] + w / 2, pt[1] + h / 2)
 
-    def click(self, point1, point2=None, retry=0):
-        if isinstance(point1, str):
-            center = self.find(point1)
+    def click(self, point, retry=0):
+        if isinstance(point, str):
+            name = point
+            center = self.find(name)
             if center:
-                print point1
+                print name
                 return self.click(center)
             if retry > 0:
                 time.sleep(1)
                 self.screenshot()
                 return self.click(name, retry=retry - 1)
             return False
-        center = point1
-        if point2:
-            center = ((point1[0] + point2[0]) / 2, (point1[1] + point2[1]) / 2)
-        self._device.click(center[0], center[1])
+        self._device.click(point[0], point[1])
         return True
 
     def addAction(self, action):
@@ -71,6 +71,6 @@ class Game(object):
                 if result:
                     last_action_time = time.time()
                     break
-            if time.time() - last_action_time > 30 and self.idle:
+            if time.time() - last_action_time > self._idle_time and self.idle:
                 self.idle(self)
                 last_action_time = time.time()
