@@ -6,7 +6,10 @@ from devices import create
 
 ACTION = (1200, 230)
 
+
 def task(g):
+    if g.click('cancel'):
+        return True
     point = g.find('choose')
     if point:
         return g.click((point[0], point[1] + 80))
@@ -32,7 +35,7 @@ def main():
     game.addAction(buy)
     for image in ['use'] + utils.COMMON:
         game.addAction(SimpleAction(image))
-    game.idle = lambda g : g.click(ACTION)
+    game.idle = lambda g: g.click(ACTION)
     game.start()
 
 if __name__ == "__main__":

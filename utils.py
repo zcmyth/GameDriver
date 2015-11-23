@@ -39,4 +39,3 @@ def rate_limited(max_per_second, block=True):
         return rate_limited_function
 
     return decorate
-

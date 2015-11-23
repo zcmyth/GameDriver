@@ -1,5 +1,4 @@
 import sys
-import os
 
 from com.dtmilano.android.viewclient import ViewClient
 

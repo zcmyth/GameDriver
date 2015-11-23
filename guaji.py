@@ -6,21 +6,21 @@ import utils
 
 
 def baby(g):
-  if g.find('baby'):
-    print 'Baby'
-    print '\a'
+    if g.find('baby'):
+        print 'Baby'
+        print '\a'
 
 
 def defence_for_target(g):
-  if g.find('guijiang'):
-    print 'Find it!!!!!!!!'
-    print '\a'
-    g.click('cancel')
-    time.sleep(5)
-    g.click('defence')
-    time.sleep(5)
-    g.click('defence')
-    time.sleep(5)
+    if g.find('guijiang'):
+        print 'Find it!!!!!!!!'
+        print '\a'
+        g.click('cancel')
+        time.sleep(5)
+        g.click('defence')
+        time.sleep(5)
+        g.click('defence')
+        time.sleep(5)
 
 
 def main():

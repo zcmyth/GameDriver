@@ -1,15 +1,15 @@
 from game import Game
 from utils import rate_limited, COMMON
 from action import SimpleAction
-import time
 from devices import create
 
 IMAGES = COMMON + [
-  'main',
-  'continue'
+    'main',
+    'continue'
 ]
 
 ACTION = (1200, 230)
+
 
 def task(g):
     point = g.find('choose')
@@ -17,9 +17,11 @@ def task(g):
         return g.click((point[0], point[1] + 80))
     return False
 
+
 @rate_limited(0.2, block=False)
 def clickNext(g):
     g.click(ACTION)
+
 
 def main():
     game = Game(create())

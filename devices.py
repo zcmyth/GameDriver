@@ -32,6 +32,6 @@ class Builder(object):
 
 def create():
     return (Builder().with_device(AdbDevice)
-        .with_limit(1) # one action per second
-        .with_blur(5)  # random change click point
-        .build())
+            .with_limit(1)  # one action per second
+            .with_blur(5)   # random change click point
+            .build())

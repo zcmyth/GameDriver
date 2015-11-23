@@ -6,10 +6,10 @@ from devices import create
 
 def main():
     game = Game(create())
-    game.addAction(SimpleAction(['task', 'ghost']))
+    game.addAction(SimpleAction(['task', 'ghost', 'ghost']))
     for image in COMMON:
-        game.addAction(SingleClickAction(image))
-    game.idle = lambda g : g.click('ghost')
+        game.addAction(SimpleAction(image))
+    game.idle = lambda g: g.click('ghost')
     game.start()
 
 

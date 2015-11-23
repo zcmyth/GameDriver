@@ -1,5 +1,6 @@
 from com.dtmilano.android.viewclient import ViewClient
 
+
 class AdbDevice(object):
     """Device using adb"""
     def __init__(self):

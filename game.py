@@ -1,6 +1,5 @@
 import cv2
 import numpy
-import utils
 import time
 
 
@@ -65,7 +64,7 @@ class Game(object):
             self.screenshot()
             for action in self._actions:
                 result = action(self)
-                if result == None:
+                if result is None:
                     print 'Action should return result'
                     return
                 if result:

@@ -12,11 +12,13 @@ BLACKLIST = [
     'neidan'
 ]
 
+
 def choose(g):
     point = g.find('choose')
     if point:
         return g.click((point[0], point[1] + 80))
     return False
+
 
 def guaji(g):
     if multiClick(g, ['guaji', 'hell4']):
@@ -34,11 +36,13 @@ def guaji(g):
         exit()
     return False
 
+
 def guaji_if_no_money(g):
     if g.find('nomoney'):
         multiClick(g, ['nmclose', 'close'])
         return guaji(g)
     return False
+
 
 def buy(g):
     point = g.find('buy')
@@ -58,16 +62,16 @@ def buy(g):
 
 def main():
     device = (Builder().with_device(AdbDevice)
-        .with_limit(1) # one action per second
-        .with_blur(5)  # random change click point
-        .build())
+              .with_limit(1)  # one action per second
+              .with_blur(5)   # random change click point
+              .build())
     game = Game(device)
     game.addAction(choose)
     game.addAction(guaji_if_no_money)
     game.addAction(buy)
     for image in COMMON:
         game.addAction(SimpleAction(image))
-    game.idle = lambda g : g.click('huan')
+    game.idle = lambda g: g.click('huan')
     game.start()
 
 if __name__ == "__main__":

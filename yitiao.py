@@ -9,6 +9,7 @@ TASKS = [
     'digua'
 ]
 
+
 @utils.rate_limited(0.1, block=False)
 def next(g):
     for task in TASKS:
@@ -17,11 +18,13 @@ def next(g):
             return True
     return False
 
+
 def choose(g):
     point = g.find('choose')
     if point:
         return g.click((point[0], point[1] + 80))
     return False
+
 
 def main():
     game = Game(create())
