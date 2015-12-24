@@ -6,6 +6,7 @@ def multiClick(game, names, retry=5):
         if not game.click(name, retry=retry):
             return False
         time.sleep(1)
+        game.screenshot()
     return True
 
 

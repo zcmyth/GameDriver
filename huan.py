@@ -21,7 +21,7 @@ def choose(g):
 
 
 def guaji(g):
-    if multiClick(g, ['guaji', 'hell4']):
+    if multiClick(g, ['guaji', 'yaochidong']):
         print '\a'
         print 'chuang shuo 20 mins'
         start = time.time()

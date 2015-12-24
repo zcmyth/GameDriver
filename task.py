@@ -9,6 +9,7 @@ ACTION = (1200, 230)
 
 def task(g):
     if g.click('cancel'):
+        exit()
         return True
     point = g.find('choose')
     if point:

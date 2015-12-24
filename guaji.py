@@ -7,8 +7,13 @@ import utils
 
 def baby(g):
     if g.find('baby'):
-        print 'Baby'
-        print '\a'
+        for i in range(10):
+            print 'Baby'
+            print '\a'
+            time.sleep(1)
+    return False
+      
+        
 
 
 def defence_for_target(g):
@@ -21,13 +26,16 @@ def defence_for_target(g):
         time.sleep(5)
         g.click('defence')
         time.sleep(5)
+    return False
 
 
 def main():
+    print '\a'
     game = Game(create())
     for image in utils.COMMON:
         game.addAction(SimpleAction(image))
     game.addAction(defence_for_target)
+    game.addAction(baby)
     game.start()
 
 
