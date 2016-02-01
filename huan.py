@@ -21,14 +21,15 @@ def choose(g):
 
 
 def guaji(g):
-    if multiClick(g, ['guaji', 'yaochidong']):
+    print 'lalal'
+    if multiClick(g, ['guaji', 'yaochixi']):
         print '\a'
         print 'chuang shuo 20 mins'
         start = time.time()
         while time.time() - start < 20 * 60:
             print 'check chuang shuo'
             g.screenshot()
-            if choose(g):
+            if g.find('submit'):
                 return True
             time.sleep(60)
         print '\a'

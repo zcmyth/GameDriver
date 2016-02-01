@@ -4,7 +4,7 @@ import time
 import utils
 from devices import create
 
-ACTION = (1200, 230)
+ACTION = (1100, 230)
 
 
 def task(g):
@@ -31,7 +31,7 @@ def buy(g):
 
 
 def main():
-    game = Game(create(), idle_time=5)
+    game = Game(create(), idle_time=3)
     game.addAction(task)
     game.addAction(buy)
     for image in ['use'] + utils.COMMON:
