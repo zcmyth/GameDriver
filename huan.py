@@ -57,7 +57,7 @@ def buy(g):
             if g.find(item):
                 g.click('close')
                 return guaji(g)
-        return multiClick(g, ['need', 'buy', 'close'])
+        return multiClick(g, ['need', 'buy'])
     return False
 
 

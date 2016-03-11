@@ -70,6 +70,7 @@ class Game(object):
                 if result:
                     last_action_time = time.time()
                     break
-            if time.time() - last_action_time > self._idle_time and self.idle:
+            if (time.time() - last_action_time > self._idle_time and
+                    self.idle):
                 self.idle(self)
                 last_action_time = time.time()

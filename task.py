@@ -34,7 +34,7 @@ def main():
     game = Game(create(), idle_time=3)
     game.addAction(task)
     game.addAction(buy)
-    for image in ['use'] + utils.COMMON:
+    for image in ['use', 'submit', 'ok']:
         game.addAction(SimpleAction(image))
     game.idle = lambda g: g.click(ACTION)
     game.start()
