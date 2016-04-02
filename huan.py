@@ -29,7 +29,7 @@ def guaji(g):
         while time.time() - start < 20 * 60:
             print 'check chuang shuo'
             g.screenshot()
-            if g.find('submit'):
+            if g.find('submit') or g.find('choose'):
                 return True
             time.sleep(60)
         print '\a'
