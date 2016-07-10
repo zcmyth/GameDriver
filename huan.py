@@ -23,7 +23,7 @@ def choose(g):
 def guaji(g):
     time.sleep(1)
     g.screenshot()
-    if multiClick(g, ['guaji', 'yaochixi']):
+    if multiClick(g, ['guaji', 'yaochibei']):
         print '\a'
         print 'chuang shuo 20 mins'
         start = time.time()

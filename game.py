@@ -27,9 +27,11 @@ class Game(object):
         return self._image_cache[name]
 
     def screenshot(self):
+        # t = time.time()
         pil_image = self._device.screenshot()
         open_cv_image = numpy.array(pil_image)
         self._screen = cv2.cvtColor(open_cv_image, cv2.COLOR_BGR2GRAY)
+        # print 'screenshot took %sms' % int((time.time() - t) * 1000)
 
     def find(self, name):
         w, h = self._getImage(name).shape[::-1]
