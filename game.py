@@ -5,7 +5,7 @@ import time
 
 class Game(object):
 
-    def __init__(self, device, target_width=1280,
+    def __init__(self, device, target_width=1600,
                  threshold=0.8, idle_time=30):
         self._device = device
         self._actions = []
@@ -21,7 +21,7 @@ class Game(object):
     def _getImage(self, name):
         if name in self._image_cache:
             return self._image_cache[name]
-        original = cv2.imread('images/' + name + '.png', 0)
+        original = cv2.imread('yys/' + name + '.png', 0)
         resized = cv2.resize(original, (0, 0), fx=self._scale, fy=self._scale)
         self._image_cache[name] = resized
         return self._image_cache[name]
