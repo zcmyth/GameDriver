@@ -6,11 +6,12 @@ import time
 class Game(object):
 
     def __init__(self, device, target_width=1600,
-                 threshold=0.8, idle_time=30):
+                 threshold=0.8, idle_time=30, debug=False):
         self._device = device
         self._actions = []
         self._image_cache = {}
         self._threshold = threshold
+        self._debug = debug
         if target_width == device.width:
             self._scale = 1
         else:
@@ -46,7 +47,8 @@ class Game(object):
             name = point
             center = self.find(name)
             if center:
-                print name
+                if self._debug:
+                    print name
                 return self.click(center)
             if retry > 0:
                 time.sleep(1)
