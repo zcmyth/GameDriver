@@ -38,9 +38,16 @@ class Game(object):
         w, h = self._getImage(name).shape[::-1]
         res = cv2.matchTemplate(
             self._screen, self._getImage(name), cv2.TM_CCOEFF_NORMED)
-        loc = numpy.where(res >= self._threshold)
-        for pt in zip(*loc[::-1]):
-            return (pt[0] + w / 2, pt[1] + h / 2)
+        # loc = numpy.where(res >= self._threshold)
+        # for pt in zip(*loc[::-1]):
+        #     return (pt[0] + w / 2, pt[1] + h / 2)
+        _, max_val, _, max_loc = cv2.minMaxLoc(res)
+	# print 'find %s score %s' % (name, max_val)
+        if max_val > self._threshold:
+            # print 'find %s at %s %s' % (name, max_loc[0] + w / 2, max_loc[1] + h / 2)
+            return (max_loc[0] + w / 2, max_loc[1] + h / 2)
+        else:
+            return None
 
     def click(self, point, retry=0):
         if isinstance(point, str):

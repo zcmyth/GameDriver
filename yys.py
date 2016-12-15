@@ -4,20 +4,19 @@ from devices import create
 import time
 import utils
 
-fighting = False
 failed_count = 0
 enemy = (937,300)
+fighting = False
+
 
 def finish(g):
-    global fighting
     global failed_count
-    finished = g.click('finish')
-    if not finished:
-        finished = g.click('failed')
-        if finished:
-            failed_count += 1
-            print 'failed %s times' % failed_count
-    if finished:
+    global fighting
+    if g.click('failed'):
+        failed_count += 1
+        print 'failed %s times' % failed_count
+        #exit()
+    if g.click('finish'):
         fighting = False
         for i in xrange(3):
           time.sleep(1)
@@ -34,25 +33,38 @@ def fight(g):
         while g.click('prepare'):
             g.screenshot()
             g.click(enemy)
-            time.sleep(1)
-            g.click(enemy)
     	return True
     return False
 
 def selectEnemy(g):
-    if fighting :
+    if fighting and not finish(g):
         for i in xrange(3):
           time.sleep(1)
           g.click(enemy)
         return True
     return False 
 
+def tupo(g):
+    if g.click('tupo'):
+        time.sleep(2)
+        g.screenshot()
+        if not g.click('attack'):
+            return False
+        while not g.click('prepare'):
+            g.screenshot()
+        while g.click('prepare'):
+            g.screenshot()
+            g.click(enemy)
+    	return True
+    return False
+
 def main():
-    game = Game(create(), idle_time=5)
+    game = Game(create(), idle_time=5, debug=True)
     game.addAction(SimpleAction('busy'))
     game.addAction(SimpleAction('cancel'))
     game.addAction(fight)
     game.addAction(finish)
+    game.addAction(tupo)
     game.addAction(selectEnemy)
     game.start()
 

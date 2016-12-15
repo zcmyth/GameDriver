@@ -31,10 +31,17 @@ def finish(g):
 def fight(g):
     global fighting
     g.screenshot()
-    if g.click('boss') or g.click('fight') or g.click('fight'):
+    if g.click('boss') or g.click('fight'):
         fighting = True
         time.sleep(5)
         g.click(enemy)
+    	return True
+    return False
+
+def gift(g):
+    if g.click('gift'):
+        time.sleep(5)
+        g.click(center)
     	return True
     return False
 
@@ -42,13 +49,13 @@ def move(g):
     if fighting:
         return True
     print 'searching...'
-    for i in xrange(5):
-        time.sleep(1)
+    for i in xrange(3):
+        time.sleep(2)
         g.click(right)
     	if fight(g):
             return True
-    for i in xrange(5):
-        time.sleep(1)
+    for i in xrange(3):
+        time.sleep(2)
         g.click(left)
     	if fight(g):
             return True
@@ -57,9 +64,8 @@ def move(g):
 def box(g):
     if g.click('box'):
         for i in xrange(2):
-            g.click(150, 360)
             time.sleep(3)
-            g.click(150, 360)
+            g.click((150, 360))
         return True
     return False
 
@@ -67,9 +73,11 @@ def main():
     game = Game(create(), idle_time=20, debug=True)
     game.addAction(SimpleAction('busy'))
     game.addAction(SimpleAction('cancel'))
-    game.addAction(SimpleAction('box'))
+    game.addAction(SimpleAction('accept'))
+    game.addAction(gift)
     game.addAction(SimpleAction('discover'))
     game.addAction(SimpleAction('16'))
+    game.addAction(box)
     game.addAction(fight)
     game.addAction(finish)
     game.idle = move

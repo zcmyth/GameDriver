@@ -12,7 +12,7 @@ class Builder(object):
     def with_limit(self, rate_limit):
         r = rate_limited(rate_limit)
         self._device.screenshot = r(self._device.screenshot)
-        self._device.click = r(self._device.click)
+        # self._device.click = r(self._device.click)
         return self
 
     def with_blur(self, pixel):

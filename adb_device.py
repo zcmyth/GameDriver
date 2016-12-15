@@ -14,4 +14,5 @@ class AdbDevice(object):
         return self._adb.takeSnapshot(True)
 
     def click(self, x, y):
+        #print 'click %s %s' % (x, y)
         self._adb.touch(x, y)
