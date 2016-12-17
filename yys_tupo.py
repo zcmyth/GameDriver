@@ -13,9 +13,7 @@ def finish(g):
     global failed_count
     global fighting
     if g.click('failed'):
-        failed_count += 1
-        print 'failed %s times' % failed_count
-        #exit()
+        exit()
     if g.click('finish'):
         fighting = False
         for i in xrange(3):
@@ -36,13 +34,20 @@ def fight(g):
     	return True
     return False
 
-def selectEnemy(g):
-    if fighting and not finish(g):
-        for i in xrange(3):
-          time.sleep(1)
-          g.click(enemy)
-        return True
-    return False 
+
+def tupo(g):
+    if g.click('tupo'):
+        time.sleep(2)
+        g.screenshot()
+        if not g.click('attack'):
+            return False
+        while not g.click('prepare'):
+            g.screenshot()
+        while g.click('prepare'):
+            g.screenshot()
+            g.click(enemy)
+    	return True
+    return False
 
 def main():
     game = Game(create(), idle_time=5, debug=True)
@@ -51,7 +56,7 @@ def main():
     game.addAction(SimpleAction('accept'))
     game.addAction(fight)
     game.addAction(finish)
-    game.addAction(selectEnemy)
+    game.addAction(tupo)
     game.start()
 
 

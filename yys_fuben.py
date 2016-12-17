@@ -3,6 +3,12 @@ from action import SimpleAction
 from devices import create
 import time
 import utils
+import sys
+
+
+f = '16'
+if len(sys.argv) == 2:
+    f = sys.argv.pop(1)
 
 fighting = False
 failed_count = 0
@@ -15,11 +21,11 @@ def finish(g):
     global failed_count
     global fighting
     finished = g.click('finish')
-    #if not finished:
-    #    finished = g.click('failed')
-    #    if finished:
-    #        failed_count += 1
-    #        print 'failed %s times' % failed_count
+    if not finished:
+        finished = g.click('failed')
+        if finished:
+            failed_count += 1
+            print 'failed %s times' % failed_count
     if finished:
         fighting = False
         for i in xrange(3):
@@ -76,7 +82,7 @@ def main():
     game.addAction(SimpleAction('accept'))
     game.addAction(gift)
     game.addAction(SimpleAction('discover'))
-    game.addAction(SimpleAction('16'))
+    game.addAction(SimpleAction(f))
     game.addAction(box)
     game.addAction(fight)
     game.addAction(finish)
