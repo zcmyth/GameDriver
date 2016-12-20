@@ -13,6 +13,15 @@ def finish(g):
     global failed_count
     global fighting
     if g.click('failed'):
+        for i in xrange(3):
+          time.sleep(1)
+          g.click((100,100))
+        g.screenshot()
+        if g.click('refresh'):
+          time.sleep(1)
+          g.screenshot()
+          if g.click('ok'):
+            return True
         exit()
     if g.click('finish'):
         fighting = False
@@ -36,7 +45,7 @@ def fight(g):
 
 
 def tupo(g):
-    if g.click('tupo'):
+    if g.click('tupo2') or g.click('tupo1') or g.click('tupo'):
         time.sleep(2)
         g.screenshot()
         if not g.click('attack'):

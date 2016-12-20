@@ -28,8 +28,8 @@ def finish(g):
             print 'failed %s times' % failed_count
     if finished:
         fighting = False
-        for i in xrange(3):
-            time.sleep(1)
+        for i in xrange(2):
+            time.sleep(2)
             g.click(center)
     	return True
     return False
@@ -70,7 +70,7 @@ def move(g):
 def box(g):
     if g.click('box'):
         for i in xrange(2):
-            time.sleep(3)
+            time.sleep(1)
             g.click((150, 360))
         return True
     return False
