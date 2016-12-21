@@ -8,6 +8,7 @@ A WebDriver for Game
     * Run the emulator and open cmd, type `adb devices`. You should be able to see the address of the emulator.
   * `git clone git@github.com:zcmyth/GameDriver.git`
   * Install python and make sure the `C:\Python27` is in the `PATH` variable as well.
+  * Install python dependency `pip install -r requirements.txt`
   * Install OpenCV-Python in Windows and copy `cv2.pyd` to `C:/Python27/lib/site-packages`
     * `echo 'import cv2' | python` # Check no error messages.
 
