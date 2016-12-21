@@ -10,16 +10,14 @@ f = '16'
 if len(sys.argv) == 2:
     f = sys.argv.pop(1)
 
-fighting = False
 failed_count = 0
 enemy = (969,220)
 center = (640, 360)
-left = (275, 594)
-right = (884, 594)
+left = (180, 600)
+right = (1100, 600)
 
 def finish(g):
     global failed_count
-    global fighting
     finished = g.click('finish')
     if not finished:
         finished = g.click('failed')
@@ -27,7 +25,6 @@ def finish(g):
             failed_count += 1
             print 'failed %s times' % failed_count
     if finished:
-        fighting = False
         for i in xrange(2):
             time.sleep(2)
             g.click(center)
@@ -35,25 +32,25 @@ def finish(g):
     return False
 
 def fight(g):
-    global fighting
     g.screenshot()
     if g.click('boss') or g.click('fight'):
-        fighting = True
-        time.sleep(5)
-        g.click(enemy)
+        for i in xrange(6):
+          time.sleep(1)
+          g.click(enemy)
     	return True
     return False
 
 def gift(g):
     if g.click('gift'):
-        time.sleep(5)
+        time.sleep(3)
         g.click(center)
     	return True
     return False
 
+def isfighting(g):
+    return g.find('auto') is not None
+
 def move(g):
-    if fighting:
-        return True
     print 'searching...'
     for i in xrange(3):
         time.sleep(2)
@@ -86,6 +83,7 @@ def main():
     game.addAction(box)
     game.addAction(fight)
     game.addAction(finish)
+    game.addAction(isfighting)
     game.idle = move
     game.start()
 
