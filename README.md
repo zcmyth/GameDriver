@@ -16,4 +16,5 @@ A WebDriver for Game
   * `adb devices` # to find the emulator port
   * `adb connect <localhost:port>`
   * `python ss.py 1.png` # This will take a screenshot. Test everything works fine
-  * `python yys_fuben.py`
+  * `cd yys`
+  * `python fuben.py`

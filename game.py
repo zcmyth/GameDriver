@@ -5,13 +5,14 @@ import time
 
 class Game(object):
 
-    def __init__(self, device, target_width=1600,
+    def __init__(self, device, target_width=1280,
                  threshold=0.8, idle_time=30, debug=False):
         self._device = device
         self._actions = []
         self._image_cache = {}
         self._threshold = threshold
         self._debug = debug
+        self._target_width = target_width
         if target_width == device.width:
             self._scale = 1
         else:
@@ -22,7 +23,7 @@ class Game(object):
     def _getImage(self, name):
         if name in self._image_cache:
             return self._image_cache[name]
-        original = cv2.imread('yys/' + name + '.png', 0)
+        original = cv2.imread('%s/%s.png' % (self._target_width, name), 0)
         resized = cv2.resize(original, (0, 0), fx=self._scale, fy=self._scale)
         self._image_cache[name] = resized
         return self._image_cache[name]
@@ -42,9 +43,10 @@ class Game(object):
         # for pt in zip(*loc[::-1]):
         #     return (pt[0] + w / 2, pt[1] + h / 2)
         _, max_val, _, max_loc = cv2.minMaxLoc(res)
-	# print 'find %s score %s' % (name, max_val)
+        # print 'find %s score %s' % (name, max_val)
         if max_val > self._threshold:
-            # print 'find %s at %s %s' % (name, max_loc[0] + w / 2, max_loc[1] + h / 2)
+            # print 'find %s at %s %s' % (name, max_loc[0] + w / 2, max_loc[1]
+            # + h / 2)
             return (max_loc[0] + w / 2, max_loc[1] + h / 2)
         else:
             return None
@@ -56,13 +58,16 @@ class Game(object):
             if center:
                 if self._debug:
                     print name
-                return self.click(center)
+                self._device.click(center[0], center[1])
+                return True
             if retry > 0:
                 time.sleep(1)
                 self.screenshot()
                 return self.click(name, retry=retry - 1)
             return False
-        self._device.click(point[0], point[1])
+        self._device.click(
+            int(point[0] * self._device.width),
+            int(point[1] * self._device.height))
         return True
 
     def addAction(self, action):

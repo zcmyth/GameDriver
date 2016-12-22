@@ -10,9 +10,12 @@ class AdbDevice(object):
     def width(self):
         return self._adb.getProperty('display.width')
 
+    @property
+    def height(self):
+        return self._adb.getProperty('display.height')
+
     def screenshot(self):
         return self._adb.takeSnapshot(True)
 
     def click(self, x, y):
-        #print 'click %s %s' % (x, y)
         self._adb.touch(x, y)

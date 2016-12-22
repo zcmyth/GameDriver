@@ -3,18 +3,6 @@ import time
 from functools import wraps
 
 
-COMMON = [
-    'ok',
-    'submit',
-    'close',
-]
-
-LOGIN = [
-    'login',
-    'login2',
-]
-
-
 def rate_limited(max_per_second, block=True):
     """
     Decorator that make functions not be called faster than
