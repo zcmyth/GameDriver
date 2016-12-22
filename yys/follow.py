@@ -1,33 +1,19 @@
-from ..game import Game
-from ..action import SimpleAction
-from ..devices import create
-import time
-import utils
 import sys
+import common
 
-enemy = (969,220)
-center = (640, 360)
+sys.path.append("..")
+from game import Game
+from action import SimpleAction
+from devices import create
 
-def finish(g):
-    if g.click('finish'):
-        for i in xrange(2):
-            time.sleep(2)
-            g.click(center)
-        return True
-    return False
-
-def fighting(g):
-    if g.find('auto'):
-        g.click(enemy)
-        return True
-    return False
 
 def main():
-    game = Game(create(), idle_time=10, debug=True)
+    game = Game(create(), debug=True)
+    common.handle_common_interruption(game)
     game.addAction(SimpleAction('ok'))
     game.addAction(SimpleAction('prepare'))
-    game.addAction(finish)
-    game.addAction(fighting)
+    game.addAction(common.select_enemy)
+    game.addAction(common.finish(False))
     game.start()
 
 
