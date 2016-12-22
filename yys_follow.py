@@ -3,20 +3,31 @@ from action import SimpleAction
 from devices import create
 import time
 import utils
+import sys
 
-def multiclick(g):
-    g.click((10, 300))
-    g.click((10, 300))
+enemy = (969,220)
+center = (640, 360)
+
+def finish(g):
+    if g.click('finish'):
+        for i in xrange(2):
+            time.sleep(2)
+            g.click(center)
+        return True
+    return False
+
+def fighting(g):
+    if g.find('auto'):
+        g.click(enemy)
+        return True
+    return False
 
 def main():
-    game = Game(create(), idle_time=3)
+    game = Game(create(), idle_time=10, debug=True)
     game.addAction(SimpleAction('ok'))
-    game.addAction(SimpleAction('cancel'))
-    game.addAction(SimpleAction('next'))
-    game.addAction(SimpleAction('challenge'))
     game.addAction(SimpleAction('prepare'))
-    game.addAction(SimpleAction('fight'))
-    game.idle = multiclick
+    game.addAction(finish)
+    game.addAction(fighting)
     game.start()
 
 

@@ -73,7 +73,7 @@ def box(g):
     return False
 
 def main():
-    game = Game(create(), idle_time=20, debug=True)
+    game = Game(create(), idle_time=10, debug=True)
     game.addAction(SimpleAction('busy'))
     game.addAction(SimpleAction('cancel'))
     game.addAction(SimpleAction('accept'))
