@@ -38,7 +38,14 @@ def select_enemy(g):
     return False
 
 
+def exit_if_no_energy(g):
+    if g.find('energy'):
+        exit()
+    return False
+
+
 def handle_common_interruption(g):
     g.addAction(SimpleAction('accept'))
     g.addAction(SimpleAction('busy'))
     g.addAction(SimpleAction('cancel'))
+    g.addAction(exit_if_no_energy)

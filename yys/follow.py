@@ -9,7 +9,7 @@ from devices import create
 
 def main():
     game = Game(create(), debug=True)
-    common.handle_common_interruption(game)
+    game.addAction(SimpleAction('accept'))
     game.addAction(SimpleAction('ok'))
     game.addAction(SimpleAction('prepare'))
     game.addAction(common.select_enemy)

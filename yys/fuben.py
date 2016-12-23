@@ -14,16 +14,21 @@ if len(sys.argv) == 2:
 
 enemy = (0.757, 0.306)
 center = (0.5, 0.5)
-left = (0.1, 0.8)
-right = (0.9, 0.8)
+left = (0.2, 0.8)
+right = (0.8, 0.8)
 
 
 def fight(g):
     g.screenshot()
     if g.click('boss') or g.click('fight'):
-        for i in xrange(6):
+        for i in xrange(3):
+            g.screenshot()
+            if g.find('auto'):
+                for j in xrange(5):
+                    g.click(enemy)
+                    time.sleep(1)
+                return True
             time.sleep(1)
-            g.click(enemy)
         return True
     return False
 
@@ -48,7 +53,7 @@ def move(g):
         if fight(g):
             return True
     for i in xrange(3):
-        time.sleep(2)
+        time.sleep(1)
         g.click(left)
         if fight(g):
             return True
@@ -65,7 +70,7 @@ def box(g):
 
 
 def main():
-    game = Game(create(), idle_time=10, debug=True)
+    game = Game(create(), idle_time=20, debug=True)
     common.handle_common_interruption(game)
     game.addAction(gift)
     game.addAction(SimpleAction('discover'))
