@@ -9,8 +9,8 @@ from devices import create
 
 def main():
     game = Game(create(), debug=True)
+    game.addAction(SimpleAction('accept1'))
     game.addAction(SimpleAction('accept'))
-    game.addAction(SimpleAction('ok'))
     game.addAction(SimpleAction('prepare'))
     game.addAction(common.select_enemy)
     game.addAction(common.finish(False))

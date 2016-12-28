@@ -24,7 +24,7 @@ def fight(g):
         for i in xrange(3):
             g.screenshot()
             if g.find('auto'):
-                for j in xrange(5):
+                for j in xrange(6):
                     g.click(enemy)
                     time.sleep(1)
                 return True
