@@ -24,7 +24,7 @@ def finish(g):
             if g.click('ok'):
                 return True
         exit()
-    if g.click('finish1'):
+    if g.click('finish1') or g.click('continue'):
         time.sleep(1)
         g.click(any_point)
         time.sleep(1)

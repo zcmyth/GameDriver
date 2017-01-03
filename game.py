@@ -47,7 +47,8 @@ class Game(object):
         if max_val > self._threshold:
             # print 'find %s at %s %s' % (name, max_loc[0] + w / 2, max_loc[1]
             # + h / 2)
-            return (max_loc[0] + w / 2, max_loc[1] + h / 2)
+            return ((max_loc[0] + w / 2) / float(self._device.width),
+                    (max_loc[1] + h / 2) / float(self._device.height))
         else:
             return None
 
@@ -65,9 +66,7 @@ class Game(object):
                 self.screenshot()
                 return self.click(name, retry=retry - 1)
             return False
-        self._device.click(
-            int(point[0] * self._device.width),
-            int(point[1] * self._device.height))
+        self._device.click(point[0], point[1])
         return True
 
     def addAction(self, action):

@@ -12,8 +12,8 @@ def main():
     game.addAction(SimpleAction('accept1'))
     game.addAction(SimpleAction('accept'))
     game.addAction(SimpleAction('prepare'))
-    game.addAction(common.select_enemy)
     game.addAction(common.finish(False))
+    game.addAction(common.select_enemy)
     game.start()
 
 

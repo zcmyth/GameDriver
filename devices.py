@@ -15,12 +15,12 @@ class Builder(object):
         self._device.click = r(self._device.click)
         return self
 
-    def with_blur(self, pixel):
+    def with_blur(self, pixel_percent):
         click = self._device.click
 
         def new_click(instance, x, y):
-            new_x = random.randint(x - pixel, x + pixel)
-            new_y = random.randint(y - pixel, y + pixel)
+            new_x = random.uniform(x - pixel_percent, x + pixel_percent)
+            new_y = random.uniform(y - pixel_percent, y + pixel_percent)
             click(instance, new_x, new_y)
 
         self._device.click = new_click
@@ -33,5 +33,5 @@ class Builder(object):
 def create():
     return (Builder().with_device(AdbDevice)
             .with_limit(1)  # one action per second
-            .with_blur(2)   # random change click point
+            .with_blur(0)   # random change click point
             .build())

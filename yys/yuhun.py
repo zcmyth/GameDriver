@@ -10,6 +10,7 @@ from devices import create
 def main():
     game = Game(create(), debug=True)
     common.handle_common_interruption(game)
+    game.addAction(SimpleAction('challenge'))
     game.addAction(SimpleAction('fight'))
     game.addAction(SimpleAction('prepare'))
     game.addAction(common.select_enemy)
