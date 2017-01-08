@@ -9,11 +9,11 @@ from devices import create
 
 def main():
     game = Game(create(), debug=True)
+    game.addAction(common.select_enemy)
     game.addAction(SimpleAction('accept1'))
     game.addAction(SimpleAction('accept'))
     game.addAction(SimpleAction('prepare'))
     game.addAction(common.finish(False))
-    game.addAction(common.select_enemy)
     game.start()
 
 

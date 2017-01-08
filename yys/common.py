@@ -18,11 +18,14 @@ def finish(exit):
             if finished:
                 exit()
         if finished:
+            time.sleep(1)
             g.click(center)
             time.sleep(1)
             g.screenshot()
+            g.click('finish2')
+            time.sleep(1)
             g.click(center)
-            return g.click('finish2')
+            return True
         return False
     return finish_fn
 

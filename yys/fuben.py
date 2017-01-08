@@ -36,10 +36,6 @@ def fight(g):
     if center:
         print 'try to click enemy'
         g.click(center)
-        for i in xrange(2):
-            x = random.uniform(-0.05, 0.05)
-            y = random.uniform(-0.05, 0.05)
-            g.click((center[0] + x, center[1] + y))
         return True
     return False
 
@@ -77,13 +73,13 @@ def isfighting(g):
 def main():
     game = Game(create(), idle_time=20, debug=True)
     common.handle_common_interruption(game)
+    game.addAction(common.select_enemy)
     game.addAction(common.finish(False))
     game.addAction(enter)
     game.addAction(SimpleAction('discover'))
     game.addAction(box)
     game.addAction(SimpleAction('boss'))
     game.addAction(fight)
-    # game.addAction(common.select_enemy)
     game.addAction(isfighting)
     game.idle = move
     game.start()
