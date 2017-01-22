@@ -11,8 +11,12 @@ center = (0.5, 0.5)
 
 def finish(exit):
     def finish_fn(g):
-        global failed_count
-        finished = g.click('finish1') or g.click('continue')
+        if g.click('continue'):
+            return True
+        if g.find('finish3'):
+            g.click(center)
+            return True
+        finished = g.click('finish1')
         if not finished and exit:
             finished = g.click('failed')
             if finished:
