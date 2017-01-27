@@ -5,7 +5,7 @@ sys.path.append("..")
 from action import SimpleAction
 
 
-enemy = (0.757, 0.306)
+enemy = (0.728, 0.27)
 center = (0.5, 0.5)
 
 
@@ -35,7 +35,7 @@ def finish(exit):
 
 
 def select_enemy(g):
-    if g.find('auto'):
+    if g.find('auto') or g.find('x2'):
         g.click(enemy)
         return True
     return False
