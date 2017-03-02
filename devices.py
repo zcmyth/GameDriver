@@ -11,7 +11,6 @@ class Builder(object):
 
     def with_limit(self, rate_limit):
         r = rate_limited(rate_limit)
-        self._device.screenshot = r(self._device.screenshot)
         self._device.click = r(self._device.click)
         return self
 
@@ -22,16 +21,15 @@ class Builder(object):
             new_x = random.uniform(x - pixel_percent, x + pixel_percent)
             new_y = random.uniform(y - pixel_percent, y + pixel_percent)
             click(instance, new_x, new_y)
-
-        # self._device.click = new_click
+        self._device.click = new_click
         return self
 
-    def build(self):
-        return self._device()
+    def build(self, device_id=None):
+        return self._device(device_id)
 
 
-def create():
+def create(device_id=None, rate_limit=1, blur=0.01):
     return (Builder().with_device(AdbDevice)
-            .with_limit(2)  # two action per second
-            .with_blur(0)   # random change click point
-            .build())
+            .with_limit(rate_limit)  # two action per second
+            .with_blur(blur)   # random change click point
+            .build(device_id))

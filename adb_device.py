@@ -3,8 +3,9 @@ from com.dtmilano.android.viewclient import ViewClient
 
 class AdbDevice(object):
     """Device using adb"""
-    def __init__(self):
-        self._adb, _ = ViewClient.connectToDeviceOrExit(verbose=False)
+    def __init__(self, serialno=None):
+        self._adb, _id = ViewClient.connectToDeviceOrExit(verbose=False, serialno=serialno)
+        print 'connected ' + _id
 
     @property
     def width(self):

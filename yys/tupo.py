@@ -8,8 +8,12 @@ from action import SimpleAction
 from devices import create
 
 
-enemy = (0.757, 0.306)
 any_point = (0.1, 0.1)
+
+
+exit_on_fail = True
+if len(sys.argv) == 2:
+    exit_on_fail = False
 
 
 def finish(g):
@@ -23,7 +27,8 @@ def finish(g):
             g.screenshot()
             if g.click('ok'):
                 return True
-        exit()
+        if exit_on_fail:
+            exit()
     if g.click('finish1') or g.click('continue'):
         time.sleep(1)
         g.click(any_point)
@@ -33,45 +38,21 @@ def finish(g):
     return False
 
 
-def fight(g):
-    if g.click('challenge'):
-        while not g.click('prepare'):
-            g.screenshot()
-        while g.click('prepare'):
-            g.screenshot()
-        return True
-    return False
-
-
-def fighting(g):
-    if g.find('auto'):
-        g.click(enemy)
-        return True
-    return False
-
-
 def tupo(g):
     if g.click('tupo2') or g.click('tupo1') or g.click('tupo'):
-        time.sleep(2)
-        g.screenshot()
-        if not g.click('attack'):
-            return False
-        while not g.click('prepare'):
-            g.screenshot()
-        while g.click('prepare'):
-            g.screenshot()
-            g.click(enemy)
         return True
     return False
 
 
 def main():
-    game = Game(create(), idle_time=5, debug=True)
+    game = Game(create(), idle_time=10, debug=True)
     common.handle_common_interruption(game)
-    game.addAction(fighting)
-    game.addAction(fight)
-    game.addAction(finish)
+    game.addAction(SimpleAction('attack'))
+    game.addAction(SimpleAction('prepare'))
     game.addAction(tupo)
+    game.addAction(common.select_enemy)
+    game.addAction(finish)
+    game.idle = lambda g: g.click(any_point)
     game.start()
 
 

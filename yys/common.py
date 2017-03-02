@@ -50,5 +50,5 @@ def exit_if_no_energy(g):
 def handle_common_interruption(g):
     g.addAction(SimpleAction('accept'))
     g.addAction(SimpleAction('busy'))
-    g.addAction(SimpleAction('cancel'))
+    # g.addAction(SimpleAction('cancel'))
     g.addAction(exit_if_no_energy)
