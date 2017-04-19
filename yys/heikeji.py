@@ -8,9 +8,9 @@ from action import SimpleAction
 from devices import create
 
 
-enemy1 = (0.63, 0.2)
-enemy2 = (0.5, 0.2)
-enemy3 = (0.37, 0.2)
+enemy1 = (0.66, 0.31)
+enemy2 = (0.5, 0.31)
+enemy3 = (0.34, 0.31)
 ally1 = (0.25, 0.75)
 ally2 = (0.5, 0.6)
 ally3 = (0.75, 0.7)
@@ -50,6 +50,7 @@ def attack(g):
     g.click(enemy1)
     g.click(enemy2)
     g.click(enemy3)
+    return True
 
 
 def main():

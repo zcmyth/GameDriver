@@ -1,5 +1,6 @@
 import sys
 import common
+import time
 
 sys.path.append("..")
 from game import Game
@@ -13,15 +14,23 @@ def prepare(g):
     return False
 
 
+def box(g):
+    if g.click('box'):
+        for i in xrange(2):
+            time.sleep(1)
+            g.click((0.1, 0.5))
+        return True
+    return False
+
+
 def main():
-    if len(sys.argv) == 2:
-        game = Game(create(sys.argv[1], rate_limit=2, blur=0.005), debug=True)
-    else:
-        game = Game(create('127.0.0.1:21533', rate_limit=2, blur=0.005), debug=True)
+    game = Game(create(rate_limit=2, blur=0.005), debug=True)
     game.addAction(SimpleAction('accept1'))
+    game.addAction(SimpleAction('accept2'))
     common.handle_common_interruption(game)
     game.addAction(prepare)
     game.addAction(common.finish(False))
+    game.addAction(box)
     game.start()
 
 

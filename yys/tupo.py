@@ -11,11 +11,6 @@ from devices import create
 any_point = (0.1, 0.1)
 
 
-exit_on_fail = True
-if len(sys.argv) == 2:
-    exit_on_fail = False
-
-
 def finish(g):
     if g.click('failed'):
         for i in xrange(3):
@@ -27,8 +22,6 @@ def finish(g):
             g.screenshot()
             if g.click('ok'):
                 return True
-        if exit_on_fail:
-            exit()
     if g.click('finish1') or g.click('continue'):
         time.sleep(1)
         g.click(any_point)
@@ -44,15 +37,27 @@ def tupo(g):
     return False
 
 
+def prepare(g):
+    if g.find("can_prepare"):
+        return g.click("prepare")
+    return False
+
+
+def outOfTicket(g):
+    if g.find('zero_tupo'):
+        print 'out of ticket'
+        exit()
+    return False
+
+
 def main():
     game = Game(create(), idle_time=10, debug=True)
     common.handle_common_interruption(game)
+    game.addAction(outOfTicket)
     game.addAction(SimpleAction('attack'))
-    game.addAction(SimpleAction('prepare'))
+    game.addAction(prepare)
     game.addAction(tupo)
-    game.addAction(common.select_enemy)
     game.addAction(finish)
-    game.idle = lambda g: g.click(any_point)
     game.start()
 
 

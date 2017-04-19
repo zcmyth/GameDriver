@@ -6,7 +6,7 @@ from action import SimpleAction
 
 
 enemy = (0.728, 0.27)
-center = (0.5, 0.5)
+center = (0.7, 0.7)
 
 
 def finish(exit):

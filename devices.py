@@ -1,6 +1,8 @@
 from utils import rate_limited
 from adb_device import AdbDevice
+from hosts import HOSTS
 import random
+import sys
 
 
 class Builder(object):
@@ -24,12 +26,15 @@ class Builder(object):
         self._device.click = new_click
         return self
 
-    def build(self, device_id=None):
-        return self._device(device_id)
+    def build(self):
+        if len(sys.argv) == 2:
+            return self._device(HOSTS[int(sys.argv[1])])
+        else:
+            return self._device()
 
 
-def create(device_id=None, rate_limit=1, blur=0.01):
+def create(rate_limit=1, blur=0.01):
     return (Builder().with_device(AdbDevice)
             .with_limit(rate_limit)  # two action per second
             .with_blur(blur)   # random change click point
-            .build(device_id))
+            .build())

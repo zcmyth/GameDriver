@@ -19,13 +19,14 @@ def begin(g):
 def invite(g):
     if multiClick(g, ["invite", "xiaohao", "invite1"]):
         return True
-    elif not g.find("me"):
-        print "stuck"
-        time.sleep(5)
-        g.click((0.34, 0.67))
-        time.sleep(5)
-        g.click((0.67, 0.12))
-        return True
+    #elif not g.find("me"):
+    ##    print "stuck"
+     #   time.sleep(5)
+     #   g.click((0.72, 0.72))
+     #   time.sleep(5)
+     #   g.click((0.7, 0.7))
+     #   return True
+    return False
 
 
 def prepare(g):
@@ -34,18 +35,20 @@ def prepare(g):
     return False
 
 
+def fighting(g):
+    return g.find('auto') is not None
+
+
 def main():
-    if len(sys.argv) == 2:
-        game = Game(create(sys.argv[1]), debug=True, idle_time=45)
-    else:
-        game = Game(create('127.0.0.1:21523'), debug=True)
+    game = Game(create(), debug=True, idle_time=45)
     common.handle_common_interruption(game)
     game.addAction(SimpleAction('ok'))
     game.addAction(begin)
     game.addAction(SimpleAction('fight'))
     game.addAction(prepare)
-    game.addAction(common.select_enemy)
+    # game.addAction(common.select_enemy)
     game.addAction(common.finish(False))
+    game.addAction(fighting)
     game.idle = invite
     game.start()
 

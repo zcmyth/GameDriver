@@ -9,35 +9,10 @@ from action import SimpleAction
 from devices import create
 
 
-f = '16'
-if len(sys.argv) == 2:
-    f = sys.argv.pop(1)
-
 enemy = (0.757, 0.306)
 center = (0.5, 0.5)
 left = (0.2, 0.8)
 right = (0.8, 0.8)
-
-
-def enter(g):
-    # gift will have a delay
-    time.sleep(2)
-    # get gift before entering
-    if g.click('gift'):
-        time.sleep(3)
-        g.click(center)
-        return True
-    return g.click(f)
-
-
-def fight(g):
-    g.screenshot()
-    center = g.find('fight')
-    if center:
-        print 'try to click enemy'
-        g.click(center)
-        return True
-    return False
 
 
 def move(g):
@@ -70,16 +45,30 @@ def isfighting(g):
     return g.find('auto') is not None
 
 
+def prepare(g):
+    if g.find("can_prepare"):
+        return g.click("prepare")
+    return False
+
+
+def fight(g):
+    g.screenshot()
+    center = g.find('fight')
+    if center:
+        print 'try to click enemy'
+        g.click(center)
+        return True
+    return False
+
+
 def main():
     game = Game(create(), idle_time=20, debug=True)
     common.handle_common_interruption(game)
-    game.addAction(common.select_enemy)
+    game.addAction(SimpleAction('ok'))
     game.addAction(common.finish(False))
-    game.addAction(enter)
-    game.addAction(SimpleAction('discover'))
+    game.addAction(fight)
     game.addAction(box)
     game.addAction(SimpleAction('boss'))
-    game.addAction(fight)
     game.addAction(isfighting)
     game.idle = move
     game.start()
