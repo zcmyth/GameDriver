@@ -15,14 +15,17 @@ def prepare(g):
 
 
 def challenge(g):
-    if g.click('challenge'):
-        for i in xrange(10):
-            time.sleep(2)
-            g.screenshot()
-            if g.find("can_prepare"):
-                return g.click("prepare")
-        print 'out of ticket'
-        exit()
+    if not g.find('challenge'):
+        return False
+    for t in xrange(2):
+        if g.click('challenge'):
+            for i in xrange(10):
+                time.sleep(2)
+                g.screenshot()
+                if g.find("can_prepare"):
+                    return g.click("prepare")
+    print 'out of ticket'
+    exit()
     return False
 
 

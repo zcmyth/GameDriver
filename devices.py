@@ -33,7 +33,7 @@ class Builder(object):
             return self._device()
 
 
-def create(rate_limit=1, blur=0.01):
+def create(rate_limit=1, blur=0.02):
     return (Builder().with_device(AdbDevice)
             .with_limit(rate_limit)  # two action per second
             .with_blur(blur)   # random change click point

@@ -11,24 +11,26 @@ from devices import create
 
 enemy = (0.757, 0.306)
 center = (0.5, 0.5)
-left = (0.2, 0.8)
-right = (0.8, 0.8)
+left = (0.1, 0.8)
+right = (0.9, 0.8)
 
 
 def move(g):
     print 'searching...'
-    for i in xrange(3):
+    for i in xrange(4):
         time.sleep(2)
         g.click(right)
         g.screenshot()
         if g.click('boss') or fight(g):
             return True
-    for i in xrange(3):
+    for i in xrange(6):
         time.sleep(1)
         g.click(left)
         g.screenshot()
         if g.click('boss') or fight(g):
             return True
+    print 'cannot find target'
+    exit()
     return False
 
 

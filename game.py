@@ -30,7 +30,11 @@ class Game(object):
 
     def screenshot(self):
         # t = time.time()
-        pil_image = self._device.screenshot()
+        try:
+            pil_image = self._device.screenshot()
+        except TypeError as e:
+            print e
+            return
         open_cv_image = numpy.array(pil_image)
         self._screen = cv2.cvtColor(open_cv_image, cv2.COLOR_BGR2GRAY)
         # print 'screenshot took %sms' % int((time.time() - t) * 1000)
