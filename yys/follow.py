@@ -22,6 +22,13 @@ def box(g):
         return True
     return False
 
+def double_yuhun(g):
+    if g.click("double_yuhun"):
+        time.sleep(5)
+        g.screenshot()
+        return g.click("double_yuhun")
+    return False
+
 
 def main():
     game = Game(create(rate_limit=2, blur=0.005), debug=True)
@@ -31,6 +38,7 @@ def main():
     game.addAction(prepare)
     game.addAction(common.finish(False))
     game.addAction(box)
+    game.idle = double_yuhun
     game.start()
 
 

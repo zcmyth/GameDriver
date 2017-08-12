@@ -54,7 +54,7 @@ def main():
     game = Game(create(), idle_time=10, debug=True)
     common.handle_common_interruption(game)
     game.addAction(outOfTicket)
-    game.addAction(SimpleAction('attack'))
+    game.addAction(SimpleAction('tupo_attack'))
     game.addAction(prepare)
     game.addAction(tupo)
     game.addAction(finish)

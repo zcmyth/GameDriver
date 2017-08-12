@@ -17,15 +17,13 @@ def begin(g):
 
 
 def invite(g):
+    if g.click("double_yuhun"):
+        time.sleep(5)
+        g.screenshot()
+        return g.click("double_yuhun")
+
     if multiClick(g, ["invite", "xiaohao", "invite1"]):
         return True
-    #elif not g.find("me"):
-    ##    print "stuck"
-     #   time.sleep(5)
-     #   g.click((0.72, 0.72))
-     #   time.sleep(5)
-     #   g.click((0.7, 0.7))
-     #   return True
     return False
 
 

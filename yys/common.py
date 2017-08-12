@@ -42,10 +42,14 @@ def finish(exit):
             time.sleep(2)
             g.screenshot()
             if not g.click('finish2'):
-                print 'screen is full, click corner'
-                g.click(center)
-            time.sleep(1)
-            g.click(center)
+                time.sleep(2)
+                g.screenshot()
+                if not g.click('finish2'):
+                    print 'screen is full, click corner'
+                    g.click(center)
+            time.sleep(2)
+            g.screenshot()
+            g.click('finish2')
             return True
         return False
     return finish_fn
