@@ -2,64 +2,7 @@ import sys
 import time
 
 sys.path.append("..")
-from action import SimpleAction
-
-
-enemy = (0.728, 0.27)
-center = (0.95, 0.5)
-
-
-def finish_bak(exit):
-    def finish_fn(g):
-        if g.click('continue'):
-            return True
-        if g.find('finish3'):
-            g.click(center)
-            return True
-        finished = g.click('finish1')
-        if not finished and exit:
-            finished = g.click('failed')
-            if finished:
-                exit()
-        if finished:
-            time.sleep(1)
-            g.click(center)
-            time.sleep(1)
-            g.screenshot()
-            g.click('finish2')
-            time.sleep(1)
-            g.click(center)
-            return True
-        return False
-    return finish_fn
-
-
-def finish(exit):
-    def finish_fn(g):
-        if g.click('finish1'):
-            time.sleep(1)
-            g.click(center)
-            time.sleep(2)
-            g.screenshot()
-            if not g.click('finish2'):
-                time.sleep(2)
-                g.screenshot()
-                if not g.click('finish2'):
-                    print 'screen is full, click corner'
-                    g.click(center)
-            time.sleep(2)
-            g.screenshot()
-            g.click('finish2')
-            return True
-        return False
-    return finish_fn
-
-
-def select_enemy(g):
-    if g.find('auto') or g.find('x2'):
-        g.click(enemy)
-        return True
-    return False
+from action import SimpleAction, multiClick
 
 
 def exit_if_no_energy(g):
@@ -72,8 +15,45 @@ def exit_if_no_energy(g):
     return False
 
 
+def prepare(g):
+    if g.find("can_prepare"):
+        return g.click("prepare")
+    return False
+
+
+def finish(g):
+    if g.find("finish1"):
+        g.screenshot()
+        result = g.click("finish1")
+        time.sleep(1)
+        return result
+    if g.find("finish2"):
+        time.sleep(2)
+        g.screenshot()
+        result = g.click("finish2")
+        time.sleep(1)
+        return result
+    return False
+
+
+def login(g):
+    if g.find("yys"):
+        if multiClick(g, ["yys", "cg", "close", "enter_game"], 10, 5):
+            for i in xrange(5):
+                time.sleep(5)
+                g.screenshot()
+                if not g.click("enter_game"):
+                    break
+            return multiClick(g, ["shenle", "task"], 10, 5)
+    return False
+
+
 def handle_common_interruption(g):
-    g.addAction(SimpleAction('accept'))
+    g.addAction(SimpleAction('reject'))
     g.addAction(SimpleAction('busy'))
+    g.addAction(finish)
+    # g.addAction(SimpleAction('finish2'))
+    g.addAction(prepare)
     # g.addAction(SimpleAction('cancel'))
     g.addAction(exit_if_no_energy)
+    g.addAction(login)

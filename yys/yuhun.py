@@ -8,12 +8,6 @@ from action import SimpleAction
 from devices import create
 
 
-def prepare(g):
-    if g.find("can_prepare"):
-        return g.click("prepare")
-    return False
-
-
 def challenge(g):
     if not g.find('challenge'):
         return False
@@ -26,16 +20,12 @@ def challenge(g):
                     return g.click("prepare")
     print 'out of ticket'
     exit()
-    return False
 
 
 def main():
     game = Game(create(), debug=True)
     common.handle_common_interruption(game)
     game.addAction(challenge)
-    game.addAction(prepare)
-    # game.addAction(common.select_enemy)
-    game.addAction(common.finish(False))
     game.start()
 
 

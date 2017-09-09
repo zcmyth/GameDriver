@@ -1,7 +1,7 @@
 import time
 
 
-def multiClick(game, names, retry=5):
+def multiClick(game, names, retry=5, wait=1):
     for name in names:
         if not game.click(name, retry=retry):
             return False

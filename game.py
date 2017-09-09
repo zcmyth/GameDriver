@@ -32,11 +32,12 @@ class Game(object):
         # t = time.time()
         try:
             pil_image = self._device.screenshot()
+            open_cv_image = numpy.array(pil_image)
+            self._screen = cv2.cvtColor(open_cv_image, cv2.COLOR_BGR2GRAY)
         except TypeError as e:
             print e
             return
-        open_cv_image = numpy.array(pil_image)
-        self._screen = cv2.cvtColor(open_cv_image, cv2.COLOR_BGR2GRAY)
+
         # print 'screenshot took %sms' % int((time.time() - t) * 1000)
 
     def find(self, name):
@@ -71,6 +72,13 @@ class Game(object):
                 return self.click(name, retry=retry - 1)
             return False
         self._device.click(point[0], point[1])
+        return True
+
+    def drag(self, start_name, end_name, duration):
+        start = self.find(start_name)
+        end = self.find(end_name)
+        if start and end:
+            self._device.drag(start, end, duration)
         return True
 
     def addAction(self, action):

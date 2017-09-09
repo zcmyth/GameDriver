@@ -18,6 +18,12 @@ class AdbDevice(object):
     def screenshot(self):
         return self._adb.takeSnapshot(True)
 
+    def drag(self, start, end, duration):
+        self._adb.drag(
+            (int(start[0] * self.width), int(start[1] * self.height)),
+            (int(end[0] * self.width), int(end[1] * self.height)),
+            duration, 3)
+
     def click(self, x, y):
         """ x and y should be [0, 1] """
         if x < 0 or x > 1 or y < 0 or y > 1:
