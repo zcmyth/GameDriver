@@ -5,7 +5,7 @@ import time
 
 class Game(object):
 
-    def __init__(self, device, target_width=1280,
+    def __init__(self, device, target_width=1024,
                  threshold=0.8, idle_time=30, debug=False):
         self._device = device
         self._actions = []
@@ -41,6 +41,7 @@ class Game(object):
         # print 'screenshot took %sms' % int((time.time() - t) * 1000)
 
     def find(self, name):
+        #print "try find " + name
         w, h = self._getImage(name).shape[::-1]
         res = cv2.matchTemplate(
             self._screen, self._getImage(name), cv2.TM_CCOEFF_NORMED)

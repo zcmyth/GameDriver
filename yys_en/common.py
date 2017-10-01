@@ -27,22 +27,20 @@ def wait_if_no_energy(g):
     return False
 
 
-def prepare(g):
-    if g.find("can_prepare"):
-        return g.click("prepare")
+def ready(g):
+    if g.find("deploy"):
+        return g.click("ready")
     return False
 
 
 def finish(g):
     if g.find("finish1"):
         if g.click("finish1"):
+            time.sleep(2)
+            g.click((0.5, 0.5))
             time.sleep(3)
             g.screenshot()
-    if g.find("finish2"):
-        if g.click("finish2"):
-            time.sleep(1)
-            return True
-    return False
+    return g.click("finish2")
 
 
 def login(g):
@@ -65,11 +63,11 @@ def login(g):
 
 def handle_common_interruption(g, exit=True):
     g.addAction(finish)
-    g.addAction(prepare)
-    g.addAction(SimpleAction('reject'))
-    g.addAction(SimpleAction('busy'))
+    # g.addAction(ready)
+    # g.addAction(SimpleAction('reject'))
+    # g.addAction(SimpleAction('busy'))
     if exit:
         g.addAction(exit_if_no_energy)
     else:
         g.addAction(wait_if_no_energy)
-    g.addAction(login)
+    # g.addAction(login)
