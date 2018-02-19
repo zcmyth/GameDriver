@@ -40,7 +40,11 @@ def finish(g):
             g.click((0.5, 0.5))
             time.sleep(3)
             g.screenshot()
-    return g.click("finish2")
+    if g.find("finish2"):
+        if g.click("finish2"):
+            time.sleep(1)
+            return True
+    return False
 
 
 def login(g):
@@ -63,7 +67,7 @@ def login(g):
 
 def handle_common_interruption(g, exit=True):
     g.addAction(finish)
-    # g.addAction(ready)
+    g.addAction(ready)
     # g.addAction(SimpleAction('reject'))
     # g.addAction(SimpleAction('busy'))
     if exit:

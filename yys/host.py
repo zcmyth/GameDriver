@@ -10,7 +10,7 @@ from devices import create
 
 
 def begin(g):
-    if g.find("xiaohao"):
+    if g.find("xiaohao") or g.find("xiaohao1"):
         if g.click("begin"):
             time.sleep(3)
             return True
@@ -66,7 +66,7 @@ def idle(g):
 
     if g.find('invite'):
         if not multiClick(g, ["invite", "xiaohao"]):
-            if no_xiaohao >= 2:
+            if no_xiaohao >= 3:
                 print "no xiaohao many times, exit"
                 exit()
             print "cannot find xiaohao, cancel the window and retry later."
@@ -77,7 +77,7 @@ def idle(g):
         g.screenshot()
         if g.click("invite1"):
             no_xiaohao = 0
-            if last_invite and (datetime.now() - last_invite).seconds < 120:
+            if last_invite and (datetime.now() - last_invite).seconds < 60:
                 # the follower might be out of energy, wait
                 print "xiaohao is out of energy, sleep and wait for an hour"
                 time.sleep(3600)

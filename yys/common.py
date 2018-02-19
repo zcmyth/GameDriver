@@ -36,22 +36,22 @@ def prepare(g):
 def finish(g):
     if g.find("finish1"):
         if g.click("finish1"):
-            time.sleep(3)
+            time.sleep(4)
             g.screenshot()
     if g.find("finish2"):
         if g.click("finish2"):
-            time.sleep(1)
+            time.sleep(2)
             return True
     return False
 
 
 def login(g):
     if g.find("yys"):
-        if multiClick(g, ["yys", "cg", "close", "enter_game"], 10, 5):
+        if multiClick(g, ["yys", "cg", "close", "enter_game1"], 10, 5):
             while True:
                 time.sleep(5)
                 g.screenshot()
-                if not g.click("enter_game"):
+                if not g.click("enter_game1"):
                     break
             multiClick(g, ["shenle", "close"], 5, 3)
             while True:

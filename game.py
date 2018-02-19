@@ -5,7 +5,7 @@ import time
 
 class Game(object):
 
-    def __init__(self, device, target_width=1024,
+    def __init__(self, device, target_width=1280,
                  threshold=0.8, idle_time=30, debug=False):
         self._device = device
         self._actions = []

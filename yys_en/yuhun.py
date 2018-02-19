@@ -23,9 +23,10 @@ def challenge(g):
 
 
 def main():
-    game = Game(create(), debug=True)
-    common.handle_common_interruption(game)
-    game.addAction(challenge)
+    game = Game(create(), debug=True, target_width=1024)
+    common.handle_common_interruption(game, False)
+    # game.addAction(challenge)
+    game.addAction(SimpleAction('challenge'))
     game.start()
 
 
