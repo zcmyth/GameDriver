@@ -24,6 +24,7 @@ packages = ["src/game_driver"]
 dev = [
     "ipykernel>=6.30.1",
     "jupyter>=1.1.1",
+    "nbstripout>=0.8.1",
     "ruff>=0.8.4",
 ]
 
