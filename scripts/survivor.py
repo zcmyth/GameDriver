@@ -17,9 +17,9 @@ controls = [
     'next',
     'start',
     'steamroll',
-    #'ok'
+    # 'battle',
+    # 'ok'
 ]
-
 
 preferred_skills = [
     'destroyer',
@@ -34,23 +34,19 @@ preferred_skills = [
     'beam gun',
     'damage up',
     'damageup',
-    'rpg',
+]
+
+secondary_skills = [
+    'twin',
+    'born',
     # stats
     'atk',
     'all ummo',
     'all ammo',
     'quel',
-    # forcefield
-    'foucel',
-    'forcef',
     # ball
     'ball',
     'shoe',
-    # durian
-    'caltrops',
-    'durion',
-    'duuial',
-    'durian',
     # energycube
     'encgy',
     'supercell',
@@ -60,20 +56,27 @@ preferred_skills = [
     'duralion',
 ]
 
-
 max_iter = 9999999
 for i in range(max_iter):
     time.sleep(2)
-    logger.info(f'Processing iteration: {i + 1}/{max_iter}')
+    # logger.info(f'Processing iteration: {i + 1}/{max_iter}')
     engine.refresh()
 
     if engine.contains('choice'):
         clicked, skill = engine.click_first_text(preferred_skills)
         if clicked:
-            logger.info('picked skill' + skill)
-        else:
-            logger.info('pick a random skill')
-            engine.click(288.0 / 460, 500.0 / 1024)
+            logger.info('picked skill ' + skill)
+            continue
+
+        if engine.click_text('refresh', retry=3):
+            logger.info('clicked refresh')
+
+        clicked, skill = engine.click_first_text(secondary_skills)
+        if clicked:
+            logger.info('picked secondary skill ' + skill)
+            continue
+        logger.info('pick a random skill')
+        engine.click(288.0 / 460, 500.0 / 1024)
         continue
 
     control_clicked, control = engine.click_first_text(controls)
@@ -94,6 +97,11 @@ for i in range(max_iter):
         engine.click_text('main challenge')
         engine.click(380.0 / 460, 280.0 / 1024)
         continue
+
+    if engine.contains('revival'):
+        if engine.try_click_text('ad'):
+            continue
+        # engine.click(368.0 / 460, 380.0 / 1024)
 
     if i % 5 == 0:
         engine.click(0.5, 0.8, False)

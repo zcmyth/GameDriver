@@ -73,7 +73,7 @@ class EasyOCRAnalyzer(ImageAnalyzer):
     def __init__(self):
         self.reader = easyocr.Reader(['en'])
 
-    def extract_text_locations(self, image, confidence_threshold=0.3):
+    def extract_text_locations(self, image, confidence_threshold=0.2):
         width, height = image.size
 
         # Convert PIL image to numpy array
