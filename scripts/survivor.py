@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 engine = GameEngine()
 
 controls = [
+    'activate',
     'confirm',
     'next',
     'start',
@@ -24,64 +25,44 @@ controls = [
 preferred_skills = [
     'destroyer',
     'drone',
-    'starf',
-    'staulorge',
-    'stallorge',
-    'havoc',
-    'funnel',
-    'fuluel',
-    'vulcal',
-    'beam gun',
-    'damage up',
-    'damageup',
 ]
 
 secondary_skills = [
-    'twin',
-    'born',
-    # stats
-    'atk',
-    'all ummo',
-    'all ammo',
-    'quel',
-    # ball
-    'ball',
-    'shoe',
-    # energycube
-    'encgy',
-    'supercell',
-    'bullet',
-    # overtime duration
-    'duration',
-    'duralion',
+    'soccer',
+    'havoc',
+    'starforge',
+    'palm wind',
+    'hi-power',
+    'drill',
+    'twinborn',
 ]
 
 max_iter = 9999999
 for i in range(max_iter):
     time.sleep(2)
-    # logger.info(f'Processing iteration: {i + 1}/{max_iter}')
+    print(f'Processing iteration: {i + 1}/{max_iter}')
     engine.refresh()
 
     if engine.contains('choice'):
         clicked, skill = engine.click_first_text(preferred_skills)
         if clicked:
-            logger.info('picked skill ' + skill)
+            print('picked skill ' + skill)
             continue
 
         if engine.click_text('refresh', retry=3):
-            logger.info('clicked refresh')
+            print('clicked refresh')
 
         clicked, skill = engine.click_first_text(secondary_skills)
         if clicked:
-            logger.info('picked secondary skill ' + skill)
+            print('picked secondary skill ' + skill)
             continue
-        logger.info('pick a random skill')
+        print('pick a random skill')
         engine.click(288.0 / 460, 500.0 / 1024)
         continue
 
     control_clicked, control = engine.click_first_text(controls)
     if control_clicked:
-        logger.info(f'control {control} clicked')
+        print(f'control {control} clicked')
         continue
 
     if engine.contains('back t'):

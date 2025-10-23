@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
 
-import cv2
-import easyocr
 import numpy as np
+from paddleocr import PaddleOCR
 from PIL import ImageDraw
 
 PROMPT = """
@@ -69,35 +68,45 @@ class ImageAnalyzer(ABC):
         pass
 
 
-class EasyOCRAnalyzer(ImageAnalyzer):
+class PaddleOCRAnalyzer(ImageAnalyzer):
     def __init__(self):
-        self.reader = easyocr.Reader(['en'])
+        self.reader = PaddleOCR(
+            lang='en',
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            use_textline_orientation=False,
+            text_recognition_model_name='en_PP-OCRv5_mobile_rec',
+            text_detection_model_name='PP-OCRv5_mobile_det',
+        )
 
-    def extract_text_locations(self, image, confidence_threshold=0.2):
+    def extract_text_locations(self, image, confidence_threshold=0.8):
         width, height = image.size
 
         # Convert PIL image to numpy array
         img_array = np.array(image)
 
-        # Use EasyOCR to detect text
-        results_raw = self.reader.readtext(img_array)
+        # Use PaddleOCR to detect text
+        # PaddleOCR 3.3.0 returns OCRResult with dt_polys, rec_texts, rec_scores
+        results_raw = self.reader.predict(img_array)
 
         results = []
-        for bbox, text, confidence in results_raw:
+
+        # PaddleOCR returns empty list if no text detected
+        if not results_raw or not results_raw[0]:
+            return results
+
+        ocr_result = results_raw[0]
+        bboxes = ocr_result['dt_polys']
+        texts = ocr_result['rec_texts']
+        confidences = ocr_result['rec_scores']
+
+        for bbox, text, confidence in zip(bboxes, texts, confidences):
             if confidence > confidence_threshold:
                 # Calculate center from bounding box
-                x_coords = [point[0] for point in bbox]
-                y_coords = [point[1] for point in bbox]
+                # bbox format: [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+                x_coords, y_coords = zip(*bbox)
                 center_x = sum(x_coords) / len(x_coords)
                 center_y = sum(y_coords) / len(y_coords)
-
-                # Check if text is greyed out
-                try:
-                    if self._is_greyed_out(img_array, bbox):
-                        continue
-                except Exception:
-                    # ignore errors in greyed-out detection
-                    pass
 
                 # Calculate character size for sorting
                 bbox_width = max(x_coords) - min(x_coords)
@@ -125,25 +134,6 @@ class EasyOCRAnalyzer(ImageAnalyzer):
 
         return results
 
-    def _is_greyed_out(self, img_array, bbox):
-        # Extract text region
-        x_coords = [point[0] for point in bbox]
-        y_coords = [point[1] for point in bbox]
-        x1, y1 = int(min(x_coords)), int(min(y_coords))
-        x2, y2 = int(max(x_coords)), int(max(y_coords))
-
-        # Crop text region
-        text_region = img_array[y1:y2, x1:x2]
-
-        # Convert to grayscale
-        gray = cv2.cvtColor(text_region, cv2.COLOR_RGB2GRAY)
-
-        # Calculate contrast (standard deviation)
-        contrast = np.std(gray)
-
-        # Low contrast indicates greyed out text
-        return contrast < 30
-
 
 def create_analyzer():
-    return EasyOCRAnalyzer()
+    return PaddleOCRAnalyzer()
