@@ -88,6 +88,9 @@ class FakeEngine:
     def is_cycle_stuck(self, cycle_len=2, min_cycles=3):
         return False
 
+    def metrics(self):
+        return {}
+
 
 def test_shop_label_does_not_trigger_purchase_dismiss_loop():
     engine = FakeEngine(
@@ -173,3 +176,26 @@ def test_skill_choice_uses_hotspot_close_when_text_close_is_missed():
 
     assert engine.clicked
     assert engine.clicked[0] == (0.94, 0.07)
+
+
+def test_skill_choice_refresh_fail_breaker_triggers_early_recovery_on_low_success_rate():
+    class RefreshFailEngine(FakeEngine):
+        def click_text(self, text, retry=5, exact=False, min_confidence=0.0):
+            return False
+
+        def metrics(self):
+            return {'text_click_success_rate': 0.038}
+
+    engine = RefreshFailEngine(
+        [
+            {'text': 'Choice', 'confidence': 0.96, 'x': 0.5, 'y': 0.1},
+            {'text': 'Noise', 'confidence': 0.9, 'x': 0.4, 'y': 0.4},
+        ]
+    )
+
+    strategy = SurvivorStrategy()
+    for i in range(1, 4):
+        strategy.step(engine, i=i)
+
+    assert (46.0 / 460, 960.0 / 1024) in engine.clicked
+    assert strategy.skill_choice_refresh_fail_streak == 0
