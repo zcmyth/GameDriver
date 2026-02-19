@@ -194,7 +194,7 @@ def test_skill_choice_refresh_fail_breaker_triggers_early_recovery_on_low_succes
     )
 
     strategy = SurvivorStrategy()
-    for i in range(1, 4):
+    for i in range(1, 3):
         strategy.step(engine, i=i)
 
     assert (46.0 / 460, 960.0 / 1024) in engine.clicked

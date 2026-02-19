@@ -612,9 +612,15 @@ class SurvivorStrategy:
                 self.skill_choice_refresh_fail_streak = 0
                 return
 
-            refreshed = engine.click_text('refresh', retry=2, min_confidence=0.85)
-            if refreshed:
-                self._emit_decision(i, 'refresh', 'clicked', 'skill_refresh')
+            refreshed = False
+            if engine.contains('refresh', min_confidence=0.86):
+                refreshed = engine.click_text('refresh', retry=1, min_confidence=0.86)
+                if refreshed:
+                    self._emit_decision(i, 'refresh', 'clicked', 'skill_refresh')
+                else:
+                    self._emit_decision(i, 'refresh', 'miss', 'skill_refresh_present_but_unclicked')
+            else:
+                self._emit_decision(i, 'refresh', 'skip', 'skill_refresh_absent')
 
             # Follow-up guard: repeated refresh misses in skill-choice with very low
             # global text-click success strongly indicates OCR-driven dead loop.
@@ -628,7 +634,7 @@ class SurvivorStrategy:
             metrics = engine.metrics() if hasattr(engine, 'metrics') else {}
             text_success_rate = float(metrics.get('text_click_success_rate', 1.0) or 0.0)
             if (
-                self.skill_choice_refresh_fail_streak >= 3
+                self.skill_choice_refresh_fail_streak >= 2
                 and text_success_rate <= 0.08
             ):
                 self._emit_decision(
