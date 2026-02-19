@@ -22,14 +22,23 @@ class FakeEngine:
         return {}
 
     def get_matched_locations(self, text, exact=False, min_confidence=0.0):
-        target = text.lower()
         matches = []
+        is_regex = hasattr(text, 'search')
+        target = None if is_regex else text.lower()
+
         for loc in self._locations:
             if loc.get('confidence', 0) < min_confidence:
                 continue
             current = loc['text'].lower()
+
+            if is_regex:
+                if text.search(loc['text']):
+                    matches.append(loc)
+                continue
+
             if (exact and current == target) or (not exact and target in current):
                 matches.append(loc)
+
         return sorted(matches, key=lambda x: x.get('confidence', 0), reverse=True)
 
     def contains(self, text, exact=False, min_confidence=0.0):
@@ -127,3 +136,18 @@ def test_skill_choice_streak_breaker_triggers_alternate_recovery():
 
     assert (46.0 / 460, 960.0 / 1024) in engine.clicked
     assert strategy.skill_choice_streak == 0
+
+
+def test_skill_choice_prioritizes_close_x_before_refresh_path():
+    engine = FakeEngine(
+        [
+            {'text': 'Choice', 'confidence': 0.96, 'x': 0.5, 'y': 0.1},
+            {'text': 'X', 'confidence': 0.97, 'x': 0.92, 'y': 0.08},
+        ]
+    )
+
+    strategy = SurvivorStrategy()
+    strategy.step(engine, i=1)
+
+    assert engine.clicked
+    assert engine.clicked[0] == (0.92, 0.08)
