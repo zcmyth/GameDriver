@@ -159,7 +159,13 @@ For any runtime feature affecting execution path, reliability, or performance:
 
 Track only concrete, actionable debt.
 
-1. _No items yet._ Add entries as changes are reviewed.
+1. **ID:** ARCH-001  
+   **Title:** Unified ClickTargetResolver (text + image fallback)  
+   **Why debt exists:** Current click behavior is primarily text-driven; introducing image-based fallback risks branching logic unless unified under a single resolver abstraction.  
+   **Risk:** Medium (flakiness + maintenance if implemented ad hoc)  
+   **Owner:** Engine team  
+   **Due date:** Before enabling image-click by default in production  
+   **Exit criteria:** Single resolver interface with deterministic strategy order, confidence thresholds, telemetry, and tests across resolution scaling cases.
 
 Entry format:
 - ID:

@@ -129,6 +129,13 @@ class SurvivorStrategy:
             'templates/survivor/confirm.png',
         ]
 
+        # Progress vs activity tracking.
+        self.last_signature = None
+        self.last_scene_kind = None
+        self.no_progress_steps = 0
+        self.recovery_attempts = 0
+        self.recovery_success = 0
+
     @staticmethod
     def _text_samples(engine):
         return [item['text'].lower() for item in engine._locations]
@@ -384,7 +391,68 @@ class SurvivorStrategy:
         has_level = any('lv.' in text for text in texts)
         return (numeric_noise >= 8 and has_timer) or (numeric_noise >= 6 and has_level)
 
+    def _scene_kind(self, engine):
+        if engine.contains('choice', min_confidence=0.9):
+            return 'skill_choice'
+        if self._is_in_battle(engine):
+            return 'battle'
+        if self._contains_blocked_purchase_text(engine):
+            return 'offer_popup'
+        if any(
+            engine.contains(text, min_confidence=0.85)
+            for text in ('mission', 'patrol', 'friends', 'challenge', 'start')
+        ):
+            return 'home'
+        return 'unknown'
+
+    def _track_progress_signals(self, engine, i):
+        recent = engine.recent_signatures(1)
+        current_sig = recent[-1] if recent else None
+        current_scene = self._scene_kind(engine)
+
+        signature_changed = bool(
+            self.last_signature and current_sig and self.last_signature != current_sig
+        )
+        scene_changed = bool(
+            self.last_scene_kind and self.last_scene_kind != current_scene
+        )
+
+        progressed = signature_changed or scene_changed
+        if progressed:
+            self.no_progress_steps = 0
+        else:
+            self.no_progress_steps += 1
+
+        self.last_signature = current_sig
+        self.last_scene_kind = current_scene
+
+        if self.no_progress_steps > 0 and self.no_progress_steps % 10 == 0:
+            logger.warning(
+                'No-progress streak steps=%s scene=%s iter=%s recoveries=%s/%s',
+                self.no_progress_steps,
+                current_scene,
+                i,
+                self.recovery_success,
+                self.recovery_attempts,
+            )
+
+        return current_scene
+
     def step(self, engine, i):
+        current_scene = self._track_progress_signals(engine, i)
+
+        if self.no_progress_steps >= 14:
+            self._emit_decision(
+                i,
+                'no_progress_guard',
+                'fallback',
+                'streak_breaker',
+                detail=f'scene={current_scene} steps={self.no_progress_steps}',
+            )
+            self._force_alternate_recovery(engine, i, 'no_progress_guard')
+            self.no_progress_steps = 0
+            return
+
         hard_stuck = engine.is_stuck(repeat_threshold=8)
         cycle_stuck = engine.is_cycle_stuck(cycle_len=2, min_cycles=3)
 
@@ -403,6 +471,10 @@ class SurvivorStrategy:
             debug_path = self.artifact_dir / f'stuck_{ts}.png'
             engine.debug().save(debug_path)
 
+            before = engine.recent_signatures(1)
+            before_sig = before[-1] if before else ''
+            self.recovery_attempts += 1
+
             if self.loop_cycle_hits >= 3 or self.loop_stuck_hits >= 3:
                 logger.warning(
                     'Detected persistent loop (hard_stuck=%s cycle_stuck=%s) '
@@ -415,7 +487,7 @@ class SurvivorStrategy:
                 engine.click(46.0 / 460, 960.0 / 1024, False)
                 engine.click(0.10, 0.86, False)
                 engine.click(0.50, 0.90, False)
-                self._emit_decision(i, 'loop_recovery_escalated', 'fallback', 'cycle_guard')
+                decision_name = 'loop_recovery_escalated'
             else:
                 logger.warning(
                     'Detected stuck/cycle state (hard_stuck=%s cycle_stuck=%s), '
@@ -425,7 +497,23 @@ class SurvivorStrategy:
                     debug_path,
                 )
                 engine.click(0.5, 0.8, False)
-                self._emit_decision(i, 'loop_recovery', 'fallback', 'cycle_guard')
+                decision_name = 'loop_recovery'
+
+            engine.wait(0.6)
+            after = engine.recent_signatures(1)
+            after_sig = after[-1] if after else ''
+            changed = bool(before_sig and after_sig and before_sig != after_sig)
+            if changed:
+                self.recovery_success += 1
+                self.no_progress_steps = 0
+
+            self._emit_decision(
+                i,
+                decision_name,
+                'clicked' if changed else 'fallback',
+                'cycle_guard',
+                detail=f'recovery_success={self.recovery_success}/{self.recovery_attempts}',
+            )
 
         if i % 20 == 0:
             logger.info('engine metrics: %s', engine.metrics())

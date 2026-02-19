@@ -6,14 +6,22 @@ brew install android-platform-tools
 ```
 
 ## Interaction Modes
-The engine now supports two ways to find click targets:
+The engine supports two explicit click modes:
 
-1. **Text-based (OCR)** via `click_text(...)`, `click_first_text(...)`
-2. **Image-based (template matching)** via:
+1. **Text-based (OCR)**
+   - `click_text(...)`
+   - `click_first_text(...)`
+   - `click_target("Start")` (routes to text)
+
+2. **Image-based (template matching)**
    - `register_template(name, path)`
-   - `click_template(name_or_path, threshold=0.88, retry=3)`
+   - `register_templates_from_folder(path)`
+   - `click_target("image:Start")` (routes to image click only)
 
-Use template matching for icon-only UI elements (e.g. skull button, non-text tabs).
+Notes:
+- `image:` prefix is explicit and fail-fast (no fallback to text).
+- Folder-loaded template names can include source screen size using: `Name__1920x1080.png`.
+  The matcher scales templates to current screen size before matching.
 
 ## Multi-game structure
 - Core engine stays generic in `src/game_driver/` (`game_engine.py`, `device.py`, analyzers).

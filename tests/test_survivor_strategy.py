@@ -5,6 +5,7 @@ class FakeEngine:
     def __init__(self, locations):
         self._locations = locations
         self.clicked = []
+        self._signatures = ['fake-signature']
 
     def is_stuck(self, repeat_threshold=8):
         return False
@@ -65,6 +66,17 @@ class FakeEngine:
         self.clicked.append((x, y))
 
     def try_click_template(self, _name_or_path, threshold=0.88):
+        return False
+
+    def recent_signatures(self, count=None):
+        if count is None:
+            return list(self._signatures)
+        return self._signatures[-count:]
+
+    def wait(self, seconds=1):
+        return None
+
+    def is_cycle_stuck(self, cycle_len=2, min_cycles=3):
         return False
 
 

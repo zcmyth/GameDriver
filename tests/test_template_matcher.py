@@ -70,3 +70,25 @@ def test_find_all_returns_ranked_matches(tmp_path):
 
     assert len(matches) >= 2
     assert matches[0]['confidence'] >= matches[1]['confidence']
+
+
+def test_register_from_folder_and_scale_by_encoded_dimensions(tmp_path):
+    source = Image.new('RGB', (200, 100), color='black')
+    draw = ImageDraw.Draw(source)
+    draw.rectangle((40, 20, 80, 60), fill='white')
+    draw.rectangle((52, 32, 68, 48), fill='black')
+
+    template = source.crop((40, 20, 80, 60))
+    template_path = tmp_path / 'Play__200x100.png'
+    template.save(template_path)
+
+    matcher = TemplateMatcher()
+    loaded = matcher.register_from_folder(tmp_path)
+    assert loaded == 1
+
+    current = source.resize((400, 200))
+    match = matcher.match(current, 'Play', threshold=0.75)
+
+    assert match is not None
+    assert 0.25 <= match['x'] <= 0.35
+    assert 0.35 <= match['y'] <= 0.45

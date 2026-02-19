@@ -1,5 +1,7 @@
 import re
 
+import pytest
+
 from game_driver import game_engine as ge_module
 
 
@@ -116,3 +118,28 @@ def test_engine_event_listener_receives_click_events(monkeypatch):
     event_names = [name for name, _payload in events]
     assert 'click' in event_names
     assert 'text_click_success' in event_names
+
+
+def test_click_target_routes_image_prefix_to_image_click(monkeypatch):
+    engine, _device = build_engine(monkeypatch, [])
+
+    called = {'image': None}
+
+    def fake_click_image(name, retry=3, threshold=0.88, **kwargs):
+        called['image'] = (name, retry, threshold)
+        return True
+
+    engine.click_image = fake_click_image
+
+    assert engine.click_target('image:confirm', retry=2, threshold=0.91)
+    assert called['image'] == ('confirm', 2, 0.91)
+
+
+def test_click_target_image_prefix_fails_fast_without_fallback(monkeypatch):
+    engine, _device = build_engine(
+        monkeypatch,
+        [{'text': 'confirm', 'x': 0.5, 'y': 0.5, 'confidence': 0.95}],
+    )
+
+    with pytest.raises(ge_module.ImageClickError):
+        engine.click_target('image:missing', retry=1)

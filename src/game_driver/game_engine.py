@@ -2,10 +2,25 @@ import re
 import time
 from collections import deque
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from game_driver.device import Device
 from game_driver.image_analyzer import create_analyzer, draw_text_locations
 from game_driver.template_matcher import TemplateMatcher
+
+
+IMAGE_PREFIX = 'image:'
+
+
+class ImageClickError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class ClickRequest:
+    raw_target: object
+    mode: str
+    target: object
 
 
 class GameEngine:
@@ -15,6 +30,7 @@ class GameEngine:
         analyzer=None,
         template_matcher=None,
         event_listeners=None,
+        template_folder=None,
     ):
         self.device = device or Device()
         self.analyzer = analyzer or create_analyzer()
@@ -32,12 +48,26 @@ class GameEngine:
             'template_click_attempts': 0,
             'template_click_success': 0,
             'template_click_miss': 0,
+            'image_click_attempts': 0,
+            'image_click_success': 0,
+            'image_click_miss': 0,
         }
+        if template_folder:
+            self.register_templates_from_folder(template_folder)
         self.refresh()
 
     @staticmethod
     def _normalize_text(text):
         return str(text).strip().lower()
+
+    @staticmethod
+    def parse_click_target(target):
+        if isinstance(target, str) and target.startswith(IMAGE_PREFIX):
+            image_name = target[len(IMAGE_PREFIX) :].strip()
+            if not image_name:
+                raise ValueError('Image target cannot be empty. Use image:<name>.')
+            return ClickRequest(raw_target=target, mode='image', target=image_name)
+        return ClickRequest(raw_target=target, mode='text', target=target)
 
     def add_listener(self, listener: Callable[[str, dict], None]):
         self._listeners.append(listener)
@@ -154,6 +184,25 @@ class GameEngine:
             self.refresh()
         return False
 
+    def click_target(
+        self,
+        target,
+        retry=5,
+        exact=False,
+        min_confidence=0.0,
+        threshold=0.88,
+        **kwargs,
+    ):
+        request = self.parse_click_target(target)
+        if request.mode == 'image':
+            return self.click_image(request.target, retry=retry, threshold=threshold, **kwargs)
+        return self.click_text(
+            request.target,
+            retry=retry,
+            exact=exact,
+            min_confidence=min_confidence,
+        )
+
     def click_first_text(self, text_list, exact=False, min_confidence=0.0):
         for text in text_list:
             if self.try_click_text(
@@ -190,6 +239,9 @@ class GameEngine:
     def register_template(self, name, template_path):
         self.template_matcher.register_template(name, template_path)
 
+    def register_templates_from_folder(self, folder_path):
+        return self.template_matcher.register_from_folder(folder_path)
+
     def get_template_match(self, name_or_path, threshold=0.88, **kwargs):
         return self.template_matcher.match(
             self._screenshot,
@@ -223,6 +275,33 @@ class GameEngine:
             confidence=match.get('confidence', 0),
         )
         return True
+
+    def try_click_image(self, image_name, threshold=0.88, **kwargs):
+        self._metrics['image_click_attempts'] += 1
+        try:
+            ok = self.try_click_template(image_name, threshold=threshold, **kwargs)
+        except KeyError as exc:
+            self._metrics['image_click_miss'] += 1
+            raise ImageClickError(f'IMAGE_ASSET_NOT_FOUND: {image_name}') from exc
+
+        if not ok:
+            self._metrics['image_click_miss'] += 1
+            raise ImageClickError(f'IMAGE_MATCH_LOW_CONFIDENCE: {image_name}')
+
+        self._metrics['image_click_success'] += 1
+        return True
+
+    def click_image(self, image_name, retry=3, threshold=0.88, **kwargs):
+        last_error = None
+        for _ in range(retry):
+            try:
+                return self.try_click_image(image_name, threshold=threshold, **kwargs)
+            except ImageClickError as exc:
+                last_error = exc
+                self.refresh()
+        if last_error is not None:
+            raise last_error
+        raise ImageClickError(f'IMAGE_CLICK_FAILED: {image_name}')
 
     def click_template(self, name_or_path, threshold=0.88, retry=3, **kwargs):
         for _ in range(retry):
@@ -294,10 +373,15 @@ class GameEngine:
             (template_success / template_attempts) if template_attempts else 0
         )
 
+        image_attempts = self._metrics['image_click_attempts']
+        image_success = self._metrics['image_click_success']
+        image_success_rate = (image_success / image_attempts) if image_attempts else 0
+
         return {
             **self._metrics,
             'text_click_success_rate': round(success_rate, 3),
             'template_click_success_rate': round(template_success_rate, 3),
+            'image_click_success_rate': round(image_success_rate, 3),
         }
 
     def wait(self, seconds=1):
