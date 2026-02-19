@@ -335,6 +335,26 @@ class SurvivorStrategy:
 
         return self._try_click_skill_alias(engine, min_confidence=min_confidence)
 
+    def _try_click_close_controls(self, engine):
+        clicked, template = self._try_click_icon_templates(engine)
+        if clicked:
+            return True, template
+
+        # Prefer explicit close labels and single-char X to avoid broad text matches.
+        close_text_targets = [
+            'close',
+            'skip',
+            'cancel',
+        ]
+        clicked, target = engine.click_first_text(close_text_targets, min_confidence=0.9)
+        if clicked:
+            return True, target
+
+        if engine.try_click_text(re.compile(r'^\s*[x×]\s*$', re.I), min_confidence=0.92):
+            return True, 'x'
+
+        return False, None
+
     def _force_alternate_recovery(self, engine, i, reason):
         # Stronger path to break repeated home-scene target loops.
         engine.click(46.0 / 460, 960.0 / 1024, False)  # back
@@ -548,7 +568,20 @@ class SurvivorStrategy:
                 self.skill_choice_streak = 0
                 return
 
-            if engine.click_text('refresh', retry=3, min_confidence=0.85):
+            closed, close_target = self._try_click_close_controls(engine)
+            if closed:
+                self._emit_decision(
+                    i,
+                    close_target,
+                    'clicked',
+                    'skill_choice_close_priority',
+                )
+                engine.wait(0.6)
+                if not engine.contains('choice', min_confidence=0.88):
+                    self.skill_choice_streak = 0
+                    return
+
+            if engine.click_text('refresh', retry=2, min_confidence=0.85):
                 self._emit_decision(i, 'refresh', 'clicked', 'skill_refresh')
 
             clicked, skill = self._try_click_skill_targets(
