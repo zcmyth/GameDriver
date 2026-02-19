@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import re
 
 import numpy as np
 from paddleocr import PaddleOCR
@@ -78,6 +79,54 @@ class PaddleOCRAnalyzer(ImageAnalyzer):
             text_recognition_model_name='en_PP-OCRv5_mobile_rec',
             text_detection_model_name='PP-OCRv5_mobile_det',
         )
+        self.noise_text_patterns = [
+            re.compile(r'^\d+[./:]?\d*[kmb]?$'),
+            re.compile(r'^[+\-]?\d+[./:]\d+$'),
+            re.compile(r'^season\s*\d+', re.I),
+        ]
+
+    def _bbox_slice(self, img_array, x_coords, y_coords):
+        h, w = img_array.shape[:2]
+        x1 = max(0, min(w - 1, int(np.floor(min(x_coords)))))
+        x2 = max(0, min(w, int(np.ceil(max(x_coords)))))
+        y1 = max(0, min(h - 1, int(np.floor(min(y_coords)))))
+        y2 = max(0, min(h, int(np.ceil(max(y_coords)))))
+        if x2 <= x1 or y2 <= y1:
+            return None
+        return img_array[y1:y2, x1:x2]
+
+    def _visual_clickability_score(self, crop):
+        if crop is None or crop.size == 0:
+            return 0.0
+
+        pixels = crop.astype(np.float32)
+        if pixels.ndim == 2:
+            gray = pixels
+            sat = np.zeros_like(gray)
+        else:
+            r = pixels[..., 0]
+            g = pixels[..., 1]
+            b = pixels[..., 2]
+            maxc = np.maximum(np.maximum(r, g), b)
+            minc = np.minimum(np.minimum(r, g), b)
+            gray = 0.299 * r + 0.587 * g + 0.114 * b
+            sat = (maxc - minc) / np.maximum(maxc, 1.0)
+
+        brightness = float(np.mean(gray) / 255.0)
+        contrast = float(np.std(gray) / 255.0)
+        saturation = float(np.mean(sat))
+
+        # Greys + low-contrast regions are usually disabled labels.
+        score = (1.8 * contrast) + (1.2 * saturation) + (0.2 * brightness)
+        return score
+
+    def _looks_like_noise_text(self, text):
+        norm = text.strip().lower()
+        if not norm:
+            return True
+        if len(norm) <= 1:
+            return True
+        return any(p.search(norm) for p in self.noise_text_patterns)
 
     @staticmethod
     def _dedupe_similar_locations(results, min_dist=0.03):
@@ -120,34 +169,50 @@ class PaddleOCRAnalyzer(ImageAnalyzer):
         confidences = ocr_result['rec_scores']
 
         for bbox, text, confidence in zip(bboxes, texts, confidences):
-            if confidence > confidence_threshold:
-                # Calculate center from bounding box
-                # bbox format: [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
-                x_coords, y_coords = zip(*bbox)
-                center_x = sum(x_coords) / len(x_coords)
-                center_y = sum(y_coords) / len(y_coords)
+            if confidence <= confidence_threshold:
+                continue
 
-                # Calculate character size for sorting
-                bbox_width = max(x_coords) - min(x_coords)
-                bbox_height = max(y_coords) - min(y_coords)
-                bbox_area = bbox_width * bbox_height
-                char_count = len(text.strip())
-                char_size = bbox_area / char_count if char_count > 0 else 0
+            if self._looks_like_noise_text(text):
+                continue
 
-                results.append(
-                    {
-                        'text': text,
-                        'x': center_x / width,
-                        'y': center_y / height,
-                        'confidence': confidence,
-                        'char_size': char_size,
-                    }
-                )
+            # Calculate center from bounding box
+            # bbox format: [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+            x_coords, y_coords = zip(*bbox)
+            center_x = float(sum(x_coords) / len(x_coords))
+            center_y = float(sum(y_coords) / len(y_coords))
 
-        # Sort by character size (largest first)
-        results.sort(key=lambda x: x['char_size'], reverse=True)
+            crop = self._bbox_slice(img_array, x_coords, y_coords)
+            clickability = self._visual_clickability_score(crop)
 
-        # Remove char_size from final results
+            # Filter likely disabled / greyed-out text.
+            if clickability < 0.10:
+                continue
+
+            # Calculate character size for sorting
+            bbox_width = float(max(x_coords) - min(x_coords))
+            bbox_height = float(max(y_coords) - min(y_coords))
+            bbox_area = bbox_width * bbox_height
+            char_count = len(text.strip())
+            char_size = bbox_area / char_count if char_count > 0 else 0.0
+
+            results.append(
+                {
+                    'text': text,
+                    'x': center_x / width,
+                    'y': center_y / height,
+                    'confidence': float(confidence),
+                    'char_size': char_size,
+                    'clickability': clickability,
+                }
+            )
+
+        # Sort with clickable-looking candidates first.
+        results.sort(
+            key=lambda x: (x['clickability'], x['confidence'], x['char_size']),
+            reverse=True,
+        )
+
+        # Remove internal-only fields from final results
         for result in results:
             del result['char_size']
 

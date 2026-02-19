@@ -245,11 +245,43 @@ class GameEngine:
     def debug(self):
         return draw_text_locations(self._screenshot, self._locations)
 
+    def recent_signatures(self, count=None):
+        signatures = list(self._screen_signatures)
+        if count is None:
+            return signatures
+        return signatures[-count:]
+
     def is_stuck(self, repeat_threshold=8):
         if len(self._screen_signatures) < repeat_threshold:
             return False
         recent = list(self._screen_signatures)[-repeat_threshold:]
         return len(set(recent)) <= 1
+
+    def is_cycle_stuck(self, cycle_len=2, min_cycles=3):
+        if cycle_len <= 0 or min_cycles < 2:
+            return False
+
+        window = cycle_len * min_cycles
+        if len(self._screen_signatures) < window:
+            return False
+
+        recent = list(self._screen_signatures)[-window:]
+        pattern = recent[:cycle_len]
+
+        # Ignore empty/noisy signatures; they are not reliable for cycle detection.
+        if not all(pattern):
+            return False
+
+        # Require at least two distinct states in the cycle to avoid matching
+        # simple static-screen stuck states (handled by is_stuck).
+        if len(set(pattern)) < 2:
+            return False
+
+        for idx, sig in enumerate(recent):
+            if sig != pattern[idx % cycle_len]:
+                return False
+
+        return True
 
     def metrics(self):
         attempts = self._metrics['text_click_attempts']

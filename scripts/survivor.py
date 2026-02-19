@@ -1,3 +1,4 @@
+import fcntl
 import json
 import logging
 import time
@@ -13,6 +14,7 @@ ARTIFACTS = Path('artifacts')
 LOG_PATH = ARTIFACTS / 'runner.log'
 EVENTS_PATH = ARTIFACTS / 'events.jsonl'
 ERRORS_DIR = ARTIFACTS / 'errors'
+LOCK_PATH = ARTIFACTS / 'survivor.lock'
 
 
 def _setup_logging():
@@ -134,8 +136,22 @@ def _make_engine_listener(state):
     return listener
 
 
+def _acquire_single_instance_lock():
+    ARTIFACTS.mkdir(parents=True, exist_ok=True)
+    lock_fh = LOCK_PATH.open('w')
+    try:
+        fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        raise SystemExit('Another survivor runner instance is already running.')
+
+    lock_fh.write(str(time.time()))
+    lock_fh.flush()
+    return lock_fh
+
+
 def main():
     _setup_logging()
+    _lock_fh = _acquire_single_instance_lock()
 
     soft_restart_times = deque()
 

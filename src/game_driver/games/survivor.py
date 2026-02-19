@@ -36,7 +36,6 @@ class SurvivorStrategy:
 
         self.home_actions = [
             'view',
-            'mission',
             'patrol',
             'challenge',
             'friends',
@@ -46,7 +45,6 @@ class SurvivorStrategy:
         self.nav_labels = [
             'main challenge',
             'challenge',
-            'mission',
             'patrol',
             'friends',
             'chest',
@@ -79,6 +77,12 @@ class SurvivorStrategy:
         ]
 
         self.last_action = None
+        self.loop_cycle_hits = 0
+        self.loop_stuck_hits = 0
+        self.home_last_target = None
+        self.home_same_target_count = 0
+        self.home_nochange_count = 0
+        self.target_unclickable_penalty = {}
 
         self.low_energy_texts = [
             'not enough energy',
@@ -218,17 +222,74 @@ class SurvivorStrategy:
                 continue
         return False, None
 
-    def _try_click_critical_controls(self, engine):
+    def _click_best_text_match(self, engine, targets, min_confidence=0.85, exact=False):
+        candidates = []
+
+        for target in self._safe_targets(targets):
+            matches = engine.get_matched_locations(
+                target,
+                exact=exact,
+                min_confidence=min_confidence,
+            )
+            if not matches:
+                continue
+            top = matches[0]
+            conf = top.get('confidence', 0)
+
+            # Down-rank targets that repeatedly fail to change state.
+            # This approximates "greyed out/not clickable" behavior.
+            penalty = self.target_unclickable_penalty.get(target, 0)
+            score = conf - (0.12 * penalty)
+            candidates.append((score, target, top))
+
+        if not candidates:
+            return False, None
+
+        # Try highest-priority target first; if it doesn't change state,
+        # immediately try the next one in this same iteration.
+        candidates.sort(key=lambda item: item[0], reverse=True)
+
+        before = engine.recent_signatures(1)
+        before_sig = before[-1] if before else ''
+
+        for _, target, hit in candidates:
+            engine.click(hit['x'], hit['y'], wait=False)
+            engine.wait(0.8)
+            after = engine.recent_signatures(1)
+            after_sig = after[-1] if after else ''
+            changed = bool(before_sig and after_sig and before_sig != after_sig)
+
+            if changed:
+                self.target_unclickable_penalty[target] = max(
+                    0, self.target_unclickable_penalty.get(target, 0) - 1
+                )
+                return True, target
+
+            self.target_unclickable_penalty[target] = min(
+                6, self.target_unclickable_penalty.get(target, 0) + 1
+            )
+
+        return False, None
+
+    def _try_click_critical_controls(self, engine, i=None):
         safe_critical = self._safe_targets(self.critical_controls)
-        return engine.click_first_text(
+        if i is not None and i < self.start_cooldown_until:
+            safe_critical = [c for c in safe_critical if c != 'start']
+        return self._click_best_text_match(
+            engine,
             safe_critical,
-            exact=True,
             min_confidence=0.85,
+            exact=True,
         )
 
     def _try_click_nav_labels(self, engine):
         safe_nav = self._safe_targets(self.nav_labels)
-        return engine.click_first_text(safe_nav, min_confidence=0.82)
+        return self._click_best_text_match(
+            engine,
+            safe_nav,
+            min_confidence=0.82,
+            exact=False,
+        )
 
     def _try_click_skill_alias(self, engine, min_confidence=0.88):
         for item in engine._locations:
@@ -264,6 +325,55 @@ class SurvivorStrategy:
 
         return self._try_click_skill_alias(engine, min_confidence=min_confidence)
 
+    def _force_alternate_recovery(self, engine, i, reason):
+        # Stronger path to break repeated home-scene target loops.
+        engine.click(46.0 / 460, 960.0 / 1024, False)  # back
+        engine.click(0.50, 0.10, False)                # top-center dismiss
+        engine.click(0.10, 0.86, False)                # challenge area
+        engine.click(0.50, 0.90, False)                # bottom nav center
+        self._emit_decision(i, 'alternate_recovery', 'fallback', reason)
+
+    def _record_home_click_outcome(self, target, before_sig, engine, i):
+        # Verify post-click state change when on home scene.
+        engine.wait(0.8)
+        after = engine.recent_signatures(1)
+        after_sig = after[-1] if after else ''
+        changed = bool(before_sig and after_sig and before_sig != after_sig)
+
+        if target == self.home_last_target:
+            self.home_same_target_count += 1
+        else:
+            self.home_last_target = target
+            self.home_same_target_count = 1
+
+        if changed:
+            self.home_nochange_count = 0
+            self.target_unclickable_penalty[target] = max(
+                0, self.target_unclickable_penalty.get(target, 0) - 1
+            )
+        else:
+            self.home_nochange_count += 1
+            self.target_unclickable_penalty[target] = min(
+                6, self.target_unclickable_penalty.get(target, 0) + 1
+            )
+
+        self._emit_decision(
+            i,
+            target,
+            'state_changed' if changed else 'state_unchanged',
+            'post_click_signature_check',
+            detail=f'same_target_count={self.home_same_target_count} nochange_count={self.home_nochange_count}',
+        )
+
+        if self.home_same_target_count >= 4 and self.home_nochange_count >= 3:
+            self._force_alternate_recovery(engine, i, 'same_target_nochange_loop')
+            self.home_same_target_count = 0
+            self.home_nochange_count = 0
+            self.home_last_target = None
+            return False
+
+        return True
+
     def _is_in_battle(self, engine):
         texts = self._text_samples(engine)
         if not texts:
@@ -275,16 +385,47 @@ class SurvivorStrategy:
         return (numeric_noise >= 8 and has_timer) or (numeric_noise >= 6 and has_level)
 
     def step(self, engine, i):
-        if engine.is_stuck(repeat_threshold=8):
+        hard_stuck = engine.is_stuck(repeat_threshold=8)
+        cycle_stuck = engine.is_cycle_stuck(cycle_len=2, min_cycles=3)
+
+        if hard_stuck:
+            self.loop_stuck_hits += 1
+        else:
+            self.loop_stuck_hits = 0
+
+        if cycle_stuck:
+            self.loop_cycle_hits += 1
+        else:
+            self.loop_cycle_hits = 0
+
+        if hard_stuck or cycle_stuck:
             ts = datetime.now().strftime('%Y%m%d_%H%M%S')
             debug_path = self.artifact_dir / f'stuck_{ts}.png'
             engine.debug().save(debug_path)
-            logger.warning(
-                'Detected stuck state, saved debug screenshot: %s, '
-                'attempting recovery tap',
-                debug_path,
-            )
-            engine.click(0.5, 0.8, False)
+
+            if self.loop_cycle_hits >= 3 or self.loop_stuck_hits >= 3:
+                logger.warning(
+                    'Detected persistent loop (hard_stuck=%s cycle_stuck=%s) '
+                    'saved=%s escalating recovery',
+                    hard_stuck,
+                    cycle_stuck,
+                    debug_path,
+                )
+                # Escalation: back/home-style sequence before another run.
+                engine.click(46.0 / 460, 960.0 / 1024, False)
+                engine.click(0.10, 0.86, False)
+                engine.click(0.50, 0.90, False)
+                self._emit_decision(i, 'loop_recovery_escalated', 'fallback', 'cycle_guard')
+            else:
+                logger.warning(
+                    'Detected stuck/cycle state (hard_stuck=%s cycle_stuck=%s), '
+                    'saved debug screenshot: %s, attempting recovery tap',
+                    hard_stuck,
+                    cycle_stuck,
+                    debug_path,
+                )
+                engine.click(0.5, 0.8, False)
+                self._emit_decision(i, 'loop_recovery', 'fallback', 'cycle_guard')
 
         if i % 20 == 0:
             logger.info('engine metrics: %s', engine.metrics())
@@ -359,7 +500,7 @@ class SurvivorStrategy:
             active_controls.remove('start')
             self._emit_decision(i, 'start', 'cooldown', 'start_cooldown_active')
 
-        critical_clicked, critical = self._try_click_critical_controls(engine)
+        critical_clicked, critical = self._try_click_critical_controls(engine, i=i)
         if critical_clicked:
             self._emit_decision(i, critical, 'clicked', 'critical_control')
             if critical == 'start':
@@ -367,19 +508,17 @@ class SurvivorStrategy:
             return
 
         active_controls = self._safe_targets(active_controls)
-        if any(
-            engine.contains(control, min_confidence=0.82)
-            for control in active_controls
-        ):
-            control_clicked, control = engine.click_first_text(
-                active_controls,
-                min_confidence=0.82,
-            )
-            if control_clicked:
-                self._emit_decision(i, control, 'clicked', 'nav_label')
-                if control == 'start':
-                    self.start_cooldown_until = i + 8
-                return
+        control_clicked, control = self._click_best_text_match(
+            engine,
+            active_controls,
+            min_confidence=0.82,
+            exact=False,
+        )
+        if control_clicked:
+            self._emit_decision(i, control, 'clicked', 'nav_label')
+            if control == 'start':
+                self.start_cooldown_until = i + 8
+            return
 
         if self._contains_blocked_purchase_text(engine):
             self._emit_decision(i, 'purchase_ui', 'blocked', 'high_risk_no_buy')
@@ -388,17 +527,16 @@ class SurvivorStrategy:
             return
 
         if engine.contains('back t', min_confidence=0.9):
+            # Keep this lightweight to avoid OCR-heavy retry loops.
             engine.click(380.0 / 460, 280.0 / 1024)
             engine.click(0.5, 0.8, False)
             engine.click(230.0 / 460, 280.0 / 1024)
             engine.click(0.5, 0.8, False)
             engine.click(80.0 / 460, 280.0 / 1024)
             engine.click(0.5, 0.8, False)
-            engine.click(46.0 / 460, 960.0 / 1024)
-            engine.click_text('main challenge', min_confidence=0.9)
-            engine.click(46.0 / 460, 960.0 / 1024)
-            engine.click_text('main challenge', min_confidence=0.9)
-            engine.click(380.0 / 460, 280.0 / 1024)
+            engine.click(46.0 / 460, 960.0 / 1024, False)
+            engine.try_click_text('main challenge', min_confidence=0.82)
+            self._emit_decision(i, 'backtrack_recover', 'fallback', 'safe_backtrack')
             return
 
         if engine.contains('revival', min_confidence=0.85):
@@ -420,11 +558,15 @@ class SurvivorStrategy:
             return
 
         # Home-screen fallback: OCR confidence for "Start" can fluctuate.
-        if engine.contains('start', min_confidence=0.75):
+        # Honor start cooldown here too, otherwise we can spam the same tap loop.
+        if i >= self.start_cooldown_until and engine.contains('start', min_confidence=0.75):
+            before = engine.recent_signatures(1)
+            before_sig = before[-1] if before else ''
             engine.click(70.0 / 460, 330.0 / 1024, False)
             self.start_cooldown_until = i + 8
             self.last_action = 'start_fallback'
             self._emit_decision(i, 'start', 'fallback', 'start_area_tap')
+            self._record_home_click_outcome('start', before_sig, engine, i)
             return
 
         if i % 7 == 0:
