@@ -243,8 +243,8 @@ def test_skill_choice_skips_refresh_when_text_click_success_is_very_low():
     assert engine.refresh_click_attempts == 0
 
 
-def test_skill_choice_refresh_uses_cooldown_to_avoid_repeat_misses():
-    class CooldownRefreshEngine(FakeEngine):
+def test_skill_choice_disables_refresh_to_avoid_ocr_miss_loops():
+    class RefreshDisabledEngine(FakeEngine):
         def __init__(self, locations):
             super().__init__(locations)
             self.refresh_click_attempts = 0
@@ -257,7 +257,7 @@ def test_skill_choice_refresh_uses_cooldown_to_avoid_repeat_misses():
         def metrics(self):
             return {'text_click_success_rate': 0.5}
 
-    engine = CooldownRefreshEngine(
+    engine = RefreshDisabledEngine(
         [
             {'text': 'Choice', 'confidence': 0.96, 'x': 0.5, 'y': 0.1},
             {'text': 'Refresh', 'confidence': 0.95, 'x': 0.5, 'y': 0.2},
@@ -268,4 +268,4 @@ def test_skill_choice_refresh_uses_cooldown_to_avoid_repeat_misses():
     strategy.step(engine, i=1)
     strategy.step(engine, i=2)
 
-    assert engine.refresh_click_attempts == 1
+    assert engine.refresh_click_attempts == 0

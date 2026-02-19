@@ -623,19 +623,9 @@ class SurvivorStrategy:
             text_success_rate = float(metrics.get('text_click_success_rate', 1.0) or 0.0)
 
             refreshed = False
-            if text_success_rate <= 0.10:
-                self._emit_decision(i, 'refresh', 'skip', 'skill_refresh_low_text_success')
-            elif i < self.skill_choice_refresh_cooldown_until:
-                self._emit_decision(i, 'refresh', 'skip', 'skill_refresh_cooldown')
-            elif engine.contains('refresh', min_confidence=0.86):
-                refreshed = engine.click_text('refresh', retry=1, min_confidence=0.86)
-                self.skill_choice_refresh_cooldown_until = i + 4
-                if refreshed:
-                    self._emit_decision(i, 'refresh', 'clicked', 'skill_refresh')
-                else:
-                    self._emit_decision(i, 'refresh', 'miss', 'skill_refresh_present_but_unclicked')
-            else:
-                self._emit_decision(i, 'refresh', 'skip', 'skill_refresh_absent')
+            # Hard-disable refresh inside skill_choice: runtime telemetry shows
+            # refresh OCR dominates miss loops with negligible upside.
+            self._emit_decision(i, 'refresh', 'skip', 'skill_refresh_disabled')
 
             # Follow-up guard: repeated refresh misses in skill-choice with very low
             # global text-click success strongly indicates OCR-driven dead loop.
