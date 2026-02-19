@@ -76,6 +76,14 @@ class SurvivorStrategy:
             'sale',
         ]
 
+        self.close_text_patterns = [
+            re.compile(r'^x$'),
+            re.compile(r'^×$'),
+            re.compile(r'^close$'),
+            re.compile(r'^skip$'),
+            re.compile(r'^cancel$'),
+        ]
+
         self.last_action = None
         self.loop_cycle_hits = 0
         self.loop_stuck_hits = 0
@@ -232,6 +240,53 @@ class SurvivorStrategy:
                 continue
         return False, None
 
+    @staticmethod
+    def _is_corner_close_candidate(item):
+        x = float(item.get('x', 0.0))
+        y = float(item.get('y', 1.0))
+        return (x >= 0.84 and y <= 0.23) or (x <= 0.16 and y <= 0.23)
+
+    def _try_click_close_controls(self, engine, min_confidence=0.82):
+        # Prefer explicit text cues first (x/×/close/skip/cancel).
+        textual_hits = []
+        for item in engine._locations:
+            if item.get('confidence', 0) < min_confidence:
+                continue
+            text = str(item.get('text', '')).strip().lower()
+            if any(pattern.search(text) for pattern in self.close_text_patterns):
+                textual_hits.append(item)
+
+        for hit in textual_hits:
+            if self._is_corner_close_candidate(hit):
+                engine.click(hit['x'], hit['y'], wait=False)
+                return True, 'close_text_corner'
+
+        if textual_hits:
+            hit = sorted(textual_hits, key=lambda x: x.get('confidence', 0), reverse=True)[0]
+            engine.click(hit['x'], hit['y'], wait=False)
+            return True, 'close_text'
+
+        # Fallback: small OCR glyph in top corners is often recognized as junk;
+        # if confidence is high enough, still treat as likely close control.
+        for item in engine._locations:
+            if item.get('confidence', 0) < 0.9:
+                continue
+            text = str(item.get('text', '')).strip().lower()
+            if len(text) > 2:
+                continue
+            if text in {'x', '×', '+'} and self._is_corner_close_candidate(item):
+                engine.click(item['x'], item['y'], wait=False)
+                return True, 'close_glyph_corner'
+
+        icon_clicked, icon_name = self._try_click_icon_templates(engine)
+        if icon_clicked:
+            return True, icon_name
+
+        # Last-resort safe taps for close buttons in top-right / top-center areas.
+        engine.click(0.92, 0.08, False)
+        engine.click(0.50, 0.10, False)
+        return True, 'close_safe_tap'
+
     def _click_best_text_match(self, engine, targets, min_confidence=0.85, exact=False):
         candidates = []
 
@@ -337,8 +392,10 @@ class SurvivorStrategy:
 
     def _force_alternate_recovery(self, engine, i, reason):
         # Stronger path to break repeated home-scene target loops.
+        closed, close_reason = self._try_click_close_controls(engine)
+        if closed:
+            self._emit_decision(i, 'close_control', 'clicked', close_reason)
         engine.click(46.0 / 460, 960.0 / 1024, False)  # back
-        engine.click(0.50, 0.10, False)                # top-center dismiss
         engine.click(0.10, 0.86, False)                # challenge area
         engine.click(0.50, 0.90, False)                # bottom nav center
         self._emit_decision(i, 'alternate_recovery', 'fallback', reason)
@@ -460,6 +517,12 @@ class SurvivorStrategy:
             self._force_alternate_recovery(engine, i, 'no_progress_guard')
             self.no_progress_steps = 0
             return
+
+        if current_scene == 'offer_popup':
+            closed, close_reason = self._try_click_close_controls(engine)
+            if closed:
+                self._emit_decision(i, 'close_control', 'clicked', close_reason)
+                return
 
         hard_stuck = engine.is_stuck(repeat_threshold=8)
         cycle_stuck = engine.is_cycle_stuck(cycle_len=2, min_cycles=3)
@@ -617,6 +680,11 @@ class SurvivorStrategy:
             active_controls.remove('start')
             self._emit_decision(i, 'start', 'cooldown', 'start_cooldown_active')
 
+        closed, close_reason = self._try_click_close_controls(engine)
+        if closed and (self.no_progress_steps >= 4 or current_scene in {'offer_popup', 'unknown'}):
+            self._emit_decision(i, 'close_control', 'clicked', close_reason)
+            return
+
         critical_clicked, critical = self._try_click_critical_controls(engine, i=i)
         if critical_clicked:
             self._emit_decision(i, critical, 'clicked', 'critical_control')
@@ -639,8 +707,11 @@ class SurvivorStrategy:
 
         if self._contains_blocked_purchase_text(engine):
             self._emit_decision(i, 'purchase_ui', 'blocked', 'high_risk_no_buy')
-            engine.click(46.0 / 460, 960.0 / 1024, False)
-            engine.click(0.5, 0.1, False)
+            closed, close_reason = self._try_click_close_controls(engine)
+            if closed:
+                self._emit_decision(i, 'close_control', 'clicked', close_reason)
+            else:
+                engine.click(46.0 / 460, 960.0 / 1024, False)
             return
 
         if engine.contains('back t', min_confidence=0.9):
