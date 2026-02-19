@@ -199,3 +199,19 @@ def test_skill_choice_refresh_fail_breaker_triggers_early_recovery_on_low_succes
 
     assert (46.0 / 460, 960.0 / 1024) in engine.clicked
     assert strategy.skill_choice_refresh_fail_streak == 0
+
+
+def test_skill_choice_persist_breaker_triggers_even_without_low_success_metric():
+    engine = FakeEngine(
+        [
+            {'text': 'Choice', 'confidence': 0.96, 'x': 0.5, 'y': 0.1},
+            {'text': 'Noise', 'confidence': 0.9, 'x': 0.4, 'y': 0.4},
+        ]
+    )
+
+    strategy = SurvivorStrategy()
+    for i in range(1, 3):
+        strategy.step(engine, i=i)
+
+    assert (46.0 / 460, 960.0 / 1024) in engine.clicked
+    assert strategy.skill_choice_persist_streak == 0

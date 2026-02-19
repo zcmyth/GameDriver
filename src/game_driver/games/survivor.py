@@ -139,6 +139,7 @@ class SurvivorStrategy:
         # Skill-choice specific anti-loop tracking.
         self.skill_choice_streak = 0
         self.skill_choice_refresh_fail_streak = 0
+        self.skill_choice_persist_streak = 0
 
     @staticmethod
     def _text_samples(engine):
@@ -481,6 +482,7 @@ class SurvivorStrategy:
         if current_scene != 'skill_choice':
             self.skill_choice_streak = 0
             self.skill_choice_refresh_fail_streak = 0
+            self.skill_choice_persist_streak = 0
 
     def step(self, engine, i):
         current_scene = self._track_progress_signals(engine, i)
@@ -584,6 +586,7 @@ class SurvivorStrategy:
                 self._emit_decision(i, skill, 'clicked', 'skill_preferred_or_alias')
                 self.skill_choice_streak = 0
                 self.skill_choice_refresh_fail_streak = 0
+                self.skill_choice_persist_streak = 0
                 return
 
             closed, close_target = self._try_click_close_controls(engine)
@@ -598,6 +601,7 @@ class SurvivorStrategy:
                 if not engine.contains('choice', min_confidence=0.88):
                     self.skill_choice_streak = 0
                     self.skill_choice_refresh_fail_streak = 0
+                    self.skill_choice_persist_streak = 0
                     return
 
             hotspot_closed, hotspot = self._try_click_skill_choice_hotspots(engine)
@@ -610,6 +614,7 @@ class SurvivorStrategy:
                 )
                 self.skill_choice_streak = 0
                 self.skill_choice_refresh_fail_streak = 0
+                self.skill_choice_persist_streak = 0
                 return
 
             refreshed = False
@@ -629,6 +634,7 @@ class SurvivorStrategy:
             else:
                 self.skill_choice_refresh_fail_streak = 0
                 self.skill_choice_streak = 0
+                self.skill_choice_persist_streak = 0
                 return
 
             metrics = engine.metrics() if hasattr(engine, 'metrics') else {}
@@ -654,6 +660,7 @@ class SurvivorStrategy:
                 )
                 self.skill_choice_streak = 0
                 self.skill_choice_refresh_fail_streak = 0
+                self.skill_choice_persist_streak = 0
                 return
 
             clicked, skill = self._try_click_skill_targets(
@@ -665,6 +672,7 @@ class SurvivorStrategy:
                 self._emit_decision(i, skill, 'clicked', 'skill_secondary_or_alias')
                 self.skill_choice_streak = 0
                 self.skill_choice_refresh_fail_streak = 0
+                self.skill_choice_persist_streak = 0
                 return
 
             self._emit_decision(i, 'skill_choice', 'fallback', 'card_force_select')
@@ -679,6 +687,7 @@ class SurvivorStrategy:
             if not engine.contains('choice', min_confidence=0.88):
                 self.skill_choice_streak = 0
                 self.skill_choice_refresh_fail_streak = 0
+                self.skill_choice_persist_streak = 0
                 return
 
             engine.click(x, 0.54, wait=False)
@@ -686,6 +695,24 @@ class SurvivorStrategy:
             if not engine.contains('choice', min_confidence=0.88):
                 self.skill_choice_streak = 0
                 self.skill_choice_refresh_fail_streak = 0
+                self.skill_choice_persist_streak = 0
+                return
+
+            # If a full skill-choice pass still leaves us in choice, escalate quickly
+            # rather than spinning on OCR-driven refresh misses.
+            self.skill_choice_persist_streak += 1
+            if self.skill_choice_persist_streak >= 2:
+                self._emit_decision(
+                    i,
+                    'skill_choice',
+                    'fallback',
+                    'skill_choice_persist_breaker',
+                    detail=f'persist_streak={self.skill_choice_persist_streak}',
+                )
+                self._force_alternate_recovery(engine, i, 'skill_choice_persist_breaker')
+                self.skill_choice_streak = 0
+                self.skill_choice_refresh_fail_streak = 0
+                self.skill_choice_persist_streak = 0
                 return
 
             # Circuit-break persistent skill-choice loops where refresh/text matching
@@ -701,6 +728,7 @@ class SurvivorStrategy:
                 self._force_alternate_recovery(engine, i, 'skill_choice_streak_breaker')
                 self.skill_choice_streak = 0
                 self.skill_choice_refresh_fail_streak = 0
+                self.skill_choice_persist_streak = 0
             return
 
         if self._is_in_battle(engine):
