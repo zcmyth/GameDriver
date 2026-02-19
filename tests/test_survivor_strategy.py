@@ -110,3 +110,20 @@ def test_never_click_buy_text_even_if_visible():
     strategy.step(engine, i=1)
 
     assert (0.5, 0.55) not in engine.clicked
+
+
+def test_skill_choice_streak_breaker_triggers_alternate_recovery():
+    engine = FakeEngine(
+        [
+            {'text': 'Choice', 'confidence': 0.96, 'x': 0.5, 'y': 0.1},
+            {'text': 'Unrelated Text', 'confidence': 0.9, 'x': 0.2, 'y': 0.3},
+        ]
+    )
+
+    strategy = SurvivorStrategy()
+
+    for i in range(1, 7):
+        strategy.step(engine, i=i)
+
+    assert (46.0 / 460, 960.0 / 1024) in engine.clicked
+    assert strategy.skill_choice_streak == 0
