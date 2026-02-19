@@ -140,6 +140,7 @@ class SurvivorStrategy:
         self.skill_choice_streak = 0
         self.skill_choice_refresh_fail_streak = 0
         self.skill_choice_persist_streak = 0
+        self.skill_choice_refresh_cooldown_until = -1
 
     @staticmethod
     def _text_samples(engine):
@@ -483,6 +484,7 @@ class SurvivorStrategy:
             self.skill_choice_streak = 0
             self.skill_choice_refresh_fail_streak = 0
             self.skill_choice_persist_streak = 0
+            self.skill_choice_refresh_cooldown_until = -1
 
     def step(self, engine, i):
         current_scene = self._track_progress_signals(engine, i)
@@ -623,8 +625,11 @@ class SurvivorStrategy:
             refreshed = False
             if text_success_rate <= 0.10:
                 self._emit_decision(i, 'refresh', 'skip', 'skill_refresh_low_text_success')
+            elif i < self.skill_choice_refresh_cooldown_until:
+                self._emit_decision(i, 'refresh', 'skip', 'skill_refresh_cooldown')
             elif engine.contains('refresh', min_confidence=0.86):
                 refreshed = engine.click_text('refresh', retry=1, min_confidence=0.86)
+                self.skill_choice_refresh_cooldown_until = i + 4
                 if refreshed:
                     self._emit_decision(i, 'refresh', 'clicked', 'skill_refresh')
                 else:
