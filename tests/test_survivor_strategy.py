@@ -210,8 +210,34 @@ def test_skill_choice_persist_breaker_triggers_even_without_low_success_metric()
     )
 
     strategy = SurvivorStrategy()
-    for i in range(1, 3):
-        strategy.step(engine, i=i)
+    strategy.step(engine, i=1)
 
     assert (46.0 / 460, 960.0 / 1024) in engine.clicked
     assert strategy.skill_choice_persist_streak == 0
+
+
+def test_skill_choice_skips_refresh_when_text_click_success_is_very_low():
+    class LowSuccessRefreshEngine(FakeEngine):
+        def __init__(self, locations):
+            super().__init__(locations)
+            self.refresh_click_attempts = 0
+
+        def click_text(self, text, retry=5, exact=False, min_confidence=0.0):
+            if str(text).lower() == 'refresh':
+                self.refresh_click_attempts += 1
+            return False
+
+        def metrics(self):
+            return {'text_click_success_rate': 0.026}
+
+    engine = LowSuccessRefreshEngine(
+        [
+            {'text': 'Choice', 'confidence': 0.96, 'x': 0.5, 'y': 0.1},
+            {'text': 'Refresh', 'confidence': 0.95, 'x': 0.5, 'y': 0.2},
+        ]
+    )
+
+    strategy = SurvivorStrategy()
+    strategy.step(engine, i=1)
+
+    assert engine.refresh_click_attempts == 0

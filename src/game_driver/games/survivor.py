@@ -617,8 +617,13 @@ class SurvivorStrategy:
                 self.skill_choice_persist_streak = 0
                 return
 
+            metrics = engine.metrics() if hasattr(engine, 'metrics') else {}
+            text_success_rate = float(metrics.get('text_click_success_rate', 1.0) or 0.0)
+
             refreshed = False
-            if engine.contains('refresh', min_confidence=0.86):
+            if text_success_rate <= 0.10:
+                self._emit_decision(i, 'refresh', 'skip', 'skill_refresh_low_text_success')
+            elif engine.contains('refresh', min_confidence=0.86):
                 refreshed = engine.click_text('refresh', retry=1, min_confidence=0.86)
                 if refreshed:
                     self._emit_decision(i, 'refresh', 'clicked', 'skill_refresh')
@@ -637,8 +642,6 @@ class SurvivorStrategy:
                 self.skill_choice_persist_streak = 0
                 return
 
-            metrics = engine.metrics() if hasattr(engine, 'metrics') else {}
-            text_success_rate = float(metrics.get('text_click_success_rate', 1.0) or 0.0)
             if (
                 self.skill_choice_refresh_fail_streak >= 2
                 and text_success_rate <= 0.08
@@ -701,7 +704,7 @@ class SurvivorStrategy:
             # If a full skill-choice pass still leaves us in choice, escalate quickly
             # rather than spinning on OCR-driven refresh misses.
             self.skill_choice_persist_streak += 1
-            if self.skill_choice_persist_streak >= 2:
+            if self.skill_choice_persist_streak >= 1:
                 self._emit_decision(
                     i,
                     'skill_choice',
