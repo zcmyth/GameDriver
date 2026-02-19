@@ -1,14 +1,25 @@
+import re
 import time
 from collections import deque
+from collections.abc import Callable
 
 from game_driver.device import Device
 from game_driver.image_analyzer import create_analyzer, draw_text_locations
+from game_driver.template_matcher import TemplateMatcher
 
 
 class GameEngine:
-    def __init__(self):
-        self.device = Device()
-        self.analyzer = create_analyzer()
+    def __init__(
+        self,
+        device=None,
+        analyzer=None,
+        template_matcher=None,
+        event_listeners=None,
+    ):
+        self.device = device or Device()
+        self.analyzer = analyzer or create_analyzer()
+        self.template_matcher = template_matcher or TemplateMatcher()
+        self._listeners = list(event_listeners or [])
         self._screenshot = None
         self._locations = []
         self._screen_signatures = deque(maxlen=12)
@@ -18,12 +29,25 @@ class GameEngine:
             'text_click_attempts': 0,
             'text_click_success': 0,
             'text_click_miss': 0,
+            'template_click_attempts': 0,
+            'template_click_success': 0,
+            'template_click_miss': 0,
         }
         self.refresh()
 
     @staticmethod
     def _normalize_text(text):
         return str(text).strip().lower()
+
+    def add_listener(self, listener: Callable[[str, dict], None]):
+        self._listeners.append(listener)
+
+    def remove_listener(self, listener: Callable[[str, dict], None]):
+        self._listeners = [item for item in self._listeners if item is not listener]
+
+    def _emit(self, event, **payload):
+        for listener in list(self._listeners):
+            listener(event, payload)
 
     def _screen_signature(self):
         texts = [self._normalize_text(item.get('text', '')) for item in self._locations]
@@ -35,7 +59,35 @@ class GameEngine:
         self._screenshot = self.device.screenshot()
         self._locations = self.analyzer.extract_text_locations(self._screenshot)
         self._metrics['refresh_count'] += 1
-        self._screen_signatures.append(self._screen_signature())
+        signature = self._screen_signature()
+        self._screen_signatures.append(signature)
+        self._emit(
+            'refresh',
+            refresh_count=self._metrics['refresh_count'],
+            location_count=len(self._locations),
+            screen_signature=signature,
+        )
+
+    def _make_text_matcher(self, text_or_matcher, exact=False):
+        if hasattr(text_or_matcher, 'search'):
+            regex = text_or_matcher
+            return lambda current_text: bool(regex.search(current_text))
+
+        if callable(text_or_matcher):
+            return text_or_matcher
+
+        if isinstance(text_or_matcher, (list, tuple, set)):
+            targets = {self._normalize_text(item) for item in text_or_matcher}
+            if exact:
+                return lambda current_text: current_text in targets
+            return lambda current_text: any(
+                target in current_text for target in targets
+            )
+
+        target = self._normalize_text(text_or_matcher)
+        if exact:
+            return lambda current_text: current_text == target
+        return lambda current_text: target in current_text
 
     def contains(self, text, exact=False, min_confidence=0.0):
         return bool(
@@ -47,19 +99,23 @@ class GameEngine:
         )
 
     def get_matched_locations(self, text, exact=False, min_confidence=0.0):
-        target = self._normalize_text(text)
+        matcher = self._make_text_matcher(text, exact=exact)
         result = []
         for location in self._locations:
             if location.get('confidence', 0) < min_confidence:
                 continue
             current_text = self._normalize_text(location['text'])
-            if (exact and current_text == target) or (
-                not exact and target in current_text
-            ):
+            if matcher(current_text):
                 result.append(location)
         # Prefer higher confidence first so we click the best OCR candidate.
         result.sort(key=lambda x: x.get('confidence', 0), reverse=True)
         return result
+
+    def find_text_regex(self, pattern, flags=0, min_confidence=0.0):
+        return self.get_matched_locations(
+            re.compile(pattern, flags),
+            min_confidence=min_confidence,
+        )
 
     def try_click_text(self, text, exact=False, min_confidence=0.0):
         self._metrics['text_click_attempts'] += 1
@@ -70,6 +126,7 @@ class GameEngine:
         )
         if not matches:
             self._metrics['text_click_miss'] += 1
+            self._emit('text_click_miss', query=str(text))
             return False
 
         # Click only the best match to avoid accidental multi-clicks.
@@ -77,6 +134,13 @@ class GameEngine:
         self.click(best['x'], best['y'], wait=False)
         self.wait()
         self._metrics['text_click_success'] += 1
+        self._emit(
+            'text_click_success',
+            query=str(text),
+            x=best['x'],
+            y=best['y'],
+            confidence=best.get('confidence', 0),
+        )
         return True
 
     def click_text(self, text, retry=5, exact=False, min_confidence=0.0):
@@ -123,9 +187,58 @@ class GameEngine:
             self.refresh()
         return False
 
+    def register_template(self, name, template_path):
+        self.template_matcher.register_template(name, template_path)
+
+    def get_template_match(self, name_or_path, threshold=0.88, **kwargs):
+        return self.template_matcher.match(
+            self._screenshot,
+            name_or_path,
+            threshold=threshold,
+            **kwargs,
+        )
+
+    def contains_template(self, name_or_path, threshold=0.88, **kwargs):
+        return (
+            self.get_template_match(name_or_path, threshold=threshold, **kwargs)
+            is not None
+        )
+
+    def try_click_template(self, name_or_path, threshold=0.88, **kwargs):
+        self._metrics['template_click_attempts'] += 1
+        match = self.get_template_match(name_or_path, threshold=threshold, **kwargs)
+        if not match:
+            self._metrics['template_click_miss'] += 1
+            self._emit('template_click_miss', template=str(name_or_path))
+            return False
+
+        self.click(match['x'], match['y'], wait=False)
+        self.wait()
+        self._metrics['template_click_success'] += 1
+        self._emit(
+            'template_click_success',
+            template=str(name_or_path),
+            x=match['x'],
+            y=match['y'],
+            confidence=match.get('confidence', 0),
+        )
+        return True
+
+    def click_template(self, name_or_path, threshold=0.88, retry=3, **kwargs):
+        for _ in range(retry):
+            if self.try_click_template(
+                name_or_path,
+                threshold=threshold,
+                **kwargs,
+            ):
+                return True
+            self.refresh()
+        return False
+
     def click(self, x, y, wait=True):
         self._metrics['click_count'] += 1
         self.device.click(x, y)
+        self._emit('click', x=x, y=y)
         if wait:
             self.wait()
 
@@ -142,7 +255,18 @@ class GameEngine:
         attempts = self._metrics['text_click_attempts']
         success = self._metrics['text_click_success']
         success_rate = (success / attempts) if attempts else 0
-        return {**self._metrics, 'text_click_success_rate': round(success_rate, 3)}
+
+        template_attempts = self._metrics['template_click_attempts']
+        template_success = self._metrics['template_click_success']
+        template_success_rate = (
+            (template_success / template_attempts) if template_attempts else 0
+        )
+
+        return {
+            **self._metrics,
+            'text_click_success_rate': round(success_rate, 3),
+            'template_click_success_rate': round(template_success_rate, 3),
+        }
 
     def wait(self, seconds=1):
         time.sleep(seconds)

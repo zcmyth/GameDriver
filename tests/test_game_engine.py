@@ -1,3 +1,5 @@
+import re
+
 from game_driver import game_engine as ge_module
 
 
@@ -20,14 +22,14 @@ class FakeAnalyzer:
         return list(self.locations)
 
 
-def build_engine(monkeypatch, locations):
+def build_engine(monkeypatch, locations, listeners=None):
     fake_device = FakeDevice()
     fake_analyzer = FakeAnalyzer(locations)
 
     monkeypatch.setattr(ge_module, 'Device', lambda: fake_device)
     monkeypatch.setattr(ge_module, 'create_analyzer', lambda: fake_analyzer)
 
-    engine = ge_module.GameEngine()
+    engine = ge_module.GameEngine(event_listeners=listeners)
     return engine, fake_device
 
 
@@ -67,3 +69,50 @@ def test_metrics_track_click_success(monkeypatch):
     assert m['text_click_attempts'] == 2
     assert m['text_click_success'] == 1
     assert m['text_click_miss'] == 1
+
+
+def test_get_matched_locations_supports_regex(monkeypatch):
+    engine, _device = build_engine(
+        monkeypatch,
+        [
+            {'text': 'Tap to Start', 'x': 0.2, 'y': 0.2, 'confidence': 0.8},
+            {'text': 'Settings', 'x': 0.8, 'y': 0.8, 'confidence': 0.95},
+        ],
+    )
+
+    matches = engine.get_matched_locations(re.compile(r'tap\s+to\s+start'))
+    assert len(matches) == 1
+    assert matches[0]['text'] == 'Tap to Start'
+
+
+def test_get_matched_locations_supports_callable(monkeypatch):
+    engine, _device = build_engine(
+        monkeypatch,
+        [
+            {'text': 'Play 1', 'x': 0.2, 'y': 0.2, 'confidence': 0.8},
+            {'text': 'Play 99', 'x': 0.8, 'y': 0.8, 'confidence': 0.95},
+        ],
+    )
+
+    matches = engine.get_matched_locations(lambda t: t.endswith('99'))
+    assert len(matches) == 1
+    assert matches[0]['text'] == 'Play 99'
+
+
+def test_engine_event_listener_receives_click_events(monkeypatch):
+    events = []
+
+    def listener(event, payload):
+        events.append((event, payload))
+
+    engine, _device = build_engine(
+        monkeypatch,
+        [{'text': 'go', 'x': 0.5, 'y': 0.5, 'confidence': 0.9}],
+        listeners=[listener],
+    )
+
+    engine.try_click_text('go')
+
+    event_names = [name for name, _payload in events]
+    assert 'click' in event_names
+    assert 'text_click_success' in event_names

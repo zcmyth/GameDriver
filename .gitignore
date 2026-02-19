@@ -67,3 +67,7 @@ venv.bak/
 .DS_Store
 Thumbs.db
 .venv/
+
+# Runtime/debug artifacts
+artifacts/
+*.log
