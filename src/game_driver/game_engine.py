@@ -51,6 +51,9 @@ class GameEngine:
             'image_click_attempts': 0,
             'image_click_success': 0,
             'image_click_miss': 0,
+            'sequential_click_attempts': 0,
+            'sequential_click_success': 0,
+            'sequential_click_failed': 0,
         }
         if template_folder:
             self.register_templates_from_folder(template_folder)
@@ -212,6 +215,110 @@ class GameEngine:
             ):
                 return True, text
         return False, None
+
+    def click_targets_until_changed(
+        self,
+        targets,
+        *,
+        min_confidence=0.85,
+        exact=False,
+        verify_wait_s=0.8,
+        max_candidates_per_target=1,
+    ):
+        self._metrics['sequential_click_attempts'] += 1
+
+        details = []
+        attempt_count = 0
+        clicked_target = None
+
+        for target in list(targets or []):
+            matches = self.get_matched_locations(
+                target,
+                exact=exact,
+                min_confidence=min_confidence,
+            )
+            if not matches:
+                details.append(
+                    {
+                        'target': str(target),
+                        'matched': False,
+                        'clicked': False,
+                        'state_changed': False,
+                        'confidence': None,
+                    }
+                )
+                continue
+
+            for hit in matches[: max(1, int(max_candidates_per_target))]:
+                before = self.recent_signatures(1)
+                before_sig = before[-1] if before else ''
+
+                self.click(hit['x'], hit['y'], wait=False)
+                self.wait(verify_wait_s)
+                attempt_count += 1
+
+                after = self.recent_signatures(1)
+                after_sig = after[-1] if after else ''
+                changed = bool(before_sig and after_sig and before_sig != after_sig)
+
+                details.append(
+                    {
+                        'target': str(target),
+                        'matched': True,
+                        'clicked': True,
+                        'state_changed': changed,
+                        'confidence': hit.get('confidence'),
+                    }
+                )
+
+                self._emit(
+                    'sequential_click_attempt',
+                    target=str(target),
+                    matched=True,
+                    clicked=True,
+                    state_changed=changed,
+                    confidence=hit.get('confidence'),
+                )
+
+                if changed:
+                    clicked_target = str(target)
+                    self._metrics['sequential_click_success'] += 1
+                    self._emit(
+                        'sequential_click_result',
+                        success=True,
+                        clicked_target=clicked_target,
+                        attempts=attempt_count,
+                        reason='state_changed',
+                    )
+                    return {
+                        'success': True,
+                        'clicked_target': clicked_target,
+                        'attempts': attempt_count,
+                        'changed': True,
+                        'reason': 'state_changed',
+                        'details': details,
+                    }
+
+                # matched this target but no state change; move to next target
+                break
+
+        reason = 'no_state_change' if attempt_count > 0 else 'no_match'
+        self._metrics['sequential_click_failed'] += 1
+        self._emit(
+            'sequential_click_result',
+            success=False,
+            clicked_target=None,
+            attempts=attempt_count,
+            reason=reason,
+        )
+        return {
+            'success': False,
+            'clicked_target': None,
+            'attempts': attempt_count,
+            'changed': False,
+            'reason': reason,
+            'details': details,
+        }
 
     def wait_for_text(
         self,
