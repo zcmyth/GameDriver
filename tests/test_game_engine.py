@@ -143,3 +143,66 @@ def test_click_target_image_prefix_fails_fast_without_fallback(monkeypatch):
 
     with pytest.raises(ge_module.ImageClickError):
         engine.click_target('image:missing', retry=1)
+
+
+def test_click_targets_until_changed_first_target_succeeds(monkeypatch):
+    engine, _device = build_engine(
+        monkeypatch,
+        [{'text': 'play', 'x': 0.2, 'y': 0.3, 'confidence': 0.9}],
+    )
+    signatures = iter(['s1', 's2'])
+    engine.recent_signatures = lambda count=None: [next(signatures)]
+    engine.wait = lambda seconds=1: None
+
+    out = engine.click_targets_until_changed(['play', 'settings'], verify_wait_s=0)
+
+    assert out['success'] is True
+    assert out['clicked_target'] == 'play'
+    assert out['reason'] == 'state_changed'
+
+
+def test_click_targets_until_changed_later_target_succeeds(monkeypatch):
+    engine, _device = build_engine(
+        monkeypatch,
+        [
+            {'text': 'play', 'x': 0.2, 'y': 0.3, 'confidence': 0.9},
+            {'text': 'next', 'x': 0.4, 'y': 0.5, 'confidence': 0.95},
+        ],
+    )
+    signatures = iter(['s1', 's1', 's1', 's2'])
+    engine.recent_signatures = lambda count=None: [next(signatures)]
+    engine.wait = lambda seconds=1: None
+
+    out = engine.click_targets_until_changed(['play', 'next'], verify_wait_s=0)
+
+    assert out['success'] is True
+    assert out['clicked_target'] == 'next'
+    assert out['attempts'] == 2
+
+
+def test_click_targets_until_changed_all_targets_no_match(monkeypatch):
+    engine, _device = build_engine(monkeypatch, [])
+    engine.wait = lambda seconds=1: None
+
+    out = engine.click_targets_until_changed(['play', 'next'], verify_wait_s=0)
+
+    assert out['success'] is False
+    assert out['reason'] == 'no_match'
+
+
+def test_click_targets_until_changed_all_targets_no_state_change(monkeypatch):
+    engine, _device = build_engine(
+        monkeypatch,
+        [
+            {'text': 'play', 'x': 0.2, 'y': 0.3, 'confidence': 0.9},
+            {'text': 'next', 'x': 0.4, 'y': 0.5, 'confidence': 0.95},
+        ],
+    )
+    signatures = iter(['s1', 's1', 's1', 's1'])
+    engine.recent_signatures = lambda count=None: [next(signatures)]
+    engine.wait = lambda seconds=1: None
+
+    out = engine.click_targets_until_changed(['play', 'next'], verify_wait_s=0)
+
+    assert out['success'] is False
+    assert out['reason'] == 'no_state_change'

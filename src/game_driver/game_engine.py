@@ -39,6 +39,7 @@ class GameEngine:
         self._screenshot = None
         self._locations = []
         self._screen_signatures = deque(maxlen=12)
+        self._attempt_samples = deque(maxlen=200)
         self._metrics = {
             'refresh_count': 0,
             'click_count': 0,
@@ -51,6 +52,9 @@ class GameEngine:
             'image_click_attempts': 0,
             'image_click_success': 0,
             'image_click_miss': 0,
+            'engine_click_targets_until_changed_total': 0,
+            'engine_click_targets_until_changed_success_total': 0,
+            'engine_click_targets_until_changed_failed_total': 0,
         }
         if template_folder:
             self.register_templates_from_folder(template_folder)
@@ -212,6 +216,188 @@ class GameEngine:
             ):
                 return True, text
         return False, None
+
+    def click_targets_until_changed(
+        self,
+        targets,
+        *,
+        min_confidence=0.85,
+        exact=False,
+        verify_wait_s=0.8,
+        max_candidates_per_target=1,
+        threshold=0.88,
+    ):
+        self._metrics['engine_click_targets_until_changed_total'] += 1
+        attempts = 0
+        details = []
+        any_clicked = False
+
+        def current_signature():
+            recent = self.recent_signatures(1)
+            return recent[-1] if recent else ''
+
+        for target in targets:
+            request = self.parse_click_target(target)
+            if request.mode == 'image':
+                match = self.get_template_match(request.target, threshold=threshold)
+                attempts += 1
+                if not match:
+                    details.append(
+                        {
+                            'target': str(target),
+                            'matched': False,
+                            'clicked': False,
+                            'state_changed': False,
+                            'confidence': None,
+                        }
+                    )
+                    self._emit(
+                        'click_targets_until_changed_attempt',
+                        target=str(target),
+                        matched=False,
+                        clicked=False,
+                        state_changed=False,
+                        confidence=None,
+                    )
+                    continue
+
+                before_sig = current_signature()
+                self.click(match['x'], match['y'], wait=False)
+                any_clicked = True
+                self.wait(verify_wait_s)
+                after_sig = current_signature()
+                changed = bool(before_sig and after_sig and before_sig != after_sig)
+                confidence = match.get('confidence')
+                details.append(
+                    {
+                        'target': str(target),
+                        'matched': True,
+                        'clicked': True,
+                        'state_changed': changed,
+                        'confidence': confidence,
+                    }
+                )
+                self._emit(
+                    'click_targets_until_changed_attempt',
+                    target=str(target),
+                    matched=True,
+                    clicked=True,
+                    state_changed=changed,
+                    confidence=confidence,
+                )
+                if changed:
+                    self._metrics['engine_click_targets_until_changed_success_total'] += 1
+                    self._attempt_samples.append(attempts)
+                    self._emit(
+                        'click_targets_until_changed_result',
+                        success=True,
+                        clicked_target=str(target),
+                        attempts=attempts,
+                        changed=True,
+                        reason='state_changed',
+                    )
+                    return {
+                        'success': True,
+                        'clicked_target': str(target),
+                        'attempts': attempts,
+                        'changed': True,
+                        'reason': 'state_changed',
+                        'details': details,
+                    }
+                continue
+
+            matches = self.get_matched_locations(
+                request.target,
+                exact=exact,
+                min_confidence=min_confidence,
+            )
+            candidates = matches[: max(1, int(max_candidates_per_target))]
+            if not candidates:
+                attempts += 1
+                details.append(
+                    {
+                        'target': str(target),
+                        'matched': False,
+                        'clicked': False,
+                        'state_changed': False,
+                        'confidence': None,
+                    }
+                )
+                self._emit(
+                    'click_targets_until_changed_attempt',
+                    target=str(target),
+                    matched=False,
+                    clicked=False,
+                    state_changed=False,
+                    confidence=None,
+                )
+                continue
+
+            for candidate in candidates:
+                attempts += 1
+                before_sig = current_signature()
+                self.click(candidate['x'], candidate['y'], wait=False)
+                any_clicked = True
+                self.wait(verify_wait_s)
+                after_sig = current_signature()
+                changed = bool(before_sig and after_sig and before_sig != after_sig)
+                confidence = candidate.get('confidence')
+                details.append(
+                    {
+                        'target': str(target),
+                        'matched': True,
+                        'clicked': True,
+                        'state_changed': changed,
+                        'confidence': confidence,
+                    }
+                )
+                self._emit(
+                    'click_targets_until_changed_attempt',
+                    target=str(target),
+                    matched=True,
+                    clicked=True,
+                    state_changed=changed,
+                    confidence=confidence,
+                )
+                if changed:
+                    self._metrics['engine_click_targets_until_changed_success_total'] += 1
+                    self._attempt_samples.append(attempts)
+                    self._emit(
+                        'click_targets_until_changed_result',
+                        success=True,
+                        clicked_target=str(target),
+                        attempts=attempts,
+                        changed=True,
+                        reason='state_changed',
+                    )
+                    return {
+                        'success': True,
+                        'clicked_target': str(target),
+                        'attempts': attempts,
+                        'changed': True,
+                        'reason': 'state_changed',
+                        'details': details,
+                    }
+
+        reason = 'no_state_change' if any_clicked else 'no_match'
+        self._metrics['engine_click_targets_until_changed_failed_total'] += 1
+        self._attempt_samples.append(attempts)
+        self._emit(
+            'click_targets_until_changed_result',
+            success=False,
+            clicked_target=None,
+            attempts=attempts,
+            changed=False,
+            reason=reason,
+        )
+        return {
+            'success': False,
+            'clicked_target': None,
+            'attempts': attempts,
+            'changed': False,
+            'reason': reason,
+            'details': details,
+        }
 
     def wait_for_text(
         self,

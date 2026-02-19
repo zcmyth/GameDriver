@@ -62,6 +62,65 @@ class FakeEngine:
     def click_text(self, text, retry=5, exact=False, min_confidence=0.0):
         return self.try_click_text(text, exact=exact, min_confidence=min_confidence)
 
+    def click_targets_until_changed(
+        self,
+        targets,
+        *,
+        min_confidence=0.85,
+        exact=False,
+        verify_wait_s=0.8,
+        max_candidates_per_target=1,
+    ):
+        attempts = 0
+        details = []
+        for target in targets:
+            matches = self.get_matched_locations(
+                target,
+                exact=exact,
+                min_confidence=min_confidence,
+            )
+            attempts += 1
+            if not matches:
+                details.append(
+                    {
+                        'target': target,
+                        'matched': False,
+                        'clicked': False,
+                        'state_changed': False,
+                        'confidence': None,
+                    }
+                )
+                continue
+
+            hit = matches[0]
+            self.click(hit['x'], hit['y'], wait=False)
+            details.append(
+                {
+                    'target': target,
+                    'matched': True,
+                    'clicked': True,
+                    'state_changed': True,
+                    'confidence': hit.get('confidence'),
+                }
+            )
+            return {
+                'success': True,
+                'clicked_target': target,
+                'attempts': attempts,
+                'changed': True,
+                'reason': 'state_changed',
+                'details': details,
+            }
+
+        return {
+            'success': False,
+            'clicked_target': None,
+            'attempts': attempts,
+            'changed': False,
+            'reason': 'no_match',
+            'details': details,
+        }
+
     def click(self, x, y, wait=True):
         self.clicked.append((x, y))
 

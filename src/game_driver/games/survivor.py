@@ -230,7 +230,7 @@ class SurvivorStrategy:
         return False, None
 
     def _click_best_text_match(self, engine, targets, min_confidence=0.85, exact=False):
-        candidates = []
+        scored_targets = []
 
         for target in self._safe_targets(targets):
             matches = engine.get_matched_locations(
@@ -242,40 +242,39 @@ class SurvivorStrategy:
                 continue
             top = matches[0]
             conf = top.get('confidence', 0)
-
-            # Down-rank targets that repeatedly fail to change state.
-            # This approximates "greyed out/not clickable" behavior.
             penalty = self.target_unclickable_penalty.get(target, 0)
             score = conf - (0.12 * penalty)
-            candidates.append((score, target, top))
+            scored_targets.append((score, target))
 
-        if not candidates:
+        if not scored_targets:
             return False, None
 
-        # Try highest-priority target first; if it doesn't change state,
-        # immediately try the next one in this same iteration.
-        candidates.sort(key=lambda item: item[0], reverse=True)
+        scored_targets.sort(key=lambda item: item[0], reverse=True)
+        ordered_targets = [target for _, target in scored_targets]
 
-        before = engine.recent_signatures(1)
-        before_sig = before[-1] if before else ''
+        result = engine.click_targets_until_changed(
+            ordered_targets,
+            min_confidence=min_confidence,
+            exact=exact,
+            verify_wait_s=0.8,
+            max_candidates_per_target=1,
+        )
 
-        for _, target, hit in candidates:
-            engine.click(hit['x'], hit['y'], wait=False)
-            engine.wait(0.8)
-            after = engine.recent_signatures(1)
-            after_sig = after[-1] if after else ''
-            changed = bool(before_sig and after_sig and before_sig != after_sig)
-
-            if changed:
+        for attempt in result.get('details', []):
+            target = attempt.get('target')
+            if not target or not attempt.get('matched') or not attempt.get('clicked'):
+                continue
+            if attempt.get('state_changed'):
                 self.target_unclickable_penalty[target] = max(
                     0, self.target_unclickable_penalty.get(target, 0) - 1
                 )
-                return True, target
+            else:
+                self.target_unclickable_penalty[target] = min(
+                    6, self.target_unclickable_penalty.get(target, 0) + 1
+                )
 
-            self.target_unclickable_penalty[target] = min(
-                6, self.target_unclickable_penalty.get(target, 0) + 1
-            )
-
+        if result.get('success'):
+            return True, result.get('clicked_target')
         return False, None
 
     def _try_click_critical_controls(self, engine, i=None):
