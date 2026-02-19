@@ -42,6 +42,15 @@ Try the interactive Jupyter notebook:
 uv run jupyter notebook notebooks/debug.ipynb
 ```
 
+## Agent Governance Docs
+Canonical policy/config docs live in:
+- `docs/agents/AGENT_WORKFLOW.md`
+- `docs/agents/ARCHITECTURE_GUARDRAILS.md`
+- `docs/agents/PR_GOVERNOR.md`
+- `docs/agents/SURVIVOR_OPERATOR.md`
+
+(Compatibility stubs are kept at repo root.)
+
 ## Development
 ```bash
 # Run survivor automation
