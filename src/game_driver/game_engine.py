@@ -88,6 +88,12 @@ class GameEngine:
         texts.sort()
         return '|'.join(texts[:12])
 
+    @property
+    def text_locations(self):
+        # Stage-1 boundary contract: scripts consume this stable read-only view
+        # instead of reaching into private engine fields.
+        return list(self._locations)
+
     def refresh(self):
         self._screenshot = self.device.screenshot()
         self._locations = self.analyzer.extract_text_locations(self._screenshot)

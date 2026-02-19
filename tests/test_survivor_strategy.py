@@ -7,6 +7,10 @@ class FakeEngine:
         self.clicked = []
         self._signatures = ['fake-signature']
 
+    @property
+    def text_locations(self):
+        return list(self._locations)
+
     def is_stuck(self, repeat_threshold=8):
         return False
 
