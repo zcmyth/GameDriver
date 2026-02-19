@@ -1,0 +1,37 @@
+{
+  "step": 1,
+  "metrics": {
+    "refresh_count": 3,
+    "click_count": 0,
+    "text_click_attempts": 0,
+    "text_click_success": 0,
+    "text_click_miss": 0,
+    "text_click_success_rate": 0
+  },
+  "top_texts": [
+    "LV.50",
+    "102M",
+    "102M",
+    "1021",
+    "102M",
+    "102M",
+    "102102M",
+    "2M",
+    "02:26",
+    "102M",
+    "102M",
+    "K102M",
+    "02M",
+    "2361",
+    "LO2M",
+    "x\u00d7 5002",
+    "102M",
+    "102M",
+    "C8.15B",
+    "C.102M",
+    "02M10",
+    "021"
+  ],
+  "location_count": 22,
+  "is_stuck": false
+}

@@ -79,6 +79,25 @@ class PaddleOCRAnalyzer(ImageAnalyzer):
             text_detection_model_name='PP-OCRv5_mobile_det',
         )
 
+    @staticmethod
+    def _dedupe_similar_locations(results, min_dist=0.03):
+        deduped = []
+        for item in sorted(results, key=lambda x: x['confidence'], reverse=True):
+            keep = True
+            for existing in deduped:
+                same_text = (
+                    item['text'].strip().lower()
+                    == existing['text'].strip().lower()
+                )
+                close_x = abs(item['x'] - existing['x']) <= min_dist
+                close_y = abs(item['y'] - existing['y']) <= min_dist
+                if same_text and close_x and close_y:
+                    keep = False
+                    break
+            if keep:
+                deduped.append(item)
+        return deduped
+
     def extract_text_locations(self, image, confidence_threshold=0.8):
         width, height = image.size
 
@@ -132,7 +151,8 @@ class PaddleOCRAnalyzer(ImageAnalyzer):
         for result in results:
             del result['char_size']
 
-        return results
+        # Remove near-duplicate OCR hits that often happen on stylized UI text.
+        return self._dedupe_similar_locations(results)
 
 
 def create_analyzer():

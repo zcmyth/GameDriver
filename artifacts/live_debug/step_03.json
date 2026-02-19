@@ -1,0 +1,25 @@
+{
+  "step": 3,
+  "metrics": {
+    "refresh_count": 5,
+    "click_count": 0,
+    "text_click_attempts": 0,
+    "text_click_success": 0,
+    "text_click_miss": 0,
+    "text_click_success_rate": 0
+  },
+  "top_texts": [
+    "LV.50",
+    "102",
+    "73",
+    "02:33",
+    "1021",
+    "102M",
+    "10.2",
+    "*5264",
+    "02M",
+    "102N5.738/3B"
+  ],
+  "location_count": 10,
+  "is_stuck": false
+}
