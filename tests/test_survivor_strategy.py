@@ -151,3 +151,25 @@ def test_skill_choice_prioritizes_close_x_before_refresh_path():
 
     assert engine.clicked
     assert engine.clicked[0] == (0.92, 0.08)
+
+
+def test_skill_choice_uses_hotspot_close_when_text_close_is_missed():
+    class HotspotChoiceEngine(FakeEngine):
+        def click(self, x, y, wait=True):
+            super().click(x, y, wait=wait)
+            # Simulate close hotspot dismissing the skill choice UI.
+            if x > 0.89 and y < 0.11:
+                self._locations = []
+
+    engine = HotspotChoiceEngine(
+        [
+            {'text': 'Choice', 'confidence': 0.96, 'x': 0.5, 'y': 0.1},
+            {'text': 'x', 'confidence': 0.89, 'x': 0.92, 'y': 0.08},
+        ]
+    )
+
+    strategy = SurvivorStrategy()
+    strategy.step(engine, i=1)
+
+    assert engine.clicked
+    assert engine.clicked[0] == (0.94, 0.07)

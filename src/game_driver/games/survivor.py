@@ -350,8 +350,23 @@ class SurvivorStrategy:
         if clicked:
             return True, target
 
-        if engine.try_click_text(re.compile(r'^\s*[x×]\s*$', re.I), min_confidence=0.92):
+        if engine.try_click_text(re.compile(r'^\s*[x×]\s*$', re.I), min_confidence=0.9):
             return True, 'x'
+
+        return False, None
+
+    def _try_click_skill_choice_hotspots(self, engine):
+        # OCR often misses tiny close glyphs; probe likely close hotspots directly.
+        hotspots = [
+            (0.94, 0.07),
+            (0.90, 0.09),
+            (0.50, 0.10),
+        ]
+        for x, y in hotspots:
+            engine.click(x, y, wait=False)
+            engine.wait(0.5)
+            if not engine.contains('choice', min_confidence=0.88):
+                return True, f'hotspot_{x:.2f}_{y:.2f}'
 
         return False, None
 
@@ -580,6 +595,17 @@ class SurvivorStrategy:
                 if not engine.contains('choice', min_confidence=0.88):
                     self.skill_choice_streak = 0
                     return
+
+            hotspot_closed, hotspot = self._try_click_skill_choice_hotspots(engine)
+            if hotspot_closed:
+                self._emit_decision(
+                    i,
+                    hotspot,
+                    'clicked',
+                    'skill_choice_hotspot_close',
+                )
+                self.skill_choice_streak = 0
+                return
 
             if engine.click_text('refresh', retry=2, min_confidence=0.85):
                 self._emit_decision(i, 'refresh', 'clicked', 'skill_refresh')
