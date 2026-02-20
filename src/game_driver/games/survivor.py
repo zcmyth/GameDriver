@@ -558,6 +558,19 @@ class SurvivorStrategy:
         if engine.contains('choice', min_confidence=0.9):
             self.skill_choice_streak += 1
 
+            # Fast breaker: don't spend many OCR cycles when choice persists.
+            if self.skill_choice_streak >= 2:
+                self._emit_decision(
+                    i,
+                    'skill_choice',
+                    'fallback',
+                    'skill_choice_fast_breaker',
+                    detail=f'streak={self.skill_choice_streak}',
+                )
+                self._force_alternate_recovery(engine, i, 'skill_choice_fast_breaker')
+                self.skill_choice_streak = 0
+                return
+
             clicked, skill = self._try_click_skill_targets(
                 engine,
                 self.preferred_skills,
