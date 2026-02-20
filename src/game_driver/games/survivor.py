@@ -7,6 +7,8 @@ logger = logging.getLogger(__name__)
 
 
 class SurvivorStrategy:
+    STRATEGY_REVISION = 'pr20-skill-choice-hotfix-20260219-1731'
+
     def __init__(self, artifact_dir='artifacts/stuck'):
         self.artifact_dir = Path(artifact_dir)
         self.artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -138,6 +140,8 @@ class SurvivorStrategy:
 
         # Skill-choice specific anti-loop tracking.
         self.skill_choice_streak = 0
+
+        self._revision_emitted = False
 
     @staticmethod
     def _text_samples(engine):
@@ -355,6 +359,20 @@ class SurvivorStrategy:
 
         return False, None
 
+    def _try_click_skill_choice_hotspots(self, engine):
+        hotspots = [
+            (0.94, 0.07),
+            (0.90, 0.09),
+            (0.50, 0.10),
+        ]
+        for x, y in hotspots:
+            engine.click(x, y, wait=False)
+            engine.wait(0.5)
+            if not engine.contains('choice', min_confidence=0.88):
+                return True, f'hotspot_{x:.2f}_{y:.2f}'
+
+        return False, None
+
     def _force_alternate_recovery(self, engine, i, reason):
         # Stronger path to break repeated home-scene target loops.
         engine.click(46.0 / 460, 960.0 / 1024, False)  # back
@@ -469,6 +487,16 @@ class SurvivorStrategy:
         current_scene = self._track_progress_signals(engine, i)
         self._reset_skill_choice_streak(current_scene)
 
+        if not self._revision_emitted:
+            self._emit_decision(
+                i,
+                'strategy_revision',
+                'info',
+                'boot',
+                detail=self.STRATEGY_REVISION,
+            )
+            self._revision_emitted = True
+
         if self.no_progress_steps >= 14:
             self._emit_decision(
                 i,
@@ -558,6 +586,19 @@ class SurvivorStrategy:
         if engine.contains('choice', min_confidence=0.9):
             self.skill_choice_streak += 1
 
+            # Hard fail-safe: treat persistent choice as non-progress risk and
+            # immediately force alternate recovery instead of OCR-heavy loops.
+            self._emit_decision(
+                i,
+                'skill_choice',
+                'fallback',
+                'skill_choice_immediate_recovery',
+                detail=f'streak={self.skill_choice_streak}',
+            )
+            self._force_alternate_recovery(engine, i, 'skill_choice_immediate_recovery')
+            self.skill_choice_streak = 0
+            return
+
             clicked, skill = self._try_click_skill_targets(
                 engine,
                 self.preferred_skills,
@@ -568,21 +609,20 @@ class SurvivorStrategy:
                 self.skill_choice_streak = 0
                 return
 
-            closed, close_target = self._try_click_close_controls(engine)
-            if closed:
+            hotspot_closed, hotspot = self._try_click_skill_choice_hotspots(engine)
+            if hotspot_closed:
                 self._emit_decision(
                     i,
-                    close_target,
+                    hotspot,
                     'clicked',
-                    'skill_choice_close_priority',
+                    'skill_choice_hotspot_close',
                 )
-                engine.wait(0.6)
-                if not engine.contains('choice', min_confidence=0.88):
-                    self.skill_choice_streak = 0
-                    return
+                self.skill_choice_streak = 0
+                return
 
-            if engine.click_text('refresh', retry=2, min_confidence=0.85):
-                self._emit_decision(i, 'refresh', 'clicked', 'skill_refresh')
+            # Disable refresh in skill_choice: OCR misses on refresh are a
+            # dominant no-progress loop source in production telemetry.
+            self._emit_decision(i, 'refresh', 'skip', 'skill_refresh_disabled')
 
             clicked, skill = self._try_click_skill_targets(
                 engine,
