@@ -269,3 +269,77 @@ def test_try_click_close_control_uses_safe_tap_when_enabled(monkeypatch):
     assert ok is True
     assert reason == 'close_safe_tap'
     assert device.clicks[:2] == [(0.92, 0.08), (0.5, 0.1)]
+
+
+def test_event_envelope_schema_and_bounded_evidence(monkeypatch):
+    events = []
+
+    def listener(event, payload):
+        events.append((event, payload))
+
+    long_query = 'q' * 300
+    engine, _device = build_engine(
+        monkeypatch,
+        [{'text': 'Go', 'x': 0.4, 'y': 0.5, 'confidence': 0.97}],
+        listeners=[listener],
+    )
+
+    events.clear()
+    assert engine.try_click_text(long_query) is False
+
+    name, payload = events[-1]
+    assert name == 'text_click_miss'
+    assert set(payload.keys()) == {
+        'state_before',
+        'action',
+        'state_after',
+        'match_evidence',
+        'correlation_id',
+        'reason',
+    }
+    assert payload['action'] == 'text_click_miss'
+    assert payload['reason'] == 'miss'
+    assert len(payload['match_evidence']['query']) == 120
+
+
+def test_event_ordering_and_correlation_id_monotonic(monkeypatch):
+    events = []
+
+    def listener(event, payload):
+        events.append((event, payload))
+
+    engine, _device = build_engine(
+        monkeypatch,
+        [{'text': 'go', 'x': 0.5, 'y': 0.5, 'confidence': 0.9}],
+        listeners=[listener],
+    )
+
+    events.clear()
+    engine.try_click_text('go')
+
+    names = [name for name, _ in events]
+    assert names[:2] == ['click', 'refresh']
+    assert names[-1] == 'text_click_success'
+
+    ids = [int(payload['correlation_id'].split('-')[1]) for _, payload in events]
+    assert ids == sorted(ids)
+
+
+def test_event_emission_listener_failure_is_non_blocking(monkeypatch):
+    events = []
+
+    def bad_listener(_event, _payload):
+        raise RuntimeError('boom')
+
+    def good_listener(event, payload):
+        events.append((event, payload))
+
+    engine, _device = build_engine(
+        monkeypatch,
+        [{'text': 'go', 'x': 0.5, 'y': 0.5, 'confidence': 0.9}],
+        listeners=[bad_listener, good_listener],
+    )
+
+    events.clear()
+    assert engine.try_click_text('go') is True
+    assert any(name == 'text_click_success' for name, _ in events)
