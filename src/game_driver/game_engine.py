@@ -3,6 +3,7 @@ import time
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import StrEnum
 
 from game_driver.device import Device
 from game_driver.image_analyzer import create_analyzer, draw_text_locations
@@ -21,6 +22,16 @@ class ClickRequest:
     raw_target: object
     mode: str
     target: object
+
+
+class EventReason(StrEnum):
+    STATE_CHANGED = 'state_changed'
+    NO_STATE_CHANGE = 'no_state_change'
+    NO_MATCH = 'no_match'
+    SUCCESS = 'success'
+    MISS = 'miss'
+    ATTEMPT = 'attempt'
+    UNKNOWN = 'unknown'
 
 
 class GameEngine:
@@ -55,6 +66,7 @@ class GameEngine:
             'sequential_click_success': 0,
             'sequential_click_failed': 0,
         }
+        self._event_seq = 0
         if template_folder:
             self.register_templates_from_folder(template_folder)
         self.refresh()
@@ -79,8 +91,64 @@ class GameEngine:
         self._listeners = [item for item in self._listeners if item is not listener]
 
     def _emit(self, event, **payload):
+        self._event_seq += 1
+        before = self.recent_signatures(1)
+        state_before = before[-1] if before else ''
+        state_after = self._screen_signature()
+        reason = self._normalize_reason(payload.get('reason'))
+        envelope = {
+            'state_before': state_before,
+            'action': str(event),
+            'state_after': state_after,
+            'match_evidence': self._bounded_evidence(payload),
+            'correlation_id': f'evt-{self._event_seq}',
+            'reason': reason.value,
+        }
         for listener in list(self._listeners):
-            listener(event, payload)
+            try:
+                listener(event, envelope)
+            except Exception:
+                # Fail-safe event stream: listener failures must never block runtime.
+                continue
+
+    def _normalize_reason(self, reason):
+        if reason is None:
+            return EventReason.UNKNOWN
+        value = self._normalize_text(reason)
+        for item in EventReason:
+            if value == item.value:
+                return item
+        if value.endswith('_miss') or value == 'miss':
+            return EventReason.MISS
+        if value.endswith('_success') or value == 'success':
+            return EventReason.SUCCESS
+        return EventReason.UNKNOWN
+
+    def _bounded_evidence(self, payload, *, max_items=10, max_list=5, max_str=120):
+        def _bound(value, depth=0):
+            if depth > 2:
+                return '...'
+            if isinstance(value, (int, float, bool)) or value is None:
+                return value
+            if isinstance(value, str):
+                return value[:max_str]
+            if isinstance(value, dict):
+                result = {}
+                for idx, (k, v) in enumerate(value.items()):
+                    if idx >= max_items:
+                        result['__truncated__'] = True
+                        break
+                    result[str(k)[:40]] = _bound(v, depth + 1)
+                return result
+            if isinstance(value, (list, tuple, set)):
+                seq = list(value)[:max_list]
+                out = [_bound(item, depth + 1) for item in seq]
+                if len(value) > max_list:
+                    out.append('...')
+                return out
+            return str(value)[:max_str]
+
+        return _bound(dict(payload))
 
     def _screen_signature(self):
         texts = [self._normalize_text(item.get('text', '')) for item in self._locations]
@@ -105,6 +173,7 @@ class GameEngine:
             refresh_count=self._metrics['refresh_count'],
             location_count=len(self._locations),
             screen_signature=signature,
+            reason=EventReason.SUCCESS.value,
         )
 
     def _make_text_matcher(self, text_or_matcher, exact=False):
@@ -165,7 +234,7 @@ class GameEngine:
         )
         if not matches:
             self._metrics['text_click_miss'] += 1
-            self._emit('text_click_miss', query=str(text))
+            self._emit('text_click_miss', query=str(text), reason=EventReason.MISS.value)
             return False
 
         # Click only the best match to avoid accidental multi-clicks.
@@ -179,6 +248,7 @@ class GameEngine:
             x=best['x'],
             y=best['y'],
             confidence=best.get('confidence', 0),
+            reason=EventReason.SUCCESS.value,
         )
         return True
 
@@ -327,6 +397,7 @@ class GameEngine:
                     clicked=True,
                     state_changed=changed,
                     confidence=hit.get('confidence'),
+                    reason=EventReason.ATTEMPT.value,
                 )
 
                 if changed:
@@ -417,7 +488,11 @@ class GameEngine:
         match = self.get_template_match(name_or_path, threshold=threshold, **kwargs)
         if not match:
             self._metrics['template_click_miss'] += 1
-            self._emit('template_click_miss', template=str(name_or_path))
+            self._emit(
+                'template_click_miss',
+                template=str(name_or_path),
+                reason=EventReason.MISS.value,
+            )
             return False
 
         self.click(match['x'], match['y'], wait=False)
@@ -429,6 +504,7 @@ class GameEngine:
             x=match['x'],
             y=match['y'],
             confidence=match.get('confidence', 0),
+            reason=EventReason.SUCCESS.value,
         )
         return True
 
@@ -473,7 +549,7 @@ class GameEngine:
     def click(self, x, y, wait=True):
         self._metrics['click_count'] += 1
         self.device.click(x, y)
-        self._emit('click', x=x, y=y)
+        self._emit('click', x=x, y=y, reason=EventReason.ATTEMPT.value)
         if wait:
             self.wait()
 
