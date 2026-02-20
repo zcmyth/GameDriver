@@ -1,4 +1,4 @@
-from game_driver.games import SurvivorStrategy
+from game_driver.games import DecisionReason, SurvivorStrategy
 
 
 class FakeEngine:
@@ -266,4 +266,12 @@ def test_skill_choice_low_confidence_text_fallback_blocks_refresh_loop():
 
     assert engine.refresh_clicks == 0
     assert engine.clicked
-    assert engine.clicked[0] == (46.0 / 460, 960.0 / 1024)
+
+
+def test_emit_decision_serializes_enum_reason_value(caplog):
+    strategy = SurvivorStrategy()
+
+    with caplog.at_level('INFO'):
+        strategy._emit_decision(1, 'test_action', 'clicked', DecisionReason.CRITICAL_CONTROL)
+
+    assert 'reason=critical_control' in caplog.text

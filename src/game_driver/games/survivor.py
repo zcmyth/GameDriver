@@ -1,9 +1,37 @@
 import logging
 import re
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 
 from game_driver.contracts import EngineRuntime
+
+class DecisionReason(str, Enum):
+    BOOT = 'boot'
+    STREAK_BREAKER = 'streak_breaker'
+    NO_PROGRESS_GUARD = 'no_progress_guard'
+    CYCLE_GUARD = 'cycle_guard'
+    ENERGY_MODE = 'energy_mode'
+    FREE_OR_REWARD = 'free_or_reward'
+    CARD_FORCE_SELECT_DIRECT = 'card_force_select_direct'
+    SKILL_CHOICE_STREAK_BREAKER = 'skill_choice_streak_breaker'
+    BATTLE_HEARTBEAT = 'battle_heartbeat'
+    BATTLE_WAIT_WINDOW = 'battle_wait_window'
+    START_COOLDOWN_ACTIVE = 'start_cooldown_active'
+    CRITICAL_CONTROL = 'critical_control'
+    NAV_LABEL = 'nav_label'
+    HIGH_RISK_NO_BUY = 'high_risk_no_buy'
+    SAFE_BACKTRACK = 'safe_backtrack'
+    CRITICAL_TEXT_MISS = 'critical_text_miss'
+    ICON_TEMPLATE = 'icon_template'
+    NAV_LABEL_FUZZY = 'nav_label_fuzzy'
+    START_AREA_TAP = 'start_area_tap'
+    SCAN_POINT_TAP = 'scan_point_tap'
+    PERIODIC_RECOVERY = 'periodic_recovery'
+    NO_MATCH = 'no_match'
+    POST_CLICK_SIGNATURE_CHECK = 'post_click_signature_check'
+    SAME_TARGET_NOCHANGE_LOOP = 'same_target_nochange_loop'
+
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +197,8 @@ class SurvivorStrategy:
         return bool(re.fullmatch(r'[0-9:.xbmkn+\- ]{2,}', text.lower()))
 
     def _emit_decision(self, i, action, decision, reason, detail=''):
+        if isinstance(reason, Enum):
+            reason = reason.value
         logger.info(
             'event=survivor_decision iter=%s action=%s decision=%s reason=%s detail=%s',
             i,
@@ -475,12 +505,12 @@ class SurvivorStrategy:
             i,
             target,
             'state_changed' if changed else 'state_unchanged',
-            'post_click_signature_check',
+            DecisionReason.POST_CLICK_SIGNATURE_CHECK,
             detail=f'same_target_count={self.home_same_target_count} nochange_count={self.home_nochange_count}',
         )
 
         if self.home_same_target_count >= 4 and self.home_nochange_count >= 3:
-            self._force_alternate_recovery(engine, i, 'same_target_nochange_loop')
+            self._force_alternate_recovery(engine, i, DecisionReason.SAME_TARGET_NOCHANGE_LOOP)
             self.home_same_target_count = 0
             self.home_nochange_count = 0
             self.home_last_target = None
@@ -558,7 +588,7 @@ class SurvivorStrategy:
                 i,
                 'strategy_revision',
                 'info',
-                'boot',
+                DecisionReason.BOOT,
                 detail=self.STRATEGY_REVISION,
             )
             self._revision_emitted = True
@@ -566,12 +596,12 @@ class SurvivorStrategy:
         if self.no_progress_steps >= 14:
             self._emit_decision(
                 i,
-                'no_progress_guard',
+                DecisionReason.NO_PROGRESS_GUARD,
                 'fallback',
-                'streak_breaker',
+                DecisionReason.STREAK_BREAKER,
                 detail=f'scene={current_scene} steps={self.no_progress_steps}',
             )
-            self._force_alternate_recovery(engine, i, 'no_progress_guard')
+            self._force_alternate_recovery(engine, i, DecisionReason.NO_PROGRESS_GUARD)
             self.no_progress_steps = 0
             return
 
@@ -639,7 +669,7 @@ class SurvivorStrategy:
                 i,
                 decision_name,
                 'clicked' if changed else 'fallback',
-                'cycle_guard',
+                DecisionReason.CYCLE_GUARD,
                 detail=f'recovery_success={self.recovery_success}/{self.recovery_attempts}',
             )
 
@@ -648,9 +678,9 @@ class SurvivorStrategy:
 
         low_energy_mode = self._contains_low_energy_text(engine)
         if low_energy_mode:
-            self._emit_decision(i, 'low_energy', 'fallback', 'energy_mode')
+            self._emit_decision(i, 'low_energy', 'fallback', DecisionReason.ENERGY_MODE)
             if self._run_low_energy_fallback(engine, i):
-                self._emit_decision(i, 'low_energy', 'clicked', 'free_or_reward')
+                self._emit_decision(i, 'low_energy', 'clicked', DecisionReason.FREE_OR_REWARD)
                 return
 
         # Prioritize skill-choice handling before generic controls to avoid
@@ -661,7 +691,7 @@ class SurvivorStrategy:
             # Minimal deterministic path for skill-choice UI:
             # choose a card directly (no OCR text-click path), then tap the
             # lower card body to confirm/select.
-            self._emit_decision(i, 'skill_choice', 'fallback', 'card_force_select_direct')
+            self._emit_decision(i, 'skill_choice', 'fallback', DecisionReason.CARD_FORCE_SELECT_DIRECT)
             fallback_cards = [
                 (0.17, 0.44),
                 (0.50, 0.44),
@@ -686,23 +716,23 @@ class SurvivorStrategy:
                     i,
                     'skill_choice',
                     'fallback',
-                    'skill_choice_streak_breaker',
+                    DecisionReason.SKILL_CHOICE_STREAK_BREAKER,
                     detail=f'streak={self.skill_choice_streak}',
                 )
-                self._force_alternate_recovery(engine, i, 'skill_choice_streak_breaker')
+                self._force_alternate_recovery(engine, i, DecisionReason.SKILL_CHOICE_STREAK_BREAKER)
                 self.skill_choice_streak = 0
             return
 
         if self._is_in_battle(engine):
             if i % 3 == 0:
                 engine.click(0.5, 0.82, False)
-                self._emit_decision(i, 'battle_tap', 'clicked', 'battle_heartbeat')
+                self._emit_decision(i, 'battle_tap', 'clicked', DecisionReason.BATTLE_HEARTBEAT)
                 return
             if i % 9 == 0:
                 engine.click(0.92, 0.86, False)
-                self._emit_decision(i, 'battle_skill', 'clicked', 'battle_heartbeat')
+                self._emit_decision(i, 'battle_skill', 'clicked', DecisionReason.BATTLE_HEARTBEAT)
                 return
-            self._emit_decision(i, 'battle', 'miss', 'battle_wait_window')
+            self._emit_decision(i, 'battle', 'miss', DecisionReason.BATTLE_WAIT_WINDOW)
             return
 
         if low_energy_mode:
@@ -714,7 +744,7 @@ class SurvivorStrategy:
 
         if i < self.start_cooldown_until and 'start' in active_controls:
             active_controls.remove('start')
-            self._emit_decision(i, 'start', 'cooldown', 'start_cooldown_active')
+            self._emit_decision(i, 'start', 'cooldown', DecisionReason.START_COOLDOWN_ACTIVE)
 
         closed, close_reason = self._try_click_close_controls(engine)
         if closed and (self.no_progress_steps >= 4 or current_scene in {'offer_popup', 'unknown'}):
@@ -723,7 +753,7 @@ class SurvivorStrategy:
 
         critical_clicked, critical = self._try_click_critical_controls(engine, i=i)
         if critical_clicked:
-            self._emit_decision(i, critical, 'clicked', 'critical_control')
+            self._emit_decision(i, critical, 'clicked', DecisionReason.CRITICAL_CONTROL)
             if critical == 'start':
                 self.start_cooldown_until = i + 8
             return
@@ -736,13 +766,13 @@ class SurvivorStrategy:
             exact=False,
         )
         if control_clicked:
-            self._emit_decision(i, control, 'clicked', 'nav_label')
+            self._emit_decision(i, control, 'clicked', DecisionReason.NAV_LABEL)
             if control == 'start':
                 self.start_cooldown_until = i + 8
             return
 
         if self._contains_blocked_purchase_text(engine):
-            self._emit_decision(i, 'purchase_ui', 'blocked', 'high_risk_no_buy')
+            self._emit_decision(i, 'purchase_ui', 'blocked', DecisionReason.HIGH_RISK_NO_BUY)
             closed, close_reason = self._try_click_close_controls(engine)
             if closed:
                 self._emit_decision(i, 'close_control', 'clicked', close_reason)
@@ -760,25 +790,25 @@ class SurvivorStrategy:
             engine.click(0.5, 0.8, False)
             engine.click(46.0 / 460, 960.0 / 1024, False)
             engine.try_click_text('main challenge', min_confidence=0.82)
-            self._emit_decision(i, 'backtrack_recover', 'fallback', 'safe_backtrack')
+            self._emit_decision(i, 'backtrack_recover', 'fallback', DecisionReason.SAFE_BACKTRACK)
             return
 
         if engine.contains('revival', min_confidence=0.85):
             if engine.try_click_text(re.compile(r'\bad\b', re.I), min_confidence=0.85):
-                self._emit_decision(i, 'ad', 'clicked', 'critical_control')
+                self._emit_decision(i, 'ad', 'clicked', DecisionReason.CRITICAL_CONTROL)
                 return
             engine.click(368.0 / 460, 380.0 / 1024)
-            self._emit_decision(i, 'revival', 'fallback', 'critical_text_miss')
+            self._emit_decision(i, 'revival', 'fallback', DecisionReason.CRITICAL_TEXT_MISS)
             return
 
         icon_clicked, icon_name = self._try_click_icon_templates(engine)
         if icon_clicked:
-            self._emit_decision(i, icon_name, 'clicked', 'icon_template')
+            self._emit_decision(i, icon_name, 'clicked', DecisionReason.ICON_TEMPLATE)
             return
 
         nav_clicked, nav_label = self._try_click_nav_labels(engine)
         if nav_clicked:
-            self._emit_decision(i, nav_label, 'clicked', 'nav_label_fuzzy')
+            self._emit_decision(i, nav_label, 'clicked', DecisionReason.NAV_LABEL_FUZZY)
             return
 
         # Home-screen fallback: OCR confidence for "Start" can fluctuate.
@@ -789,7 +819,7 @@ class SurvivorStrategy:
             engine.click(70.0 / 460, 330.0 / 1024, False)
             self.start_cooldown_until = i + 8
             self.last_action = 'start_fallback'
-            self._emit_decision(i, 'start', 'fallback', 'start_area_tap')
+            self._emit_decision(i, 'start', 'fallback', DecisionReason.START_AREA_TAP)
             self._record_home_click_outcome('start', before_sig, engine, i)
             return
 
@@ -797,13 +827,13 @@ class SurvivorStrategy:
             x, y = self.nav_scan_points[(i // 7) % len(self.nav_scan_points)]
             engine.click(x, y, False)
             self.last_action = 'nav_scan'
-            self._emit_decision(i, 'nav_scan', 'fallback', 'scan_point_tap')
+            self._emit_decision(i, 'nav_scan', 'fallback', DecisionReason.SCAN_POINT_TAP)
             return
 
         if i % 5 == 0:
             engine.click(0.5, 0.8, False)
             self.last_action = 'center_tap'
-            self._emit_decision(i, 'center_tap', 'fallback', 'periodic_recovery')
+            self._emit_decision(i, 'center_tap', 'fallback', DecisionReason.PERIODIC_RECOVERY)
             return
 
-        self._emit_decision(i, 'none', 'miss', 'no_match')
+        self._emit_decision(i, 'none', 'miss', DecisionReason.NO_MATCH)
