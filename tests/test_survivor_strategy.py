@@ -267,3 +267,36 @@ def test_skill_choice_low_confidence_text_fallback_blocks_refresh_loop():
     assert engine.refresh_clicks == 0
     assert engine.clicked
     assert engine.clicked[0] == (46.0 / 460, 960.0 / 1024)
+
+
+def test_no_progress_breaker_triggers_tier_jump_with_cooldown():
+    engine = FakeEngine(
+        [
+            {'text': 'Noise', 'confidence': 0.91, 'x': 0.5, 'y': 0.5},
+        ]
+    )
+    strategy = SurvivorStrategy()
+
+    strategy.no_progress_steps = strategy.no_progress_threshold
+    strategy.step(engine, i=20)
+
+    assert strategy.no_progress_tier_jumps == 1
+    assert strategy.no_progress_cooldown_until == 26
+    assert (46.0 / 460, 960.0 / 1024) in engine.clicked
+
+
+def test_no_progress_breaker_respects_bounded_retry_cap():
+    engine = FakeEngine(
+        [
+            {'text': 'Noise', 'confidence': 0.91, 'x': 0.5, 'y': 0.5},
+        ]
+    )
+    strategy = SurvivorStrategy()
+    strategy.no_progress_steps = strategy.no_progress_threshold
+    strategy.no_progress_tier_jumps = strategy.no_progress_max_tier_jumps
+
+    strategy.step(engine, i=30)
+
+    # bounded cap path uses a single back tap instead of full alternate recovery
+    assert (46.0 / 460, 960.0 / 1024) in engine.clicked
+    assert (0.10, 0.86) not in engine.clicked

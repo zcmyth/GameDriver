@@ -145,6 +145,11 @@ class SurvivorStrategy:
         self.last_signature = None
         self.last_scene_kind = None
         self.no_progress_steps = 0
+        self.no_progress_threshold = 12
+        self.no_progress_cooldown_steps = 6
+        self.no_progress_cooldown_until = -1
+        self.no_progress_tier_jumps = 0
+        self.no_progress_max_tier_jumps = 3
         self.recovery_attempts = 0
         self.recovery_success = 0
 
@@ -549,9 +554,71 @@ class SurvivorStrategy:
         if current_scene != 'skill_choice':
             self.skill_choice_streak = 0
 
+    def _emit_progress_metrics(self, i, current_scene):
+        # objective_delta_per_min is placeholder until objective counter is wired.
+        objective_delta_per_min = 0.0
+        scene_transition_rate = 1.0 if self.no_progress_steps == 0 else 0.0
+        no_progress_duration = self.no_progress_steps
+        action_to_progress_ratio = round((i + 1) / max(1, self.recovery_success + 1), 2)
+
+        logger.info(
+            'event=survivor_progress_metrics iter=%s objective_delta_per_min=%.2f '
+            'scene_transition_rate=%.2f no_progress_duration=%s action_to_progress_ratio=%.2f scene=%s',
+            i,
+            objective_delta_per_min,
+            scene_transition_rate,
+            no_progress_duration,
+            action_to_progress_ratio,
+            current_scene,
+        )
+
+    def _handle_no_progress_breaker(self, engine, i, current_scene):
+        if self.no_progress_steps < self.no_progress_threshold:
+            return False
+        if i < self.no_progress_cooldown_until:
+            self._emit_decision(
+                i,
+                'no_progress_guard',
+                'cooldown',
+                'tier_jump_cooldown',
+                detail=f'scene={current_scene} until={self.no_progress_cooldown_until}',
+            )
+            return True
+
+        if self.no_progress_tier_jumps >= self.no_progress_max_tier_jumps:
+            self._emit_decision(
+                i,
+                'no_progress_guard',
+                'fallback',
+                'bounded_retry_cap',
+                detail=f'scene={current_scene} jumps={self.no_progress_tier_jumps}',
+            )
+            engine.click(46.0 / 460, 960.0 / 1024, False)
+            self.no_progress_cooldown_until = i + self.no_progress_cooldown_steps
+            return True
+
+        self.no_progress_tier_jumps += 1
+        self._emit_decision(
+            i,
+            'no_progress_guard',
+            'fallback',
+            'tier_jump_recovery',
+            detail=(
+                f'scene={current_scene} steps={self.no_progress_steps} '
+                f'jumps={self.no_progress_tier_jumps}/{self.no_progress_max_tier_jumps}'
+            ),
+        )
+        self._force_alternate_recovery(engine, i, 'no_progress_guard')
+        self.no_progress_steps = 0
+        self.no_progress_cooldown_until = i + self.no_progress_cooldown_steps
+        return True
+
     def step(self, engine, i):
         current_scene = self._track_progress_signals(engine, i)
         self._reset_skill_choice_streak(current_scene)
+
+        if i % 10 == 0:
+            self._emit_progress_metrics(i, current_scene)
 
         if not self._revision_emitted:
             self._emit_decision(
@@ -563,16 +630,7 @@ class SurvivorStrategy:
             )
             self._revision_emitted = True
 
-        if self.no_progress_steps >= 14:
-            self._emit_decision(
-                i,
-                'no_progress_guard',
-                'fallback',
-                'streak_breaker',
-                detail=f'scene={current_scene} steps={self.no_progress_steps}',
-            )
-            self._force_alternate_recovery(engine, i, 'no_progress_guard')
-            self.no_progress_steps = 0
+        if self._handle_no_progress_breaker(engine, i, current_scene):
             return
 
         if current_scene == 'offer_popup':
@@ -645,6 +703,15 @@ class SurvivorStrategy:
 
         if i % 20 == 0:
             logger.info('engine metrics: %s', engine.metrics())
+
+        low_conf_skill_choice_hint = any(
+            'choice' in str(item.get('text', '')).lower() and item.get('confidence', 0) < 0.9
+            for item in engine.text_locations
+        )
+        if low_conf_skill_choice_hint:
+            engine.click(46.0 / 460, 960.0 / 1024, False)
+            self._emit_decision(i, 'skill_choice_low_confidence', 'fallback', 'safe_backtrack')
+            return
 
         low_energy_mode = self._contains_low_energy_text(engine)
         if low_energy_mode:
