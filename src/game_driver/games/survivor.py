@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class SurvivorStrategy:
-    STRATEGY_REVISION = 'pr20-skill-choice-hotfix-20260219-1731'
+    STRATEGY_REVISION = 'pr25-skill-choice-scene-fallback-20260219-2016'
 
     def __init__(self, artifact_dir='artifacts/stuck'):
         self.artifact_dir = Path(artifact_dir)
@@ -157,6 +157,13 @@ class SurvivorStrategy:
     def _text_samples(engine: EngineRuntime):
         return [str(item['text']).lower() for item in engine.text_locations]
 
+    def _is_skill_choice_scene(self, engine: EngineRuntime):
+        if engine.contains('choice', min_confidence=0.9):
+            return True
+        # Fallback for low-confidence OCR where `choice` text exists but
+        # strict confidence gating fails.
+        return any('choice' in text for text in self._text_samples(engine))
+
     @staticmethod
     def _is_numeric_noise(text):
         return bool(re.fullmatch(r'[0-9:.xbmkn+\- ]{2,}', text.lower()))
@@ -201,7 +208,7 @@ class SurvivorStrategy:
 
     def _contains_low_energy_text(self, engine):
         # Skill choice includes terms like "Energy Drink"; avoid false low-energy mode.
-        if engine.contains('choice', min_confidence=0.9):
+        if self._is_skill_choice_scene(engine):
             return False
 
         return any(
@@ -492,7 +499,7 @@ class SurvivorStrategy:
         return (numeric_noise >= 8 and has_timer) or (numeric_noise >= 6 and has_level)
 
     def _scene_kind(self, engine):
-        if engine.contains('choice', min_confidence=0.9):
+        if self._is_skill_choice_scene(engine):
             return 'skill_choice'
         if self._is_in_battle(engine):
             return 'battle'
@@ -648,7 +655,7 @@ class SurvivorStrategy:
 
         # Prioritize skill-choice handling before generic controls to avoid
         # false matches (e.g. "start" matching "starforge").
-        if engine.contains('choice', min_confidence=0.9):
+        if current_scene == 'skill_choice':
             self.skill_choice_streak += 1
 
             # Minimal deterministic path for skill-choice UI:
