@@ -231,3 +231,40 @@ def test_skill_choice_low_text_success_breaker_triggers_immediately():
 
     assert (46.0 / 460, 960.0 / 1024) in engine.clicked
     assert strategy.skill_choice_streak == 0
+
+
+def test_skill_choice_low_confidence_text_fallback_blocks_refresh_loop():
+    class LowConfidenceChoiceEngine(FakeEngine):
+        def __init__(self, locations):
+            super().__init__(locations)
+            self.refresh_clicks = 0
+
+        def contains(self, text, exact=False, min_confidence=0.0):
+            if str(text).lower() == 'choice' and min_confidence >= 0.9:
+                return False
+            return super().contains(text, exact=exact, min_confidence=min_confidence)
+
+        def click_text(self, text, retry=5, exact=False, min_confidence=0.0):
+            if str(text).lower() == 'refresh':
+                self.refresh_clicks += 1
+            return super().click_text(
+                text,
+                retry=retry,
+                exact=exact,
+                min_confidence=min_confidence,
+            )
+
+    engine = LowConfidenceChoiceEngine(
+        [
+            {'text': 'Choice', 'confidence': 0.62, 'x': 0.5, 'y': 0.1},
+            {'text': 'Refresh', 'confidence': 0.95, 'x': 0.5, 'y': 0.2},
+            {'text': 'Noise', 'confidence': 0.90, 'x': 0.2, 'y': 0.3},
+        ]
+    )
+
+    strategy = SurvivorStrategy()
+    strategy.step(engine, i=1)
+
+    assert engine.refresh_clicks == 0
+    assert engine.clicked
+    assert engine.clicked[0] == (46.0 / 460, 960.0 / 1024)
