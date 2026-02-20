@@ -152,6 +152,14 @@ class SurvivorStrategy:
         # Skill-choice specific anti-loop tracking.
         self.skill_choice_streak = 0
 
+        # Miss-rate circuit breaker state (issue #33).
+        self.mode_window_size = 8
+        self.mode_breaker_min_samples = 4
+        self.mode_breaker_threshold = 0.75
+        self.mode_disable_steps = 18
+        self.mode_results = {}
+        self.mode_disabled_until = {}
+
         self._revision_emitted = False
 
         # Progress-first breaker/metrics state.
@@ -394,6 +402,40 @@ class SurvivorStrategy:
                 return True, f'hotspot_{x:.2f}_{y:.2f}'
 
         return False, None
+
+
+    def _mode_enabled(self, mode, i):
+        return i >= self.mode_disabled_until.get(mode, -1)
+
+    def _record_mode_result(self, mode, success, i):
+        window = self.mode_results.setdefault(mode, [])
+        window.append(bool(success))
+        if len(window) > self.mode_window_size:
+            del window[:-self.mode_window_size]
+
+        if len(window) < self.mode_breaker_min_samples:
+            return
+
+        miss_count = sum(1 for item in window if not item)
+        miss_rate = miss_count / len(window)
+        if miss_rate < self.mode_breaker_threshold:
+            return
+
+        self.mode_disabled_until[mode] = i + self.mode_disable_steps
+        logger.warning(
+            'event=survivor_mode_breaker mode=%s miss_rate=%.2f window=%s disabled_until=%s',
+            mode,
+            miss_rate,
+            len(window),
+            self.mode_disabled_until[mode],
+        )
+        self._emit_decision(
+            i,
+            mode,
+            'disabled',
+            'miss_rate_circuit_breaker',
+            detail=f'miss_rate={miss_rate:.2f} window={len(window)}',
+        )
 
     def _force_alternate_recovery(self, engine, i, reason):
         # Stronger path to break repeated home-scene target loops.
@@ -659,6 +701,15 @@ class SurvivorStrategy:
         if i % 20 == 0:
             logger.info('engine metrics: %s', engine.metrics())
 
+        low_conf_skill_choice_hint = any(
+            'choice' in str(item.get('text', '')).lower() and item.get('confidence', 0) < 0.9
+            for item in engine.text_locations
+        )
+        if low_conf_skill_choice_hint:
+            engine.click(46.0 / 460, 960.0 / 1024, False)
+            self._emit_decision(i, 'skill_choice_low_confidence', 'fallback', 'safe_backtrack')
+            return
+
         low_energy_mode = self._contains_low_energy_text(engine)
         if low_energy_mode:
             self._emit_decision(i, 'low_energy', 'fallback', 'energy_mode')
@@ -740,12 +791,20 @@ class SurvivorStrategy:
             active_controls.remove('start')
             self._emit_decision(i, 'start', 'cooldown', 'start_cooldown_active')
 
-        closed, close_reason = self._try_click_close_controls(engine, allow_safe_tap=True)
-        if closed and (self.no_progress_steps >= 4 or current_scene in {'offer_popup', 'unknown'}):
-            self._emit_decision(i, 'close_control', 'clicked', close_reason)
-            return
+        if self._mode_enabled('close_control', i):
+            closed, close_reason = self._try_click_close_controls(
+                engine,
+                allow_safe_tap=True,
+            )
+            self._record_mode_result('close_control', closed, i)
+            if closed and (self.no_progress_steps >= 4 or current_scene in {'offer_popup', 'unknown'}):
+                self._emit_decision(i, 'close_control', 'clicked', close_reason)
+                return
 
-        critical_clicked, critical = self._try_click_critical_controls(engine, i=i)
+        critical_clicked, critical = False, None
+        if self._mode_enabled('critical_control', i):
+            critical_clicked, critical = self._try_click_critical_controls(engine, i=i)
+            self._record_mode_result('critical_control', critical_clicked, i)
         if critical_clicked:
             self._emit_decision(i, critical, 'clicked', 'critical_control')
             if critical == 'start':
@@ -753,12 +812,15 @@ class SurvivorStrategy:
             return
 
         active_controls = self._safe_targets(active_controls)
-        control_clicked, control = self._click_best_text_match(
-            engine,
-            active_controls,
-            min_confidence=0.82,
-            exact=False,
-        )
+        control_clicked, control = False, None
+        if self._mode_enabled('nav_label', i):
+            control_clicked, control = self._click_best_text_match(
+                engine,
+                active_controls,
+                min_confidence=0.82,
+                exact=False,
+            )
+            self._record_mode_result('nav_label', control_clicked, i)
         if control_clicked:
             self._emit_decision(i, control, 'clicked', 'nav_label')
             if control == 'start':
@@ -800,7 +862,10 @@ class SurvivorStrategy:
             self._emit_decision(i, icon_name, 'clicked', 'icon_template')
             return
 
-        nav_clicked, nav_label = self._try_click_nav_labels(engine)
+        nav_clicked, nav_label = False, None
+        if self._mode_enabled('nav_label_fuzzy', i):
+            nav_clicked, nav_label = self._try_click_nav_labels(engine)
+            self._record_mode_result('nav_label_fuzzy', nav_clicked, i)
         if nav_clicked:
             self._emit_decision(i, nav_label, 'clicked', 'nav_label_fuzzy')
             return
