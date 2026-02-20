@@ -213,3 +213,22 @@ def test_skill_choice_uses_hotspot_close_without_text_click_path():
 
     assert engine.clicked
     assert engine.clicked[0] == (0.94, 0.07)
+
+
+def test_skill_choice_low_text_success_breaker_triggers_immediately():
+    class LowSuccessEngine(FakeEngine):
+        def metrics(self):
+            return {'text_click_success_rate': 0.009}
+
+    engine = LowSuccessEngine(
+        [
+            {'text': 'Choice', 'confidence': 0.96, 'x': 0.5, 'y': 0.1},
+            {'text': 'Noise', 'confidence': 0.90, 'x': 0.2, 'y': 0.3},
+        ]
+    )
+
+    strategy = SurvivorStrategy()
+    strategy.step(engine, i=1)
+
+    assert (46.0 / 460, 960.0 / 1024) in engine.clicked
+    assert strategy.skill_choice_streak == 0

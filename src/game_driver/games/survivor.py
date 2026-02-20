@@ -586,6 +586,22 @@ class SurvivorStrategy:
         if engine.contains('choice', min_confidence=0.9):
             self.skill_choice_streak += 1
 
+            # When global text-click quality collapses, bypass OCR-heavy skill
+            # selection and recover immediately to avoid no-progress loops.
+            metrics = engine.metrics() if hasattr(engine, 'metrics') else {}
+            text_success_rate = float(metrics.get('text_click_success_rate', 1.0) or 0.0)
+            if text_success_rate <= 0.05:
+                self._emit_decision(
+                    i,
+                    'skill_choice',
+                    'fallback',
+                    'skill_choice_low_text_success_breaker',
+                    detail=f'text_success_rate={text_success_rate}',
+                )
+                self._force_alternate_recovery(engine, i, 'skill_choice_low_text_success_breaker')
+                self.skill_choice_streak = 0
+                return
+
             # Fast breaker: don't spend many OCR cycles when choice persists.
             if self.skill_choice_streak >= 2:
                 self._emit_decision(
