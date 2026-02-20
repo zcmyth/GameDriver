@@ -581,8 +581,9 @@ class SurvivorStrategy:
                     self.skill_choice_streak = 0
                     return
 
-            if engine.click_text('refresh', retry=2, min_confidence=0.85):
-                self._emit_decision(i, 'refresh', 'clicked', 'skill_refresh')
+            # Disable refresh in skill_choice: OCR misses on refresh are a
+            # dominant no-progress loop source in production telemetry.
+            self._emit_decision(i, 'refresh', 'skip', 'skill_refresh_disabled')
 
             clicked, skill = self._try_click_skill_targets(
                 engine,
