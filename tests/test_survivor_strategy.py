@@ -299,12 +299,14 @@ def test_skill_choice_low_confidence_text_fallback_blocks_refresh_loop():
 def test_miss_rate_breaker_disables_nav_label_mode_in_run():
     engine = FakeEngine(
         [
-            {'text': 'Noise', 'confidence': 0.91, 'x': 0.5, 'y': 0.5},
+            {'text': 'Mission', 'confidence': 0.91, 'x': 0.5, 'y': 0.5},
         ]
     )
     strategy = SurvivorStrategy()
+    strategy.mode_window_size = 3
+    strategy.mode_breaker_min_samples = 3
 
-    for i in range(1, 8):
+    for i in range(1, 12):
         strategy.step(engine, i=i)
 
     assert strategy.mode_disabled_until.get('nav_label', -1) > 0
