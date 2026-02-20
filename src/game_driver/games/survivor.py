@@ -7,6 +7,8 @@ logger = logging.getLogger(__name__)
 
 
 class SurvivorStrategy:
+    STRATEGY_REVISION = 'pr20-skill-choice-hotfix-20260219-1731'
+
     def __init__(self, artifact_dir='artifacts/stuck'):
         self.artifact_dir = Path(artifact_dir)
         self.artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -138,6 +140,8 @@ class SurvivorStrategy:
 
         # Skill-choice specific anti-loop tracking.
         self.skill_choice_streak = 0
+
+        self._revision_emitted = False
 
     @staticmethod
     def _text_samples(engine):
@@ -468,6 +472,16 @@ class SurvivorStrategy:
     def step(self, engine, i):
         current_scene = self._track_progress_signals(engine, i)
         self._reset_skill_choice_streak(current_scene)
+
+        if not self._revision_emitted:
+            self._emit_decision(
+                i,
+                'strategy_revision',
+                'info',
+                'boot',
+                detail=self.STRATEGY_REVISION,
+            )
+            self._revision_emitted = True
 
         if self.no_progress_steps >= 14:
             self._emit_decision(
