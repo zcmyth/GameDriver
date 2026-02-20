@@ -10,8 +10,11 @@ This repo uses a strict multi-agent workflow.
 Suggested branch naming:
 - `agent/<agent-name>/<short-task>`
 
-Suggested worktree path:
-- `../wt-<agent-name>-<short-task>`
+Required worktree path:
+- `worktrees/<agent_name>/<feature_name>`
+
+Cleanup ownership:
+- The agent (or person) who created a worktree is responsible for cleaning it up after the PR is merged/closed.
 
 ## 2) No direct commits to master/main
 - Direct commits on `master`/`main` are prohibited.
