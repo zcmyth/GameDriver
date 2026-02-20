@@ -293,6 +293,39 @@ def test_skill_choice_low_confidence_text_fallback_blocks_refresh_loop():
 
     assert engine.refresh_clicks == 0
     assert engine.clicked
+    assert engine.clicked[0] == (46.0 / 460, 960.0 / 1024)
+
+
+def test_miss_rate_breaker_disables_nav_label_mode_in_run():
+    engine = FakeEngine(
+        [
+            {'text': 'Mission', 'confidence': 0.91, 'x': 0.5, 'y': 0.5},
+        ]
+    )
+    strategy = SurvivorStrategy()
+    strategy.mode_window_size = 3
+    strategy.mode_breaker_min_samples = 3
+
+    for i in range(1, 12):
+        strategy.step(engine, i=i)
+
+    assert strategy.mode_disabled_until.get('nav_label', -1) > 0
+
+
+def test_miss_rate_breaker_switches_to_alternate_path_when_mode_disabled():
+    engine = FakeEngine(
+        [
+            {'text': 'Mission', 'confidence': 0.95, 'x': 0.2, 'y': 0.8},
+        ]
+    )
+    strategy = SurvivorStrategy()
+    strategy.mode_disabled_until['nav_label'] = 999
+
+    strategy.step(engine, i=10)
+
+    assert strategy.mode_disabled_until['nav_label'] == 999
+    # nav_label mode was disabled, so action comes from fallback path instead of nav_label
+    assert engine.clicked
 
 
 def test_hard_no_progress_breaker_triggers_with_duration_and_step_threshold():
