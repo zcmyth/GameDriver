@@ -117,6 +117,11 @@ def _make_engine_listener(state):
             success = False
             reason = 'no_match'
 
+        strategy_metrics = {}
+        strategy = state.get('strategy')
+        if strategy is not None and hasattr(strategy, 'progress_metrics'):
+            strategy_metrics = strategy.progress_metrics()
+
         event_row = {
             'ts': datetime.now().isoformat(),
             'event': event,
@@ -130,6 +135,12 @@ def _make_engine_listener(state):
             'success': success,
             'reason': reason,
             'metrics_snapshot': state['engine'].metrics(),
+            'objective_delta_per_min': strategy_metrics.get('objective_delta_per_min', 0.0),
+            'scene_transition_rate': strategy_metrics.get('scene_transition_rate', 0.0),
+            'no_progress_duration': strategy_metrics.get('no_progress_duration', 0.0),
+            'action_to_progress_ratio': strategy_metrics.get('action_to_progress_ratio', 0.0),
+            'tier_jump_attempts': strategy_metrics.get('tier_jump_attempts', 0),
+            'tier_jump_cooldown_remaining': strategy_metrics.get('tier_jump_cooldown_remaining', 0.0),
         }
         _jsonl_append(EVENTS_PATH, event_row)
 
@@ -158,7 +169,7 @@ def main():
     while True:
         engine = GameEngine()
         strategy = SurvivorStrategy()
-        state = {'iter': -1, 'engine': engine, 'consecutive_errors': 0}
+        state = {'iter': -1, 'engine': engine, 'strategy': strategy, 'consecutive_errors': 0}
 
         engine.add_listener(_make_engine_listener(state))
 

@@ -1,5 +1,6 @@
 import logging
 import re
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -9,9 +10,9 @@ logger = logging.getLogger(__name__)
 
 
 class SurvivorStrategy:
-    STRATEGY_REVISION = 'pr25-skill-choice-scene-fallback-20260219-2016'
+    STRATEGY_REVISION = 'pr32-no-progress-breaker-20260220-0116'
 
-    def __init__(self, artifact_dir='artifacts/stuck'):
+    def __init__(self, artifact_dir='artifacts/stuck', time_fn=None):
         self.artifact_dir = Path(artifact_dir)
         self.artifact_dir.mkdir(parents=True, exist_ok=True)
 
@@ -153,6 +154,21 @@ class SurvivorStrategy:
 
         self._revision_emitted = False
 
+        # Progress-first breaker/metrics state.
+        self._time = time_fn or time.monotonic
+        self.progress_started_at = self._time()
+        self.no_progress_started_at = None
+        self.progress_events = 0
+        self.scene_transition_events = 0
+        self.action_events = 0
+        self.objective_delta_events = 0
+        self.tier_jump_attempts = 0
+        self.tier_jump_cooldown_until = 0.0
+        self.hard_no_progress_seconds = 25.0
+        self.hard_no_progress_steps = 10
+        self.tier_jump_max_retries = 2
+        self.tier_jump_cooldown_seconds = 18.0
+
     @staticmethod
     def _text_samples(engine: EngineRuntime):
         return [str(item['text']).lower() for item in engine.text_locations]
@@ -169,6 +185,8 @@ class SurvivorStrategy:
         return bool(re.fullmatch(r'[0-9:.xbmkn+\- ]{2,}', text.lower()))
 
     def _emit_decision(self, i, action, decision, reason, detail=''):
+        if decision in {'clicked', 'fallback'}:
+            self.action_events += 1
         logger.info(
             'event=survivor_decision iter=%s action=%s decision=%s reason=%s detail=%s',
             i,
@@ -524,11 +542,21 @@ class SurvivorStrategy:
             self.last_scene_kind and self.last_scene_kind != current_scene
         )
 
+        if signature_changed:
+            self.objective_delta_events += 1
+        if scene_changed:
+            self.scene_transition_events += 1
+
         progressed = signature_changed or scene_changed
         if progressed:
+            self.progress_events += 1
             self.no_progress_steps = 0
+            self.no_progress_started_at = None
+            self.tier_jump_attempts = 0
         else:
             self.no_progress_steps += 1
+            if self.no_progress_started_at is None:
+                self.no_progress_started_at = self._time()
 
         self.last_signature = current_sig
         self.last_scene_kind = current_scene
@@ -544,6 +572,22 @@ class SurvivorStrategy:
             )
 
         return current_scene
+
+
+    def progress_metrics(self):
+        elapsed_min = max((self._time() - self.progress_started_at) / 60.0, 1e-6)
+        no_progress_duration = 0.0
+        if self.no_progress_started_at is not None:
+            no_progress_duration = max(0.0, self._time() - self.no_progress_started_at)
+
+        return {
+            'objective_delta_per_min': self.objective_delta_events / elapsed_min,
+            'scene_transition_rate': self.scene_transition_events / elapsed_min,
+            'no_progress_duration': no_progress_duration,
+            'action_to_progress_ratio': (self.action_events / max(1, self.progress_events)),
+            'tier_jump_attempts': self.tier_jump_attempts,
+            'tier_jump_cooldown_remaining': max(0.0, self.tier_jump_cooldown_until - self._time()),
+        }
 
     def _reset_skill_choice_streak(self, current_scene):
         if current_scene != 'skill_choice':
@@ -563,17 +607,46 @@ class SurvivorStrategy:
             )
             self._revision_emitted = True
 
-        if self.no_progress_steps >= 14:
-            self._emit_decision(
-                i,
-                'no_progress_guard',
-                'fallback',
-                'streak_breaker',
-                detail=f'scene={current_scene} steps={self.no_progress_steps}',
-            )
-            self._force_alternate_recovery(engine, i, 'no_progress_guard')
-            self.no_progress_steps = 0
-            return
+        no_progress_duration = 0.0
+        if self.no_progress_started_at is not None:
+            no_progress_duration = max(0.0, self._time() - self.no_progress_started_at)
+
+        should_tier_jump = (
+            self.no_progress_steps >= self.hard_no_progress_steps
+            and no_progress_duration >= self.hard_no_progress_seconds
+        )
+        if should_tier_jump:
+            if self._time() < self.tier_jump_cooldown_until:
+                self._emit_decision(
+                    i,
+                    'no_progress_guard',
+                    'cooldown',
+                    'tier_jump_cooldown',
+                    detail=f'scene={current_scene} steps={self.no_progress_steps} duration={no_progress_duration:.1f}s',
+                )
+            elif self.tier_jump_attempts >= self.tier_jump_max_retries:
+                self._emit_decision(
+                    i,
+                    'no_progress_guard',
+                    'miss',
+                    'tier_jump_retry_bound',
+                    detail=f'scene={current_scene} retries={self.tier_jump_attempts}',
+                )
+            else:
+                self.tier_jump_attempts += 1
+                self.tier_jump_cooldown_until = self._time() + self.tier_jump_cooldown_seconds
+                self._emit_decision(
+                    i,
+                    'no_progress_guard',
+                    'fallback',
+                    'hard_no_progress_tier_jump',
+                    detail=(
+                        f'scene={current_scene} steps={self.no_progress_steps} '
+                        f'duration={no_progress_duration:.1f}s attempt={self.tier_jump_attempts}/{self.tier_jump_max_retries}'
+                    ),
+                )
+                self._force_alternate_recovery(engine, i, 'hard_no_progress_tier_jump')
+                return
 
         if current_scene == 'offer_popup':
             closed, close_reason = self._try_click_close_controls(engine)
@@ -657,6 +730,17 @@ class SurvivorStrategy:
         # false matches (e.g. "start" matching "starforge").
         if current_scene == 'skill_choice':
             self.skill_choice_streak += 1
+
+            if not engine.contains('choice', min_confidence=0.9):
+                self._emit_decision(
+                    i,
+                    'skill_choice',
+                    'fallback',
+                    'low_conf_choice_tier_jump',
+                )
+                self._force_alternate_recovery(engine, i, 'low_conf_choice_tier_jump')
+                self.skill_choice_streak = 0
+                return
 
             # Minimal deterministic path for skill-choice UI:
             # choose a card directly (no OCR text-click path), then tap the
