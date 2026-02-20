@@ -77,6 +77,16 @@ class EngineRuntime(Protocol):
         """Attempt a single-pass template/image click and return success."""
         ...
 
+    def try_click_close_control(
+        self,
+        *,
+        min_confidence: float = 0.9,
+        template_candidates=None,
+        allow_safe_tap: bool = False,
+    ) -> tuple[bool, str | None]:
+        """Try standard close/dismiss controls (text, glyph, templates, safe-tap)."""
+        ...
+
     def click(self, x, y, wait: bool = True) -> None:
         """Execute a coordinate click.
 

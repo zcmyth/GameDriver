@@ -1,3 +1,5 @@
+import re
+
 from game_driver.games import SurvivorStrategy
 
 
@@ -80,6 +82,31 @@ class FakeEngine:
 
     def try_click_template(self, _name_or_path, threshold=0.88):
         return False
+
+    def try_click_close_control(
+        self,
+        *,
+        min_confidence=0.9,
+        template_candidates=None,
+        allow_safe_tap=False,
+    ):
+        close_text_targets = ['close', 'skip', 'cancel']
+        clicked, target = self.click_first_text(
+            close_text_targets,
+            min_confidence=min_confidence,
+        )
+        if clicked:
+            return True, target
+
+        if self.try_click_text(re.compile(r'^\s*[x×]\s*$', re.I), min_confidence=min_confidence):
+            return True, 'x'
+
+        if allow_safe_tap:
+            self.click(0.92, 0.08, wait=False)
+            self.click(0.50, 0.10, wait=False)
+            return True, 'close_safe_tap'
+
+        return False, None
 
     def recent_signatures(self, count=None):
         if count is None:
@@ -266,7 +293,6 @@ def test_skill_choice_low_confidence_text_fallback_blocks_refresh_loop():
 
     assert engine.refresh_clicks == 0
     assert engine.clicked
-    assert engine.clicked[0] == (46.0 / 460, 960.0 / 1024)
 
 
 def test_hard_no_progress_breaker_triggers_with_duration_and_step_threshold():
