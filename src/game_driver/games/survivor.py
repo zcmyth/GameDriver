@@ -586,55 +586,10 @@ class SurvivorStrategy:
         if engine.contains('choice', min_confidence=0.9):
             self.skill_choice_streak += 1
 
-            # Hard fail-safe: treat persistent choice as non-progress risk and
-            # immediately force alternate recovery instead of OCR-heavy loops.
-            self._emit_decision(
-                i,
-                'skill_choice',
-                'fallback',
-                'skill_choice_immediate_recovery',
-                detail=f'streak={self.skill_choice_streak}',
-            )
-            self._force_alternate_recovery(engine, i, 'skill_choice_immediate_recovery')
-            self.skill_choice_streak = 0
-            return
-
-            clicked, skill = self._try_click_skill_targets(
-                engine,
-                self.preferred_skills,
-                min_confidence=0.88,
-            )
-            if clicked:
-                self._emit_decision(i, skill, 'clicked', 'skill_preferred_or_alias')
-                self.skill_choice_streak = 0
-                return
-
-            hotspot_closed, hotspot = self._try_click_skill_choice_hotspots(engine)
-            if hotspot_closed:
-                self._emit_decision(
-                    i,
-                    hotspot,
-                    'clicked',
-                    'skill_choice_hotspot_close',
-                )
-                self.skill_choice_streak = 0
-                return
-
-            # Disable refresh in skill_choice: OCR misses on refresh are a
-            # dominant no-progress loop source in production telemetry.
-            self._emit_decision(i, 'refresh', 'skip', 'skill_refresh_disabled')
-
-            clicked, skill = self._try_click_skill_targets(
-                engine,
-                self.secondary_skills,
-                min_confidence=0.88,
-            )
-            if clicked:
-                self._emit_decision(i, skill, 'clicked', 'skill_secondary_or_alias')
-                self.skill_choice_streak = 0
-                return
-
-            self._emit_decision(i, 'skill_choice', 'fallback', 'card_force_select')
+            # Minimal deterministic path for skill-choice UI:
+            # choose a card directly (no OCR text-click path), then tap the
+            # lower card body to confirm/select.
+            self._emit_decision(i, 'skill_choice', 'fallback', 'card_force_select_direct')
             fallback_cards = [
                 (0.17, 0.44),
                 (0.50, 0.44),
@@ -642,20 +597,19 @@ class SurvivorStrategy:
             ]
             x, y = fallback_cards[i % len(fallback_cards)]
             engine.click(x, y, wait=False)
-            engine.wait(0.6)
+            engine.wait(0.5)
             if not engine.contains('choice', min_confidence=0.88):
                 self.skill_choice_streak = 0
                 return
 
             engine.click(x, 0.54, wait=False)
-            engine.wait(0.6)
+            engine.wait(0.5)
             if not engine.contains('choice', min_confidence=0.88):
                 self.skill_choice_streak = 0
                 return
 
-            # Circuit-break persistent skill-choice loops where refresh/text matching
-            # repeatedly fails and fallback taps never transition state.
-            if self.skill_choice_streak >= 6:
+            # If choice still persists for a few loops, escalate to alternate recovery.
+            if self.skill_choice_streak >= 3:
                 self._emit_decision(
                     i,
                     'skill_choice',

@@ -138,7 +138,7 @@ def test_skill_choice_streak_breaker_triggers_alternate_recovery():
     assert strategy.skill_choice_streak == 0
 
 
-def test_skill_choice_fast_breaker_triggers_by_second_iteration():
+def test_skill_choice_fast_breaker_triggers_by_third_iteration():
     engine = FakeEngine(
         [
             {'text': 'Choice', 'confidence': 0.96, 'x': 0.5, 'y': 0.1},
@@ -149,12 +149,13 @@ def test_skill_choice_fast_breaker_triggers_by_second_iteration():
     strategy = SurvivorStrategy()
     strategy.step(engine, i=1)
     strategy.step(engine, i=2)
+    strategy.step(engine, i=3)
 
     assert (46.0 / 460, 960.0 / 1024) in engine.clicked
     assert strategy.skill_choice_streak == 0
 
 
-def test_skill_choice_immediately_uses_alternate_recovery_path():
+def test_skill_choice_uses_direct_card_force_select_path():
     engine = FakeEngine(
         [
             {'text': 'Choice', 'confidence': 0.96, 'x': 0.5, 'y': 0.1},
@@ -166,7 +167,7 @@ def test_skill_choice_immediately_uses_alternate_recovery_path():
     strategy.step(engine, i=1)
 
     assert engine.clicked
-    assert engine.clicked[0] == (46.0 / 460, 960.0 / 1024)
+    assert engine.clicked[0] in [(0.17, 0.44), (0.50, 0.44), (0.81, 0.44)]
 
 
 def test_skill_choice_disables_refresh_click_path():
@@ -194,7 +195,7 @@ def test_skill_choice_disables_refresh_click_path():
     assert engine.refresh_clicks == 0
 
 
-def test_skill_choice_avoids_hotspot_path_when_immediate_recovery_enabled():
+def test_skill_choice_avoids_hotspot_path_when_direct_card_select_enabled():
     engine = FakeEngine(
         [
             {'text': 'Choice', 'confidence': 0.96, 'x': 0.5, 'y': 0.1},
@@ -207,15 +208,11 @@ def test_skill_choice_avoids_hotspot_path_when_immediate_recovery_enabled():
 
     assert engine.clicked
     assert (0.94, 0.07) not in engine.clicked
-    assert engine.clicked[0] == (46.0 / 460, 960.0 / 1024)
+    assert engine.clicked[0] in [(0.17, 0.44), (0.50, 0.44), (0.81, 0.44)]
 
 
-def test_skill_choice_low_text_success_breaker_triggers_immediately():
-    class LowSuccessEngine(FakeEngine):
-        def metrics(self):
-            return {'text_click_success_rate': 0.009}
-
-    engine = LowSuccessEngine(
+def test_skill_choice_streak_breaker_triggers_after_direct_card_retries():
+    engine = FakeEngine(
         [
             {'text': 'Choice', 'confidence': 0.96, 'x': 0.5, 'y': 0.1},
             {'text': 'Noise', 'confidence': 0.90, 'x': 0.2, 'y': 0.3},
@@ -224,6 +221,8 @@ def test_skill_choice_low_text_success_breaker_triggers_immediately():
 
     strategy = SurvivorStrategy()
     strategy.step(engine, i=1)
+    strategy.step(engine, i=2)
+    strategy.step(engine, i=3)
 
     assert (46.0 / 460, 960.0 / 1024) in engine.clicked
     assert strategy.skill_choice_streak == 0
