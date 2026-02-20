@@ -3,6 +3,8 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+from game_driver.contracts import EngineRuntime
+
 logger = logging.getLogger(__name__)
 
 
@@ -152,8 +154,8 @@ class SurvivorStrategy:
         self._revision_emitted = False
 
     @staticmethod
-    def _text_samples(engine):
-        return [item['text'].lower() for item in engine._locations]
+    def _text_samples(engine: EngineRuntime):
+        return [str(item['text']).lower() for item in engine.text_locations]
 
     @staticmethod
     def _is_numeric_noise(text):
@@ -169,8 +171,8 @@ class SurvivorStrategy:
             detail,
         )
 
-    def _contains_high_risk_buy(self, engine):
-        for item in engine._locations:
+    def _contains_high_risk_buy(self, engine: EngineRuntime):
+        for item in engine.text_locations:
             if item.get('confidence', 0) < 0.93:
                 continue
             text = str(item.get('text', '')).lower()
@@ -360,8 +362,8 @@ class SurvivorStrategy:
             exact=False,
         )
 
-    def _try_click_skill_alias(self, engine, min_confidence=0.88):
-        for item in engine._locations:
+    def _try_click_skill_alias(self, engine: EngineRuntime, min_confidence=0.88):
+        for item in engine.text_locations:
             if item.get('confidence', 0) < min_confidence:
                 continue
             text = str(item.get('text', '')).lower()
