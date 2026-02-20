@@ -134,7 +134,7 @@ def test_skill_choice_streak_breaker_triggers_alternate_recovery():
 
     strategy = SurvivorStrategy()
 
-    for i in range(1, 7):
+    for i in range(1, 3):
         strategy.step(engine, i=i)
 
     assert (46.0 / 460, 960.0 / 1024) in engine.clicked
