@@ -4,6 +4,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from game_driver.close_control import DEFAULT_TEXT_PATTERNS, try_click_close_control
 from game_driver.contracts import EngineRuntime
 
 logger = logging.getLogger(__name__)
@@ -81,13 +82,7 @@ class SurvivorStrategy:
             'sale',
         ]
 
-        self.close_text_patterns = [
-            re.compile(r'^x$'),
-            re.compile(r'^×$'),
-            re.compile(r'^close$'),
-            re.compile(r'^skip$'),
-            re.compile(r'^cancel$'),
-        ]
+        self.close_text_patterns = DEFAULT_TEXT_PATTERNS
 
         self.last_action = None
         self.loop_cycle_hits = 0
