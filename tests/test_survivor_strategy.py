@@ -154,7 +154,7 @@ def test_skill_choice_fast_breaker_triggers_by_second_iteration():
     assert strategy.skill_choice_streak == 0
 
 
-def test_skill_choice_prioritizes_close_x_before_refresh_path():
+def test_skill_choice_prioritizes_hotspot_close_before_refresh_path():
     engine = FakeEngine(
         [
             {'text': 'Choice', 'confidence': 0.96, 'x': 0.5, 'y': 0.1},
@@ -166,7 +166,7 @@ def test_skill_choice_prioritizes_close_x_before_refresh_path():
     strategy.step(engine, i=1)
 
     assert engine.clicked
-    assert engine.clicked[0] == (0.92, 0.08)
+    assert engine.clicked[0] == (0.94, 0.07)
 
 
 def test_skill_choice_disables_refresh_click_path():
@@ -192,3 +192,24 @@ def test_skill_choice_disables_refresh_click_path():
     strategy.step(engine, i=1)
 
     assert engine.refresh_clicks == 0
+
+
+def test_skill_choice_uses_hotspot_close_without_text_click_path():
+    class HotspotChoiceEngine(FakeEngine):
+        def click(self, x, y, wait=True):
+            super().click(x, y, wait=wait)
+            if x > 0.89 and y < 0.11:
+                self._locations = []
+
+    engine = HotspotChoiceEngine(
+        [
+            {'text': 'Choice', 'confidence': 0.96, 'x': 0.5, 'y': 0.1},
+            {'text': 'Noise', 'confidence': 0.90, 'x': 0.2, 'y': 0.3},
+        ]
+    )
+
+    strategy = SurvivorStrategy()
+    strategy.step(engine, i=1)
+
+    assert engine.clicked
+    assert engine.clicked[0] == (0.94, 0.07)

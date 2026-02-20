@@ -359,6 +359,20 @@ class SurvivorStrategy:
 
         return False, None
 
+    def _try_click_skill_choice_hotspots(self, engine):
+        hotspots = [
+            (0.94, 0.07),
+            (0.90, 0.09),
+            (0.50, 0.10),
+        ]
+        for x, y in hotspots:
+            engine.click(x, y, wait=False)
+            engine.wait(0.5)
+            if not engine.contains('choice', min_confidence=0.88):
+                return True, f'hotspot_{x:.2f}_{y:.2f}'
+
+        return False, None
+
     def _force_alternate_recovery(self, engine, i, reason):
         # Stronger path to break repeated home-scene target loops.
         engine.click(46.0 / 460, 960.0 / 1024, False)  # back
@@ -595,18 +609,16 @@ class SurvivorStrategy:
                 self.skill_choice_streak = 0
                 return
 
-            closed, close_target = self._try_click_close_controls(engine)
-            if closed:
+            hotspot_closed, hotspot = self._try_click_skill_choice_hotspots(engine)
+            if hotspot_closed:
                 self._emit_decision(
                     i,
-                    close_target,
+                    hotspot,
                     'clicked',
-                    'skill_choice_close_priority',
+                    'skill_choice_hotspot_close',
                 )
-                engine.wait(0.6)
-                if not engine.contains('choice', min_confidence=0.88):
-                    self.skill_choice_streak = 0
-                    return
+                self.skill_choice_streak = 0
+                return
 
             # Disable refresh in skill_choice: OCR misses on refresh are a
             # dominant no-progress loop source in production telemetry.
