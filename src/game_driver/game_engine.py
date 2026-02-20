@@ -5,6 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from game_driver.device import Device
+from game_driver.reasons import SequentialClickReason
 from game_driver.image_analyzer import create_analyzer, draw_text_locations
 from game_driver.template_matcher import TemplateMatcher
 
@@ -294,21 +295,25 @@ class GameEngine:
                         success=True,
                         clicked_target=clicked_target,
                         attempts=attempt_count,
-                        reason='state_changed',
+                        reason=SequentialClickReason.STATE_CHANGED,
                     )
                     return {
                         'success': True,
                         'clicked_target': clicked_target,
                         'attempts': attempt_count,
                         'changed': True,
-                        'reason': 'state_changed',
+                        'reason': SequentialClickReason.STATE_CHANGED,
                         'details': details,
                     }
 
                 # matched this target but no state change; move to next target
                 break
 
-        reason = 'no_state_change' if attempt_count > 0 else 'no_match'
+        reason = (
+            SequentialClickReason.NO_STATE_CHANGE
+            if attempt_count > 0
+            else SequentialClickReason.NO_MATCH
+        )
         self._metrics['sequential_click_failed'] += 1
         self._emit(
             'sequential_click_result',
