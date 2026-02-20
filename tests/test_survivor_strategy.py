@@ -267,3 +267,20 @@ def test_skill_choice_low_confidence_text_fallback_blocks_refresh_loop():
     assert engine.refresh_clicks == 0
     assert engine.clicked
     assert engine.clicked[0] == (46.0 / 460, 960.0 / 1024)
+
+
+def test_text_mode_miss_rate_circuit_breaker_disables_mode_in_run():
+    engine = FakeEngine([
+        {'text': 'Noise', 'confidence': 0.91, 'x': 0.3, 'y': 0.3},
+    ])
+
+    strategy = SurvivorStrategy()
+    strategy.text_mode_window_size = 4
+    strategy.text_mode_min_samples = 2
+    strategy.text_mode_miss_threshold = 1.0
+
+    strategy.step(engine, i=1)
+    strategy.step(engine, i=2)
+
+    assert strategy.text_mode_disabled_until > 2
+    assert (46.0 / 460, 960.0 / 1024) in engine.clicked

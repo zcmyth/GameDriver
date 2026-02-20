@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class SurvivorStrategy:
-    STRATEGY_REVISION = 'pr25-skill-choice-scene-fallback-20260219-2016'
+    STRATEGY_REVISION = 'pr33-miss-rate-circuit-breaker-20260220-0124'
 
     def __init__(self, artifact_dir='artifacts/stuck'):
         self.artifact_dir = Path(artifact_dir)
@@ -152,6 +152,13 @@ class SurvivorStrategy:
         self.skill_choice_streak = 0
 
         self._revision_emitted = False
+
+        # Miss-rate circuit breaker for text-first policy.
+        self.text_mode_miss_window = []
+        self.text_mode_window_size = 8
+        self.text_mode_min_samples = 4
+        self.text_mode_miss_threshold = 0.75
+        self.text_mode_disabled_until = -1
 
     @staticmethod
     def _text_samples(engine: EngineRuntime):
@@ -545,6 +552,26 @@ class SurvivorStrategy:
 
         return current_scene
 
+
+    def _text_mode_enabled(self, i):
+        return i >= self.text_mode_disabled_until
+
+    def _record_text_mode_result(self, i, success):
+        self.text_mode_miss_window.append(0 if success else 1)
+        if len(self.text_mode_miss_window) > self.text_mode_window_size:
+            self.text_mode_miss_window.pop(0)
+
+        if len(self.text_mode_miss_window) < self.text_mode_min_samples:
+            return False
+
+        miss_rate = sum(self.text_mode_miss_window) / len(self.text_mode_miss_window)
+        if miss_rate >= self.text_mode_miss_threshold:
+            self.text_mode_disabled_until = i + 10
+            self.text_mode_miss_window.clear()
+            return True
+
+        return False
+
     def _reset_skill_choice_streak(self, current_scene):
         if current_scene != 'skill_choice':
             self.skill_choice_streak = 0
@@ -658,6 +685,17 @@ class SurvivorStrategy:
         if current_scene == 'skill_choice':
             self.skill_choice_streak += 1
 
+            if not engine.contains('choice', min_confidence=0.9):
+                self._emit_decision(
+                    i,
+                    'skill_choice',
+                    'fallback',
+                    'low_conf_choice_tier_jump',
+                )
+                self._force_alternate_recovery(engine, i, 'low_conf_choice_tier_jump')
+                self.skill_choice_streak = 0
+                return
+
             # Minimal deterministic path for skill-choice UI:
             # choose a card directly (no OCR text-click path), then tap the
             # lower card body to confirm/select.
@@ -721,25 +759,47 @@ class SurvivorStrategy:
             self._emit_decision(i, 'close_control', 'clicked', close_reason)
             return
 
-        critical_clicked, critical = self._try_click_critical_controls(engine, i=i)
-        if critical_clicked:
-            self._emit_decision(i, critical, 'clicked', 'critical_control')
-            if critical == 'start':
-                self.start_cooldown_until = i + 8
-            return
+        if self._text_mode_enabled(i):
+            critical_clicked, critical = self._try_click_critical_controls(engine, i=i)
+            if critical_clicked:
+                self._record_text_mode_result(i, True)
+                self._emit_decision(i, critical, 'clicked', 'critical_control')
+                if critical == 'start':
+                    self.start_cooldown_until = i + 8
+                return
 
-        active_controls = self._safe_targets(active_controls)
-        control_clicked, control = self._click_best_text_match(
-            engine,
-            active_controls,
-            min_confidence=0.82,
-            exact=False,
-        )
-        if control_clicked:
-            self._emit_decision(i, control, 'clicked', 'nav_label')
-            if control == 'start':
-                self.start_cooldown_until = i + 8
-            return
+            active_controls = self._safe_targets(active_controls)
+            control_clicked, control = self._click_best_text_match(
+                engine,
+                active_controls,
+                min_confidence=0.82,
+                exact=False,
+            )
+            if control_clicked:
+                self._record_text_mode_result(i, True)
+                self._emit_decision(i, control, 'clicked', 'nav_label')
+                if control == 'start':
+                    self.start_cooldown_until = i + 8
+                return
+
+            if self._record_text_mode_result(i, False):
+                self._emit_decision(
+                    i,
+                    'text_policy',
+                    'fallback',
+                    'miss_rate_circuit_breaker_open',
+                    detail='switch=safe_policy',
+                )
+                self._force_alternate_recovery(engine, i, 'miss_rate_circuit_breaker_open')
+                return
+        else:
+            self._emit_decision(
+                i,
+                'text_policy',
+                'fallback',
+                'text_mode_disabled',
+                detail=f'disabled_until={self.text_mode_disabled_until}',
+            )
 
         if self._contains_blocked_purchase_text(engine):
             self._emit_decision(i, 'purchase_ui', 'blocked', 'high_risk_no_buy')
