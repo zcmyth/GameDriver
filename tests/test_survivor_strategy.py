@@ -267,3 +267,69 @@ def test_skill_choice_low_confidence_text_fallback_blocks_refresh_loop():
     assert engine.refresh_clicks == 0
     assert engine.clicked
     assert engine.clicked[0] == (46.0 / 460, 960.0 / 1024)
+
+
+def test_hard_no_progress_breaker_triggers_with_duration_and_step_threshold():
+    class FakeClock:
+        def __init__(self):
+            self.t = 0.0
+
+        def now(self):
+            return self.t
+
+        def advance(self, seconds):
+            self.t += seconds
+
+    clock = FakeClock()
+    engine = FakeEngine([
+        {'text': 'Mission', 'confidence': 0.90, 'x': 0.2, 'y': 0.8},
+    ])
+
+    strategy = SurvivorStrategy(time_fn=clock.now)
+    strategy.hard_no_progress_steps = 2
+    strategy.hard_no_progress_seconds = 1.0
+    strategy.tier_jump_max_retries = 1
+    strategy.tier_jump_cooldown_seconds = 10.0
+
+    strategy.step(engine, i=1)
+    clock.advance(0.6)
+    strategy.step(engine, i=2)
+    clock.advance(0.6)
+    strategy.step(engine, i=3)
+
+    assert (46.0 / 460, 960.0 / 1024) in engine.clicked
+
+    back_clicks_after_trigger = engine.clicked.count((46.0 / 460, 960.0 / 1024))
+    clock.advance(0.2)
+    strategy.step(engine, i=4)
+    assert engine.clicked.count((46.0 / 460, 960.0 / 1024)) == back_clicks_after_trigger
+
+
+def test_progress_metrics_fields_emitted_with_placeholders():
+    class FakeClock:
+        def __init__(self):
+            self.t = 0.0
+
+        def now(self):
+            return self.t
+
+        def advance(self, seconds):
+            self.t += seconds
+
+    clock = FakeClock()
+    engine = FakeEngine([
+        {'text': 'Mission', 'confidence': 0.90, 'x': 0.2, 'y': 0.8},
+    ])
+    strategy = SurvivorStrategy(time_fn=clock.now)
+
+    strategy.step(engine, i=1)
+    clock.advance(5)
+    metrics = strategy.progress_metrics()
+
+    for key in (
+        'objective_delta_per_min',
+        'scene_transition_rate',
+        'no_progress_duration',
+        'action_to_progress_ratio',
+    ):
+        assert key in metrics
