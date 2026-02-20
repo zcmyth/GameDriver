@@ -240,3 +240,32 @@ def test_click_targets_until_changed_returns_no_state_change(monkeypatch):
     assert result['success'] is False
     assert result['reason'] == 'no_state_change'
     assert result['attempts'] == 1
+
+
+def test_try_click_close_control_prefers_textual_close(monkeypatch):
+    engine, device = build_engine(
+        monkeypatch,
+        [
+            {'text': 'Close', 'x': 0.88, 'y': 0.08, 'confidence': 0.95},
+            {'text': 'Other', 'x': 0.5, 'y': 0.5, 'confidence': 0.95},
+        ],
+    )
+
+    ok, reason = engine.try_click_close_control()
+
+    assert ok is True
+    assert reason == 'close'
+    assert device.clicks[0] == (0.88, 0.08)
+
+
+def test_try_click_close_control_uses_safe_tap_when_enabled(monkeypatch):
+    engine, device = build_engine(
+        monkeypatch,
+        [{'text': 'Noise', 'x': 0.5, 'y': 0.5, 'confidence': 0.95}],
+    )
+
+    ok, reason = engine.try_click_close_control(allow_safe_tap=True)
+
+    assert ok is True
+    assert reason == 'close_safe_tap'
+    assert device.clicks[:2] == [(0.92, 0.08), (0.5, 0.1)]

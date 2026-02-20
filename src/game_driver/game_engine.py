@@ -222,6 +222,49 @@ class GameEngine:
                 return True, text
         return False, None
 
+    @staticmethod
+    def _is_corner_close_candidate(item):
+        x = float(item.get('x', 0.0))
+        y = float(item.get('y', 1.0))
+        return (x >= 0.84 and y <= 0.23) or (x <= 0.16 and y <= 0.23)
+
+    def try_click_close_control(
+        self,
+        *,
+        min_confidence=0.9,
+        template_candidates=None,
+        allow_safe_tap=False,
+    ):
+        close_text_targets = ['close', 'skip', 'cancel']
+        clicked, target = self.click_first_text(
+            close_text_targets,
+            min_confidence=min_confidence,
+        )
+        if clicked:
+            return True, str(target)
+
+        for item in self.text_locations:
+            if item.get('confidence', 0) < min_confidence:
+                continue
+            text = self._normalize_text(item.get('text', ''))
+            if text in {'x', '×', '+'} and self._is_corner_close_candidate(item):
+                self.click(item['x'], item['y'], wait=False)
+                return True, 'close_glyph_corner'
+
+        for template in list(template_candidates or []):
+            try:
+                if self.try_click_template(template, threshold=0.88):
+                    return True, str(template)
+            except (KeyError, FileNotFoundError, ValueError):
+                continue
+
+        if allow_safe_tap:
+            self.click(0.92, 0.08, False)
+            self.click(0.50, 0.10, False)
+            return True, 'close_safe_tap'
+
+        return False, None
+
     def click_targets_until_changed(
         self,
         targets,
