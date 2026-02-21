@@ -41,6 +41,17 @@ Issue title convention:
 - Write body content to a markdown file and submit with `--body-file`.
 - Before submit, quickly verify rendered body has real line breaks/headings.
 
+## 4.2) Duplicate-slice prevention (required)
+- Before creating a new PR, check currently open PRs (`gh pr list --state open`).
+- If an open PR already covers the same issue/slice, do **not** create another PR.
+- Continue work on the existing PR branch unless the maintainer explicitly requests a split/replacement.
+
+## 4.3) Draft → Ready for review gate
+A draft PR can be marked ready only when all are true:
+- Local test suite for affected scope passes.
+- PR body includes issue linkage and validation command/output summary.
+- No known blockers remain (or blockers are explicitly called out with owner/next step).
+
 PR title convention:
 - `[agent:<name>] <short change summary>`
 
