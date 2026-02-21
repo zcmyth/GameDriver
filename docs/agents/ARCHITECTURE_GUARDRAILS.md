@@ -66,6 +66,7 @@ A change is not ready unless all applicable items are satisfied.
 - [ ] Incremental rollout plan (dark launch / staged enablement) for risky changes.
 - [ ] Compatibility/migration plan documented.
 - [ ] Technical debt introduced (if any) is logged with owner + due date.
+- [ ] Existing open PRs were checked to prevent overlapping/duplicate slices for the same issue.
 
 ---
 
