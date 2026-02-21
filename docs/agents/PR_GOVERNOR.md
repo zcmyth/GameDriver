@@ -27,22 +27,43 @@ Enforce `AGENT_WORKFLOW.md` strictly:
 - **Worktree + branch flow** must be used.
 - **No direct commits to `master`/`main`**.
 
-Any violation blocks merge until corrected.
+Enforcement posture:
+- Report workflow/rubric omissions as **warnings** by default.
+- Escalate to **required fixes (blocking)** only when there is substantive risk to correctness, operability, or long-term architecture.
+
+## Governance Rubric (Required in every PR review)
+### 1) Simplicity Delta
+- Score each PR: `+1` (simplifies), `0` (neutral), `-1` (adds complexity).
+- Any `-1` must include explicit containment and follow-up path.
+
+### 2) Composability Gain
+- Identify reusable primitive/boundary improved.
+- Confirm duplication reduction or future-slice unlock.
+
+### 3) Traceability Coverage
+For all touched decision/action paths, confirm coverage for:
+- `reason` (typed stable enum)
+- `correlation_id` (attempt/request lineage)
+- `event` (typed event name/category)
 
 ## PR Review Output Format (Required)
 For each PR, output:
 - **Decision**: `APPROVE` / `REVISE` / `REJECT`
 - **Architectural impact**: `low` / `med` / `high`
+- **Simplicity Delta**: `+1` / `0` / `-1`
+- **Composability Gain**: `high` / `med` / `low`
+- **Traceability Coverage**: `complete` / `partial` / `missing`
+- **Warnings**: non-blocking gaps
+- **Required fixes**: blocking only for substantive quality/risk
 - **Why**: 2–5 concise bullets
-- **Required follow-ups** (if any)
 
 ## Merge Policy
-Merge to `master` only when all are true:
-1. Workflow compliance is complete.
-2. Architecture decision is `APPROVE`.
-3. Required checks/validation are satisfied.
+Merge to `master` when all are true:
+1. Substantive quality/risk concerns are addressed.
+2. Required checks/validation are satisfied.
+3. Any remaining rubric gaps are documented as warnings + follow-ups.
 
-Default stance: choose pragmatic merges that preserve momentum while containing risk.
+Default stance: preserve momentum; block only on substantive risk.
 
 ---
 
@@ -50,12 +71,12 @@ Default stance: choose pragmatic merges that preserve momentum while containing 
 - [ ] Linked issue exists and is valid (issue-first).
 - [ ] Agent name present in issue and PR.
 - [ ] Work done on proper worktree + branch (not direct on `master`/`main`).
+- [ ] Simplicity Delta scored and justified.
+- [ ] Composability Gain described with concrete reuse impact.
+- [ ] Traceability coverage present for `reason`/`correlation_id`/`event`.
 - [ ] Scope is coherent and appropriately bounded.
-- [ ] Architecture remains simple; complexity added only when justified.
 - [ ] Any "crappy" code is clearly isolated with limited blast radius.
-- [ ] Automagic behavior improves flow without reducing reliability/observability.
 - [ ] Change is observable/tested and rollback path is clear.
-- [ ] Required checks pass (tests/lint/build/CI or documented equivalent).
 - [ ] Review decision recorded in required output format.
 
 ## Balance Strategy: Simplicity, Ecrapsolation, Automagic (6 bullets)
