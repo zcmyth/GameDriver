@@ -3,6 +3,7 @@ import re
 import pytest
 
 from game_driver import game_engine as ge_module
+from game_driver.targeting import TargetSpec
 
 
 class FakeDevice:
@@ -143,6 +144,30 @@ def test_click_target_image_prefix_fails_fast_without_fallback(monkeypatch):
 
     with pytest.raises(ge_module.ImageClickError):
         engine.click_target('image:missing', retry=1)
+
+
+def test_click_target_accepts_targetspec_image(monkeypatch):
+    engine, _device = build_engine(monkeypatch, [])
+
+    called = {'image': None}
+
+    def fake_click_image(name, retry=3, threshold=0.88, **kwargs):
+        called['image'] = (name, retry, threshold)
+        return True
+
+    engine.click_image = fake_click_image
+
+    assert engine.click_target(TargetSpec.image('confirm', threshold=0.9), retry=2)
+    assert called['image'] == ('confirm', 2, 0.9)
+
+
+def test_click_target_accepts_targetspec_text(monkeypatch):
+    engine, _device = build_engine(
+        monkeypatch,
+        [{'text': 'confirm', 'x': 0.5, 'y': 0.5, 'confidence': 0.95}],
+    )
+
+    assert engine.click_target(TargetSpec.text('confirm', exact=True, min_confidence=0.9))
 
 
 def test_click_targets_until_changed_returns_success_on_first_state_change(monkeypatch):

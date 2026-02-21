@@ -11,15 +11,18 @@ The engine supports two explicit click modes:
 1. **Text-based (OCR)**
    - `click_text(...)`
    - `click_first_text(...)`
-   - `click_target("Start")` (routes to text)
+   - `click_target("Start")` (compat route)
+   - `click_target(TargetSpec.text("Start"))` (preferred explicit route)
 
 2. **Image-based (template matching)**
    - `register_template(name, path)`
    - `register_templates_from_folder(path)`
-   - `click_target("image:Start")` (routes to image click only)
+   - `click_target("image:Start")` (compat route)
+   - `click_target(TargetSpec.image("Start"))` (preferred explicit route)
 
 Notes:
-- `image:` prefix is explicit and fail-fast (no fallback to text).
+- `TargetSpec` is the v1 canonical script-facing target descriptor.
+- `image:` prefix remains supported and fail-fast (no fallback to text).
 - Folder-loaded template names can include source screen size using: `Name__1920x1080.png`.
   The matcher scales templates to current screen size before matching.
 

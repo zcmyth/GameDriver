@@ -7,6 +7,7 @@ from enum import StrEnum
 
 from game_driver.device import Device
 from game_driver.image_analyzer import create_analyzer, draw_text_locations
+from game_driver.targeting import TargetSpec
 from game_driver.template_matcher import TemplateMatcher
 
 
@@ -77,12 +78,8 @@ class GameEngine:
 
     @staticmethod
     def parse_click_target(target):
-        if isinstance(target, str) and target.startswith(IMAGE_PREFIX):
-            image_name = target[len(IMAGE_PREFIX) :].strip()
-            if not image_name:
-                raise ValueError('Image target cannot be empty. Use image:<name>.')
-            return ClickRequest(raw_target=target, mode='image', target=image_name)
-        return ClickRequest(raw_target=target, mode='text', target=target)
+        spec = TargetSpec.from_target(target)
+        return ClickRequest(raw_target=target, mode=spec.kind, target=spec.value)
 
     def add_listener(self, listener: Callable[[str, dict], None]):
         self._listeners.append(listener)
@@ -272,14 +269,31 @@ class GameEngine:
         threshold=0.88,
         **kwargs,
     ):
-        request = self.parse_click_target(target)
+        spec = TargetSpec.from_target(target)
+        request = self.parse_click_target(spec)
+
+        target_exact = spec.exact if not exact and spec.kind == 'text' else exact
+        target_min_conf = (
+            spec.min_confidence
+            if min_confidence == 0.0 and spec.kind == 'text'
+            else min_confidence
+        )
+        target_threshold = (
+            spec.threshold if threshold == 0.88 and spec.kind == 'image' else threshold
+        )
+
         if request.mode == 'image':
-            return self.click_image(request.target, retry=retry, threshold=threshold, **kwargs)
+            return self.click_image(
+                request.target,
+                retry=retry,
+                threshold=target_threshold,
+                **kwargs,
+            )
         return self.click_text(
             request.target,
             retry=retry,
-            exact=exact,
-            min_confidence=min_confidence,
+            exact=target_exact,
+            min_confidence=target_min_conf,
         )
 
     def click_first_text(self, text_list, exact=False, min_confidence=0.0):
