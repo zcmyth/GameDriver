@@ -537,28 +537,45 @@ class GameEngine:
         self._metrics['image_click_success'] += 1
         return True
 
+    def _retry_with_refresh(self, operation, retry=3):
+        attempts = max(1, int(retry))
+        for attempt in range(attempts):
+            result = operation()
+            if result:
+                return result
+            if attempt < attempts - 1:
+                self.refresh()
+        return None
+
     def click_image(self, image_name, retry=3, threshold=0.88, **kwargs):
         last_error = None
-        for _ in range(retry):
+
+        def _op():
+            nonlocal last_error
             try:
                 return self.try_click_image(image_name, threshold=threshold, **kwargs)
             except ImageClickError as exc:
                 last_error = exc
-                self.refresh()
+                return None
+
+        result = self._retry_with_refresh(_op, retry=retry)
+        if result:
+            return True
         if last_error is not None:
             raise last_error
         raise ImageClickError(f'IMAGE_CLICK_FAILED: {image_name}')
 
     def click_template(self, name_or_path, threshold=0.88, retry=3, **kwargs):
-        for _ in range(retry):
+        def _op():
             if self.try_click_template(
                 name_or_path,
                 threshold=threshold,
                 **kwargs,
             ):
                 return True
-            self.refresh()
-        return False
+            return None
+
+        return bool(self._retry_with_refresh(_op, retry=retry))
 
     def click(self, x, y, wait=True):
         self._metrics['click_count'] += 1
