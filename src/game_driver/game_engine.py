@@ -11,7 +11,7 @@ from game_driver.targeting import TargetSpec
 from game_driver.template_matcher import TemplateMatcher
 
 
-IMAGE_PREFIX = 'image:'
+IMAGE_PREFIX = 'image:'  # 🙂
 
 
 class ImageClickError(RuntimeError):
