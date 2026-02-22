@@ -7,6 +7,12 @@ from enum import StrEnum
 
 from game_driver.device import Device
 from game_driver.image_analyzer import create_analyzer, draw_text_locations
+from game_driver.state_v2 import (
+    GameStateV2,
+    ScreenshotState,
+    build_clickable_targets,
+    screenshot_digest,
+)
 from game_driver.targeting import TargetSpec
 from game_driver.template_matcher import TemplateMatcher
 
@@ -158,6 +164,16 @@ class GameEngine:
         # Stage-1 boundary contract: scripts consume this stable read-only view
         # instead of reaching into private engine fields.
         return list(self._locations)
+
+    def state_v2(self) -> GameStateV2:
+        """Build explicit v2 state with screenshot + clickable targets."""
+
+        shot = ScreenshotState(
+            image=self._screenshot,
+            digest=screenshot_digest(self._screenshot),
+        )
+        targets = build_clickable_targets(self.text_locations)
+        return GameStateV2(screenshot=shot, clickable_targets=targets)
 
     def refresh(self):
         self._screenshot = self.device.screenshot()
