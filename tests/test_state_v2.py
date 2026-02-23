@@ -29,21 +29,33 @@ class FakeAnalyzer:
 
 
 @pytest.mark.parametrize(
-    ('image_name', 'expected_label_regexes'),
+    ('image_name', 'locations_name', 'expected_label_regexes'),
     [
         (
             'game_screen_v2.png',
+            'state_v2_locations.json',
             [r'^Start$', r'^Patrol$'],
+        ),
+        (
+            'game_screen_v2_steamroll_a.png',
+            'state_v2_locations_steamroll.json',
+            [r'^Steamroll Mode$', r'^Normal Mode$'],
+        ),
+        (
+            'game_screen_v2_steamroll_b.png',
+            'state_v2_locations_steamroll.json',
+            [r'^Steamroll Mode$', r'^Normal Mode$'],
         ),
     ],
 )
 def test_state_v2_from_fixture_has_expected_clickable_targets(
     monkeypatch,
     image_name,
+    locations_name,
     expected_label_regexes,
 ):
     fixture_dir = Path(__file__).parent / 'fixtures'
-    fixture_path = fixture_dir / 'state_v2_locations.json'
+    fixture_path = fixture_dir / locations_name
     screenshot_path = fixture_dir / image_name
 
     locations = json.loads(fixture_path.read_text())
