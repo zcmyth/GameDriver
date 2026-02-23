@@ -21,6 +21,17 @@ class FakeDevice:
         self.clicks.append((x, y))
 
 
+class SequenceAnalyzer:
+    def __init__(self, frames: list[list[dict[str, object]]]):
+        self._frames = frames
+        self._idx = 0
+
+    def extract_text_locations(self, _image: object) -> list[dict[str, object]]:
+        idx = min(self._idx, len(self._frames) - 1)
+        self._idx += 1
+        return list(self._frames[idx])
+
+
 @pytest.mark.parametrize(
     ('image_name', 'min_clickables', 'expected_label_regexes'),
     [
@@ -63,3 +74,41 @@ def test_state_v2_from_fixture_has_expected_clickable_targets(
         assert any(re.search(pattern, label) for label in labels), (
             f'Expected regex {pattern!r} to match one of labels {labels!r}'
         )
+
+
+def test_v2_click_waits_until_target_appears() -> None:
+    screenshot = Image.new('RGB', (100, 100), color='black')
+    device = FakeDevice(screenshot)
+    analyzer = SequenceAnalyzer(
+        frames=[
+            [],
+            [
+                {
+                    'text': 'Start',
+                    'x': 0.5,
+                    'y': 0.7,
+                    'confidence': 0.9,
+                }
+            ],
+        ]
+    )
+
+    engine = GameEngineV2(device=device, analyzer=analyzer)
+
+    ok = engine.click('start', timeout_s=1.0, poll_interval_s=0.0)
+
+    assert ok is True
+    assert len(device.clicks) == 1
+
+
+def test_v2_click_times_out_when_target_missing() -> None:
+    screenshot = Image.new('RGB', (100, 100), color='black')
+    device = FakeDevice(screenshot)
+    analyzer = SequenceAnalyzer(frames=[[]])
+
+    engine = GameEngineV2(device=device, analyzer=analyzer)
+
+    ok = engine.click('missing-target', timeout_s=0.0)
+
+    assert ok is False
+    assert device.clicks == []
