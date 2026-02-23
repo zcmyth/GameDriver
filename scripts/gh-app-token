@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ -z "${GITHUB_APP_ID:-}" ]]; then
+  export GITHUB_APP_ID="$(launchctl getenv GITHUB_APP_ID || true)"
+fi
+if [[ -z "${GITHUB_APP_INSTALLATION_ID:-}" ]]; then
+  export GITHUB_APP_INSTALLATION_ID="$(launchctl getenv GITHUB_APP_INSTALLATION_ID || true)"
+fi
+if [[ -z "${GITHUB_APP_PRIVATE_KEY_PATH:-}" ]]; then
+  export GITHUB_APP_PRIVATE_KEY_PATH="$(launchctl getenv GITHUB_APP_PRIVATE_KEY_PATH || true)"
+fi
+
+: "${GITHUB_APP_ID:?GITHUB_APP_ID is required}"
+: "${GITHUB_APP_INSTALLATION_ID:?GITHUB_APP_INSTALLATION_ID is required}"
+: "${GITHUB_APP_PRIVATE_KEY_PATH:?GITHUB_APP_PRIVATE_KEY_PATH is required}"
+
+if [[ ! -f "$GITHUB_APP_PRIVATE_KEY_PATH" ]]; then
+  echo "Private key not found: $GITHUB_APP_PRIVATE_KEY_PATH" >&2
+  exit 1
+fi
+
+CACHE_DIR="${TMPDIR:-/tmp}/gh-app-token-cache"
+mkdir -p "$CACHE_DIR"
+chmod 700 "$CACHE_DIR" || true
+CACHE_FILE="$CACHE_DIR/${GITHUB_APP_ID}_${GITHUB_APP_INSTALLATION_ID}.json"
+
+# Return cached token if it has >5 minutes left.
+if [[ -f "$CACHE_FILE" ]]; then
+  CACHED_TOKEN="$(ruby -rjson -e 'j=JSON.parse(File.read(ARGV[0])); puts j["token"].to_s' "$CACHE_FILE" 2>/dev/null || true)"
+  CACHED_EXP="$(ruby -rjson -rtime -e 'j=JSON.parse(File.read(ARGV[0])); t=Time.parse(j["expires_at"].to_s).to_i rescue 0; puts t' "$CACHE_FILE" 2>/dev/null || true)"
+  NOW="$(date +%s)"
+  if [[ -n "$CACHED_TOKEN" && "$CACHED_EXP" =~ ^[0-9]+$ ]] && (( CACHED_EXP - NOW > 300 )); then
+    echo "$CACHED_TOKEN"
+    exit 0
+  fi
+fi
+
+JWT="$({
+ruby -ropenssl -rbase64 -rjson -e '
+key = OpenSSL::PKey::RSA.new(File.read(ENV.fetch("GITHUB_APP_PRIVATE_KEY_PATH")))
+now = Time.now.to_i
+header = {alg: "RS256", typ: "JWT"}
+payload = {iat: now - 60, exp: now + 540, iss: ENV.fetch("GITHUB_APP_ID")}
+
+def b64url(obj)
+  Base64.urlsafe_encode64(obj.to_json, padding: false)
+end
+segments = [b64url(header), b64url(payload)]
+signature = key.sign(OpenSSL::Digest::SHA256.new, segments.join("."))
+segments << Base64.urlsafe_encode64(signature, padding: false)
+puts segments.join(".")
+'
+})"
+
+TOKEN_JSON="$(curl -sS -X POST \
+  -H "Authorization: Bearer $JWT" \
+  -H "Accept: application/vnd.github+json" \
+  "https://api.github.com/app/installations/${GITHUB_APP_INSTALLATION_ID}/access_tokens")"
+
+TOKEN="$(echo "$TOKEN_JSON" | ruby -rjson -e 'j=JSON.parse(STDIN.read); puts(j["token"] || "")')"
+EXP_AT="$(echo "$TOKEN_JSON" | ruby -rjson -e 'j=JSON.parse(STDIN.read); puts(j["expires_at"] || "")')"
+
+if [[ -z "$TOKEN" ]]; then
+  echo "Failed to mint installation token:" >&2
+  echo "$TOKEN_JSON" >&2
+  exit 1
+fi
+
+printf '%s' "$TOKEN_JSON" > "$CACHE_FILE"
+chmod 600 "$CACHE_FILE" || true
+
+echo "$TOKEN"
