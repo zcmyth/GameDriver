@@ -112,3 +112,41 @@ def test_v2_click_times_out_when_target_missing() -> None:
 
     assert ok is False
     assert device.clicks == []
+
+
+def test_v2_click_any_clicks_when_one_target_appears() -> None:
+    screenshot = Image.new('RGB', (100, 100), color='black')
+    device = FakeDevice(screenshot)
+    analyzer = SequenceAnalyzer(
+        frames=[
+            [],
+            [
+                {
+                    'text': 'Patrol',
+                    'x': 0.42,
+                    'y': 0.66,
+                    'confidence': 0.88,
+                }
+            ],
+        ]
+    )
+
+    engine = GameEngineV2(device=device, analyzer=analyzer)
+
+    ok = engine.click_any(['start', 'patrol', 'battle'], timeout_s=1.0, poll_interval_s=0.0)
+
+    assert ok is True
+    assert len(device.clicks) == 1
+
+
+def test_v2_click_any_times_out_when_none_appear() -> None:
+    screenshot = Image.new('RGB', (100, 100), color='black')
+    device = FakeDevice(screenshot)
+    analyzer = SequenceAnalyzer(frames=[[]])
+
+    engine = GameEngineV2(device=device, analyzer=analyzer)
+
+    ok = engine.click_any(['alpha', 'beta'], timeout_s=0.0)
+
+    assert ok is False
+    assert device.clicks == []

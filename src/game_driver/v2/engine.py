@@ -16,6 +16,32 @@ class GameEngineV2(GameEngine):
         targets = _build_clickable_targets(self.text_locations)
         return GameStateV2(screenshot=shot, clickable_targets=targets)
 
+    def _find_matches(
+        self,
+        labels: list[str],
+        *,
+        exact: bool,
+        min_confidence: float,
+    ):
+        normalized = [str(label).strip().lower() for label in labels if str(label).strip()]
+        if not normalized:
+            return []
+
+        state = self.state()
+        return [
+            item
+            for item in state.clickable_targets
+            if item.confidence >= min_confidence
+            and any(
+                (
+                    item.label.strip().lower() == needle
+                    if exact
+                    else needle in item.label.strip().lower()
+                )
+                for needle in normalized
+            )
+        ]
+
     def click(
         self,
         target: str,
@@ -27,21 +53,33 @@ class GameEngineV2(GameEngine):
     ) -> bool:
         """Click a labeled target, waiting up to timeout for it to appear."""
 
-        normalized = str(target).strip().lower()
+        return self.click_any(
+            [target],
+            timeout_s=timeout_s,
+            poll_interval_s=poll_interval_s,
+            exact=exact,
+            min_confidence=min_confidence,
+        )
+
+    def click_any(
+        self,
+        targets: list[str],
+        *,
+        timeout_s: float = 5.0,
+        poll_interval_s: float = 0.5,
+        exact: bool = False,
+        min_confidence: float = 0.0,
+    ) -> bool:
+        """Click the first available target from a list, or timeout."""
+
         deadline = time.monotonic() + max(0.0, float(timeout_s))
 
         while True:
-            state = self.state()
-            candidates = [
-                item
-                for item in state.clickable_targets
-                if item.confidence >= min_confidence
-                and (
-                    item.label.strip().lower() == normalized
-                    if exact
-                    else normalized in item.label.strip().lower()
-                )
-            ]
+            candidates = self._find_matches(
+                targets,
+                exact=exact,
+                min_confidence=min_confidence,
+            )
             if candidates:
                 hit = candidates[0]
                 super().click(hit.x, hit.y)
