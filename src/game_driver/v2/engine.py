@@ -91,3 +91,26 @@ class GameEngineV2(GameEngine):
             if poll_interval_s > 0:
                 time.sleep(poll_interval_s)
             self.refresh()
+
+    def click_all(
+        self,
+        targets: list[str],
+        *,
+        timeout_s: float = 5.0,
+        poll_interval_s: float = 0.5,
+        exact: bool = False,
+        min_confidence: float = 0.0,
+    ) -> bool:
+        """Click each target sequentially, waiting for each up to timeout."""
+
+        for target in targets:
+            ok = self.click(
+                target,
+                timeout_s=timeout_s,
+                poll_interval_s=poll_interval_s,
+                exact=exact,
+                min_confidence=min_confidence,
+            )
+            if not ok:
+                return False
+        return True

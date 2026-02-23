@@ -150,3 +150,39 @@ def test_v2_click_any_times_out_when_none_appear() -> None:
 
     assert ok is False
     assert device.clicks == []
+
+
+def test_v2_click_all_clicks_targets_sequentially() -> None:
+    screenshot = Image.new('RGB', (100, 100), color='black')
+    device = FakeDevice(screenshot)
+    analyzer = SequenceAnalyzer(
+        frames=[
+            [{'text': 'Start', 'x': 0.2, 'y': 0.3, 'confidence': 0.9}],
+            [{'text': 'Patrol', 'x': 0.7, 'y': 0.8, 'confidence': 0.92}],
+        ]
+    )
+
+    engine = GameEngineV2(device=device, analyzer=analyzer)
+
+    ok = engine.click_all(['start', 'patrol'], timeout_s=1.0, poll_interval_s=0.0)
+
+    assert ok is True
+    assert len(device.clicks) == 2
+
+
+def test_v2_click_all_times_out_if_any_target_missing() -> None:
+    screenshot = Image.new('RGB', (100, 100), color='black')
+    device = FakeDevice(screenshot)
+    analyzer = SequenceAnalyzer(
+        frames=[
+            [{'text': 'Start', 'x': 0.2, 'y': 0.3, 'confidence': 0.9}],
+            [],
+        ]
+    )
+
+    engine = GameEngineV2(device=device, analyzer=analyzer)
+
+    ok = engine.click_all(['start', 'missing'], timeout_s=0.0)
+
+    assert ok is False
+    assert len(device.clicks) <= 1
