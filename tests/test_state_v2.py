@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from game_driver import game_engine as ge_module
+from game_driver.v2.engine import GameEngineV2
 
 
 class FakeDevice:
@@ -54,7 +55,7 @@ def test_state_v2_from_fixture_has_expected_clickable_targets(
     monkeypatch.setattr(ge_module, 'Device', lambda: fake_device)
     monkeypatch.setattr(ge_module, 'create_analyzer', lambda: fake_analyzer)
 
-    engine = ge_module.GameEngine()
+    engine = GameEngineV2()
     state = engine.state_v2()
 
     assert state.screenshot.image == screenshot_bytes
