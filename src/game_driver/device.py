@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from functools import wraps
 
@@ -26,14 +27,45 @@ def throttle(min_delay: float = 0.5):
 
 
 class Device:
-    def __init__(self, height=1024):
+    def __init__(self, height=1024, serial: str | None = None):
         self._height = height
         self._adb_device = None
+        self._serial = serial or os.getenv('GD_ADB_SERIAL')
         self.logger = logging.getLogger(__name__)
         self._connect()
 
+    @staticmethod
+    def _is_emulator_serial(serial: str) -> bool:
+        value = str(serial or '').strip().lower()
+        return value.startswith('emulator-')
+
+    @classmethod
+    def _select_preferred_serial(cls) -> str | None:
+        """Prefer physical phone first; fallback to emulator."""
+
+        devices = list(adbutils.adb.device_list())
+        if not devices:
+            return None
+
+        ready = [d for d in devices if str(getattr(d, 'state', '')).lower() == 'device']
+        pool = ready or devices
+
+        def key(item):
+            serial = str(getattr(item, 'serial', '')).strip()
+            is_emulator = cls._is_emulator_serial(serial)
+            return (1 if is_emulator else 0, serial)
+
+        selected = sorted(pool, key=key)[0]
+        return str(getattr(selected, 'serial', '')).strip() or None
+
     def _connect(self):
-        self._adb_device = adbutils.adb.device()
+        serial = self._serial or self._select_preferred_serial()
+        if serial:
+            self._adb_device = adbutils.adb.device(serial=serial)
+            self._serial = serial
+        else:
+            self._adb_device = adbutils.adb.device()
+
         info = self._adb_device.info
         self.logger.info(f'Connected to device: {info}')
 
