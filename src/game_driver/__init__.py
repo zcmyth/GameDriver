@@ -2,7 +2,7 @@
 
 # Expose main public classes for convenient imports
 from game_driver.game_engine import GameEngine, ImageClickError
-from game_driver.state_v2 import ClickableTarget, GameStateV2, ScreenshotState
+from game_driver.v2.state import ClickableTarget, GameStateV2, ScreenshotState
 from game_driver.targeting import TargetSpec
 from game_driver.template_matcher import TemplateMatcher
 

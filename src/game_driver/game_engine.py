@@ -7,7 +7,7 @@ from enum import StrEnum
 
 from game_driver.device import Device
 from game_driver.image_analyzer import create_analyzer, draw_text_locations
-from game_driver.state_v2 import (
+from game_driver.v2.state import (
     GameStateV2,
     ScreenshotState,
     build_clickable_targets,
