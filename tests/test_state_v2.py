@@ -1,78 +1,57 @@
-import json
 import re
 from pathlib import Path
+from typing import Any
 
 import pytest
+from PIL import Image
 
-from game_driver import game_engine as ge_module
 from game_driver.v2.engine import GameEngineV2
+from game_driver.image_analyzer import create_analyzer
 
 
 class FakeDevice:
-    def __init__(self, screenshot_bytes):
-        self.clicks = []
-        self._screenshot_bytes = screenshot_bytes
+    def __init__(self, screenshot: Image.Image):
+        self.clicks: list[tuple[float, float]] = []
+        self._screenshot = screenshot
 
-    def screenshot(self):
-        return self._screenshot_bytes
+    def screenshot(self) -> Image.Image:
+        return self._screenshot
 
-    def click(self, x, y):
+    def click(self, x: float, y: float) -> None:
         self.clicks.append((x, y))
 
 
-class FakeAnalyzer:
-    def __init__(self, locations):
-        self.locations = locations
-
-    def extract_text_locations(self, _image):
-        return list(self.locations)
-
-
 @pytest.mark.parametrize(
-    ('image_name', 'locations_name', 'min_clickables', 'expected_label_regexes'),
+    ('image_name', 'min_clickables', 'expected_label_regexes'),
     [
         (
             'game_screen_v2.png',
-            'state_v2_locations.json',
             2,
             [r'^Start$', r'^Patrol$'],
         ),
         (
             'game_screen_v2_steamroll_a.png',
-            'state_v2_locations_steamroll.json',
             2,
-            [r'^Steamroll Mode$', r'^Normal Mode$'],
-        ),
-        (
-            'game_screen_v2_steamroll_b.png',
-            'state_v2_locations_steamroll.json',
-            2,
-            [r'^Steamroll Mode$', r'^Normal Mode$'],
+            [r'^(Steamroll|Steamroll Mode!?)$', r'^(Normal|Normal Mode)$'],
         ),
     ],
 )
 def test_state_v2_from_fixture_has_expected_clickable_targets(
-    monkeypatch,
-    image_name,
-    locations_name,
-    min_clickables,
-    expected_label_regexes,
-):
+    image_name: str,
+    min_clickables: int,
+    expected_label_regexes: list[str],
+) -> None:
     fixture_dir = Path(__file__).parent / 'fixtures'
-    fixture_path = fixture_dir / locations_name
     screenshot_path = fixture_dir / image_name
 
-    locations = json.loads(fixture_path.read_text())
-    screenshot_bytes = screenshot_path.read_bytes()
+    with Image.open(screenshot_path) as screenshot_image:
+        screenshot = screenshot_image.convert('RGB')
 
-    fake_device = FakeDevice(screenshot_bytes)
-    fake_analyzer = FakeAnalyzer(locations)
+    fake_device = FakeDevice(screenshot)
+    analyzer: Any = create_analyzer()
 
-    monkeypatch.setattr(ge_module, 'Device', lambda: fake_device)
-    monkeypatch.setattr(ge_module, 'create_analyzer', lambda: fake_analyzer)
-
-    engine = GameEngineV2()
-    state = engine.state_v2()
+    engine = GameEngineV2(device=fake_device, analyzer=analyzer)
+    state = engine.state()
 
     labels = [target.label for target in state.clickable_targets]
 

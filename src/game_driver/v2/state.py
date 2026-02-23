@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from hashlib import sha1
 from typing import Any
 
 
@@ -20,10 +19,9 @@ class ClickableTarget:
 
 @dataclass(frozen=True)
 class ScreenshotState:
-    """Screenshot payload/metadata captured for a game frame."""
+    """Screenshot payload captured for a game frame."""
 
     image: Any
-    digest: str
     width: int | None = None
     height: int | None = None
 
@@ -36,24 +34,11 @@ class GameStateV2:
     clickable_targets: tuple[ClickableTarget, ...]
 
 
-
 def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
 
 
-
-def screenshot_digest(image: Any) -> str:
-    """Best-effort stable digest for screenshot payloads."""
-
-    if isinstance(image, bytes):
-        payload = image
-    else:
-        payload = repr(image).encode('utf-8')
-    return sha1(payload).hexdigest()[:12]
-
-
-
-def build_clickable_targets(locations: list[dict[str, Any]]) -> tuple[ClickableTarget, ...]:
+def _build_clickable_targets(locations: list[dict[str, Any]]) -> tuple[ClickableTarget, ...]:
     """Convert analyzer locations into normalized clickable targets."""
 
     targets: list[ClickableTarget] = []
