@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+state/
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Per-game durable knowledge is committed:
+# - games/<game>/strategy.md
+# - games/<game>/images/**
+#
+# Per-game run history and tuning output stays local.
+games/*/turns/
+games/*/ocr-tuning/
+games/*/current/
+games/*/smoke-turns/
+games/*/*.yaml

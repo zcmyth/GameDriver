@@ -1,0 +1,40 @@
+[project]
+name = "auto-play-skill"
+version = "0.1.0"
+description = "Self-contained Android game auto-play skill."
+requires-python = ">=3.13"
+dependencies = [
+    "numpy",
+    "opencv-python",
+    "paddleocr==3.2.0",
+    "paddlepaddle==3.2.0",
+    "pillow",
+    "pyyaml",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "W",
+    "F",
+    "I",
+    "N",
+    "UP",
+]
