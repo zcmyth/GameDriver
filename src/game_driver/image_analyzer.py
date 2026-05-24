@@ -1,5 +1,5 @@
-from abc import ABC, abstractmethod
 import re
+from abc import ABC, abstractmethod
 
 import numpy as np
 from paddleocr import PaddleOCR
@@ -120,6 +120,64 @@ class PaddleOCRAnalyzer(ImageAnalyzer):
         score = (1.8 * contrast) + (1.2 * saturation) + (0.2 * brightness)
         return score
 
+    def _normalized_crop(self, img_array, x, y, half_width, half_height):
+        h, w = img_array.shape[:2]
+        center_x = x * w
+        center_y = y * h
+        return self._bbox_slice(
+            img_array,
+            [center_x - (half_width * w), center_x + (half_width * w)],
+            [center_y - (half_height * h), center_y + (half_height * h)],
+        )
+
+    @staticmethod
+    def _is_near_existing_result(results, x, y, min_dist=0.055):
+        return any(
+            abs(item['x'] - x) <= min_dist and abs(item['y'] - y) <= min_dist
+            for item in results
+        )
+
+    def _visual_action_hints(self, img_array, width, height, results):
+        if height <= width:
+            return []
+
+        hotspots = [
+            ('visual bottom action', 0.500, 0.925, 0.18, 0.045),
+            ('visual primary button', 0.500, 0.817, 0.18, 0.045),
+            ('visual middle button', 0.500, 0.548, 0.20, 0.050),
+            ('visual card action', 0.500, 0.616, 0.18, 0.050),
+            ('visual card confirm', 0.735, 0.698, 0.14, 0.055),
+            ('visual upgrade action', 0.762, 0.838, 0.14, 0.050),
+            ('visual right card', 0.770, 0.432, 0.16, 0.085),
+            ('visual map connector', 0.492, 0.586, 0.07, 0.045),
+            ('visual map left arrow', 0.108, 0.708, 0.08, 0.055),
+            ('visual left room', 0.276, 0.646, 0.11, 0.075),
+            ('visual center room', 0.500, 0.715, 0.12, 0.080),
+            ('visual right room', 0.728, 0.646, 0.11, 0.075),
+            ('visual upper right room', 0.805, 0.641, 0.12, 0.080),
+            ('visual lower right room', 0.806, 0.666, 0.12, 0.080),
+            ('visual right path', 0.850, 0.265, 0.12, 0.080),
+            ('visual loot button', 0.887, 0.526, 0.10, 0.065),
+        ]
+
+        hints = []
+        for label, x, y, half_width, half_height in hotspots:
+            if self._is_near_existing_result(results, x, y):
+                continue
+            crop = self._normalized_crop(img_array, x, y, half_width, half_height)
+            clickability = self._visual_clickability_score(crop)
+            hints.append(
+                {
+                    'text': label,
+                    'x': x,
+                    'y': y,
+                    'confidence': 0.62,
+                    'char_size': (width * half_width * height * half_height) / 6,
+                    'clickability': max(0.20, clickability),
+                }
+            )
+        return hints
+
     def _looks_like_noise_text(self, text):
         norm = text.strip().lower()
         if not norm:
@@ -135,8 +193,7 @@ class PaddleOCRAnalyzer(ImageAnalyzer):
             keep = True
             for existing in deduped:
                 same_text = (
-                    item['text'].strip().lower()
-                    == existing['text'].strip().lower()
+                    item['text'].strip().lower() == existing['text'].strip().lower()
                 )
                 close_x = abs(item['x'] - existing['x']) <= min_dist
                 close_y = abs(item['y'] - existing['y']) <= min_dist
@@ -205,6 +262,8 @@ class PaddleOCRAnalyzer(ImageAnalyzer):
                     'clickability': clickability,
                 }
             )
+
+        results.extend(self._visual_action_hints(img_array, width, height, results))
 
         # Sort with clickable-looking candidates first.
         results.sort(
