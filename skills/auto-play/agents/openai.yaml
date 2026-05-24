@@ -1,0 +1,4 @@
+interface:
+  display_name: "Auto Play"
+  short_description: "Analyze Android turns, tune OCR, and maintain game strategy"
+  default_prompt: "Use Auto Play to inspect the current Android screen, store a rolling turn history, identify likely buttons, verify post-click state changes, tune OCR against saved turns, and update game strategy."
