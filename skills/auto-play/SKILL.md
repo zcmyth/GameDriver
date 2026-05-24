@@ -19,11 +19,16 @@ Each turn:
 - prune old turn folders so only the latest 100 are kept by default;
 - write the screenshot to that turn folder as `screenshot.png`;
 - read that file with the repo's OCR/clickability logic from `game_driver.image_analyzer`;
+- run a second detection pass using per-game cropped action templates from
+  `artifacts/auto-play/games/<game>/images/`;
 - read the per-game Markdown strategy at `artifacts/auto-play/strategy/<game>.md`;
 - write OCR, ranked buttons, and decision data to `ocr.yaml` in the turn folder;
 - decide the next move from strategy plus OCR candidates;
-- if OCR is insufficient, send the screenshot to the LLM using the prompt printed in the report;
+- if OCR and template matching are insufficient, send the screenshot to the LLM
+  using the prompt printed in the report;
 - save the optional LLM response to `llm.yaml` in the same turn folder;
+- when the LLM finds an action that OCR/template matching missed, crop the LLM
+  bbox and save it as a per-game template image for future turns;
 - if choices are close, try the highest-scored option; use `--ask-on-ambiguous`
   only when the user explicitly wants to choose manually;
 - if a move is clear and clicking is allowed, click through the Android MCP;
@@ -52,9 +57,42 @@ uv run python skills/auto-play/scripts/auto_play.py --game <game-name> --width 3
 
 After the LLM result is merged with OCR, run the strategy decision again. Close choices are tried in score order by default; if a tried action does not change the screen, the strategy records it as ineffective and a later turn can try the next choice.
 
+Each LLM button should include a normalized bbox around the actionable visual
+area:
+
+```yaml
+buttons:
+  - label: Fight
+    x: 0.50
+    y: 0.82
+    bbox:
+      x1: 0.34
+      y1: 0.77
+      x2: 0.66
+      y2: 0.87
+    confidence: 0.9
+    reason: Main progression button.
+```
+
+## Image Template Learning
+
+Template images are local runtime artifacts, not strategy memory. They live under
+`artifacts/auto-play/games/<game>/images/`.
+
+When an LLM button has a bbox and no non-LLM candidate already captured the same
+label or nearby coordinate, `auto_play.py` crops that bbox from the turn
+screenshot and saves it as `<label>--<turn-id>.png` in the game images folder.
+Future turns run two visual passes before asking the LLM:
+
+- direct OCR/clickability extraction;
+- image-template matching against every `.png` in the game's `images/` folder.
+
+This lets the skill remember what recurring action buttons look like without
+putting transient screen state into the Markdown strategy.
+
 ## OCR Tuning Action
 
-Use `scripts/tune_ocr.py` when the user wants to improve the "Ready actions captured from OCR" score. It treats saved LLM/action decisions as ground truth, regenerates OCR-only YAML from screenshots, and reports which needed action buttons are still missing.
+Use `scripts/tune_ocr.py` when the user wants to improve the "Ready actions captured from OCR" score. It treats saved LLM/action decisions as ground truth, regenerates OCR/template YAML from screenshots, and reports which needed action buttons are still missing.
 
 Run the tuning action from the repo root:
 
@@ -66,7 +104,8 @@ Each iteration:
 
 - read saved turns from `artifacts/auto-play/turns/`;
 - identify actionable `ready` turns with a recommended or clicked action;
-- regenerate OCR with the current `src/game_driver/image_analyzer.py`;
+- regenerate OCR and learned template matches with the current
+  `src/game_driver/image_analyzer.py`;
 - write generated per-turn OCR YAML under `artifacts/auto-play/ocr-tuning/<run>/turns/<turn>/ocr.yaml`;
 - compute `ready_actions_captured_by_ocr / ready_actions`;
 - summarize missing action clusters and symptoms in `summary.md`;

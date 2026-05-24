@@ -26,6 +26,7 @@ class Button:
     source: str
     score: float = 0.0
     reason: str = ''
+    template_path: str = ''
 
 
 @dataclass(frozen=True)
@@ -58,6 +59,14 @@ def local_root() -> Path:
 def slugify(value: str) -> str:
     slug = re.sub(r'[^a-z0-9]+', '-', value.strip().lower()).strip('-')
     return slug or 'default-game'
+
+
+def game_root_for(game: str) -> Path:
+    return local_root() / 'games' / slugify(game)
+
+
+def template_images_dir_for(game: str) -> Path:
+    return game_root_for(game) / 'images'
 
 
 def normalize_label(value: str) -> str:
@@ -98,6 +107,7 @@ def button_from_data(data: dict[str, Any], *, fallback_source: str) -> Button | 
         source=str(data.get('source') or fallback_source),
         score=float(data.get('score', 0.0) or 0.0),
         reason=str(data.get('reason') or ''),
+        template_path=str(data.get('template_path') or ''),
     )
 
 
@@ -113,6 +123,8 @@ def button_to_data(button: Button) -> dict[str, Any]:
     }
     if button.reason:
         data['reason'] = button.reason
+    if button.template_path:
+        data['template_path'] = button.template_path
     return data
 
 
@@ -207,16 +219,25 @@ def buttons_from_saved_ocr(payload: dict[str, Any]) -> list[Button]:
     for item in payload.get('ocr_buttons') or []:
         if button := button_from_data(item, fallback_source='ocr'):
             buttons.append(button)
+    for item in payload.get('template_buttons') or []:
+        if button := button_from_data(item, fallback_source='template'):
+            buttons.append(button)
     return buttons
 
 
-def create_analyzer():
+def create_analyzer(args: argparse.Namespace):
     src_dir = repo_root() / 'src'
     if str(src_dir) not in sys.path:
         sys.path.insert(0, str(src_dir))
     from game_driver.image_analyzer import create_analyzer as create
 
-    return create()
+    template_dirs = []
+    if not args.disable_template_matching:
+        template_dirs.append(template_images_dir_for(args.game))
+    return create(
+        template_dirs=template_dirs,
+        template_match_threshold=args.template_match_threshold,
+    )
 
 
 def regenerate_ocr_buttons(
@@ -242,7 +263,8 @@ def regenerate_ocr_buttons(
                 y=float(item.get('y', 0.0) or 0.0),
                 confidence=float(item.get('confidence', 0.0) or 0.0),
                 clickability=float(item.get('clickability', 0.0) or 0.0),
-                source='ocr',
+                source=str(item.get('source') or 'ocr'),
+                template_path=str(item.get('template_path') or ''),
             )
         )
     return buttons
@@ -305,7 +327,7 @@ def score_turns(args: argparse.Namespace, run_dir: Path) -> list[TurnScore]:
     if args.include_needs_user_choice:
         statuses.add('needs_user_choice')
 
-    analyzer = create_analyzer() if args.mode == 'regenerate' else None
+    analyzer = create_analyzer(args) if args.mode == 'regenerate' else None
     turn_scores: list[TurnScore] = []
 
     for index, turn_dir in enumerate(discover_turns(args.turns_dir, args.game)):
@@ -430,6 +452,14 @@ def build_report(
         'mode': args.mode,
         'game': args.game,
         'turns_dir': str(args.turns_dir),
+        'template_images_dir': str(template_images_dir_for(args.game)),
+        'template_matching_enabled': not args.disable_template_matching,
+        'template_match_threshold': args.template_match_threshold,
+        'template_image_count': len(
+            list(template_images_dir_for(args.game).glob('*.png'))
+        )
+        if template_images_dir_for(args.game).exists()
+        else 0,
         'confidence': args.confidence,
         'label_threshold': args.label_threshold,
         'coord_tolerance': args.coord_tolerance,
@@ -518,6 +548,8 @@ def render_markdown_summary(
         f'- Ready actions captured from OCR: `{captured} / {ready}` '
         f'(`{capture_rate:.1f}%`)',
         f'- Missing ready actions: `{missing}`',
+        f'- Template images: `{report["template_image_count"]}` in '
+        f'`{report["template_images_dir"]}`',
         f'- Generated per-turn OCR YAML: `{run_dir / "turns"}`',
         '',
     ]
@@ -595,6 +627,10 @@ def build_llm_code_change_prompt(
     )
     if args.confidence != 0.8:
         command += f' --confidence {args.confidence}'
+    if args.template_match_threshold != 0.82:
+        command += f' --template-match-threshold {args.template_match_threshold}'
+    if args.disable_template_matching:
+        command += ' --disable-template-matching'
     if args.baseline_report is not None:
         command += f' --baseline-report {args.baseline_report}'
         command += ' --fail-unless-improved'
@@ -679,6 +715,9 @@ change that improves OCR action capture.
 
 Constraints:
 - Prefer changing `src/game_driver/image_analyzer.py`.
+- If OCR missed an LLM-captured action with a bbox, prefer learning a cropped
+  template image under `artifacts/auto-play/games/<game>/images/` and then
+  matching that template before asking the LLM again.
 - Do not edit saved turn ground truth, strategy memory, or LLM YAML to improve
   the score.
 - Keep the output format of `extract_text_locations` compatible with existing callers.
@@ -754,6 +793,17 @@ def parse_args() -> argparse.Namespace:
         help='OCR confidence threshold used when regenerating.',
     )
     parser.add_argument(
+        '--template-match-threshold',
+        type=float,
+        default=0.82,
+        help='Minimum confidence for learned image-template action matches.',
+    )
+    parser.add_argument(
+        '--disable-template-matching',
+        action='store_true',
+        help='Regenerate using direct OCR only, ignoring per-game template images.',
+    )
+    parser.add_argument(
         '--label-threshold',
         type=float,
         default=0.68,
@@ -791,6 +841,8 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     if not 0.0 <= args.confidence <= 1.0:
         parser.error('--confidence must be between 0.0 and 1.0')
+    if not 0.0 <= args.template_match_threshold <= 1.0:
+        parser.error('--template-match-threshold must be between 0.0 and 1.0')
     if not 0.0 <= args.label_threshold <= 1.0:
         parser.error('--label-threshold must be between 0.0 and 1.0')
     if args.coord_tolerance < 0.0:

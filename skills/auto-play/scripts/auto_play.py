@@ -62,6 +62,8 @@ class ButtonCandidate:
     source: str = 'ocr'
     reason: str = ''
     score: float = 0.0
+    bbox: tuple[float, float, float, float] | None = None
+    template_path: str = ''
 
 
 @dataclass(frozen=True)
@@ -106,6 +108,11 @@ def slugify(value: str) -> str:
     return slug or 'default-game'
 
 
+def template_stem_for_label(value: str) -> str:
+    stem = re.sub(r'[^\w\u4e00-\u9fff]+', '-', value.strip().lower()).strip('-_')
+    return stem or 'action'
+
+
 def normalize_label(value: str) -> str:
     return re.sub(r'\s+', ' ', value.strip().lower())
 
@@ -121,6 +128,18 @@ def memory_path_for(game: str) -> Path:
     strategy_dir = local_root() / 'strategy'
     strategy_dir.mkdir(parents=True, exist_ok=True)
     return strategy_dir / f'{slugify(game)}.md'
+
+
+def game_root_for(game: str) -> Path:
+    path = local_root() / 'games' / slugify(game)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def template_images_dir_for(game: str) -> Path:
+    path = game_root_for(game) / 'images'
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def turns_root(args: argparse.Namespace) -> Path:
@@ -484,7 +503,13 @@ def load_image(args: argparse.Namespace) -> tuple[Image.Image, dict[str, Any]]:
     return decode_mcp_screen(result)
 
 
-def analyze_buttons(image: Image.Image, confidence: float) -> list[ButtonCandidate]:
+def analyze_buttons(
+    image: Image.Image,
+    *,
+    confidence: float,
+    game: str,
+    template_match_threshold: float,
+) -> list[ButtonCandidate]:
     root = repo_root()
     src_dir = root / 'src'
     if str(src_dir) not in sys.path:
@@ -492,7 +517,10 @@ def analyze_buttons(image: Image.Image, confidence: float) -> list[ButtonCandida
 
     from game_driver.image_analyzer import create_analyzer
 
-    analyzer = create_analyzer()
+    analyzer = create_analyzer(
+        template_dirs=[template_images_dir_for(game)],
+        template_match_threshold=template_match_threshold,
+    )
     locations = analyzer.extract_text_locations(image, confidence_threshold=confidence)
     buttons = []
     for item in locations:
@@ -506,10 +534,44 @@ def analyze_buttons(image: Image.Image, confidence: float) -> list[ButtonCandida
                 y=float(item.get('y', 0.0)),
                 confidence=float(item.get('confidence', 0.0)),
                 clickability=float(item.get('clickability', 0.0)),
-                source='ocr',
+                source=str(item.get('source') or 'ocr'),
+                template_path=str(item.get('template_path') or ''),
+                bbox=parse_normalized_bbox(item),
             )
         )
     return buttons
+
+
+def parse_normalized_bbox(
+    item: dict[str, Any],
+) -> tuple[float, float, float, float] | None:
+    bbox = item.get('bbox') or item.get('bounding_box') or item.get('box')
+    values: tuple[Any, Any, Any, Any] | None = None
+    if isinstance(bbox, dict):
+        if all(key in bbox for key in ('x1', 'y1', 'x2', 'y2')):
+            values = (bbox['x1'], bbox['y1'], bbox['x2'], bbox['y2'])
+        elif all(key in bbox for key in ('left', 'top', 'right', 'bottom')):
+            values = (bbox['left'], bbox['top'], bbox['right'], bbox['bottom'])
+        elif all(key in bbox for key in ('x', 'y', 'width', 'height')):
+            x = float(bbox['x'])
+            y = float(bbox['y'])
+            values = (x, y, x + float(bbox['width']), y + float(bbox['height']))
+    elif isinstance(bbox, (list, tuple)) and len(bbox) == 4:
+        values = (bbox[0], bbox[1], bbox[2], bbox[3])
+
+    if values is None:
+        return None
+
+    try:
+        x1, y1, x2, y2 = (float(value) for value in values)
+    except (TypeError, ValueError):
+        return None
+
+    x1, x2 = sorted((max(0.0, min(1.0, x1)), max(0.0, min(1.0, x2))))
+    y1, y2 = sorted((max(0.0, min(1.0, y1)), max(0.0, min(1.0, y2))))
+    if x2 - x1 < 0.01 or y2 - y1 < 0.01:
+        return None
+    return x1, y1, x2, y2
 
 
 def load_llm_buttons(path: Path | None) -> list[ButtonCandidate]:
@@ -537,6 +599,7 @@ def load_llm_buttons(path: Path | None) -> list[ButtonCandidate]:
                 clickability=float(item.get('clickability', 0.8)),
                 source='llm',
                 reason=str(item.get('reason', '')).strip(),
+                bbox=parse_normalized_bbox(item),
             )
         )
     return buttons
@@ -550,6 +613,101 @@ def stage_llm_result(source: Path | None, target: Path) -> Path | None:
     if source.resolve() != target.resolve():
         target.write_text(source.read_text())
     return target
+
+
+def candidate_captured_by_non_llm(
+    candidate: ButtonCandidate,
+    buttons: list[ButtonCandidate],
+    *,
+    coord_tolerance: float = 0.06,
+) -> bool:
+    candidate_label = normalize_label(candidate.label)
+    for button in buttons:
+        if button.source == 'llm':
+            continue
+        label_match = normalize_label(button.label) == candidate_label
+        coord_match = (
+            ((button.x - candidate.x) ** 2 + (button.y - candidate.y) ** 2) ** 0.5
+        ) <= coord_tolerance
+        if label_match or coord_match:
+            return True
+    return False
+
+
+def crop_from_bbox(
+    image: Image.Image,
+    bbox: tuple[float, float, float, float],
+    *,
+    padding: float = 0.01,
+) -> Image.Image | None:
+    x1, y1, x2, y2 = bbox
+    x1 = max(0.0, x1 - padding)
+    y1 = max(0.0, y1 - padding)
+    x2 = min(1.0, x2 + padding)
+    y2 = min(1.0, y2 + padding)
+    left = int(x1 * image.width)
+    top = int(y1 * image.height)
+    right = int(x2 * image.width)
+    bottom = int(y2 * image.height)
+    if right - left < 4 or bottom - top < 4:
+        return None
+    return image.crop((left, top, right, bottom))
+
+
+def unique_template_path(directory: Path, label: str, turn_name: str) -> Path:
+    stem = f'{template_stem_for_label(label)}--{turn_name}'
+    path = directory / f'{stem}.png'
+    suffix = 2
+    while path.exists():
+        path = directory / f'{stem}-{suffix:02d}.png'
+        suffix += 1
+    return path
+
+
+def learn_templates_from_llm(
+    *,
+    game: str,
+    image: Image.Image,
+    llm_buttons: list[ButtonCandidate],
+    non_llm_buttons: list[ButtonCandidate],
+    turn_name: str,
+) -> list[dict[str, Any]]:
+    learned = []
+    images_dir = template_images_dir_for(game)
+    for button in llm_buttons:
+        if candidate_captured_by_non_llm(button, non_llm_buttons):
+            continue
+        if button.bbox is None:
+            learned.append(
+                {
+                    'label': button.label,
+                    'status': 'skipped',
+                    'reason': 'LLM button did not include bbox.',
+                }
+            )
+            continue
+        crop = crop_from_bbox(image, button.bbox)
+        if crop is None:
+            learned.append(
+                {
+                    'label': button.label,
+                    'status': 'skipped',
+                    'reason': 'bbox was too small after normalization.',
+                    'bbox': button_to_data(button).get('bbox'),
+                }
+            )
+            continue
+        path = unique_template_path(images_dir, button.label, turn_name)
+        crop.save(path)
+        learned.append(
+            {
+                'label': button.label,
+                'status': 'saved',
+                'path': str(path),
+                'bbox': button_to_data(button).get('bbox'),
+            }
+        )
+    return learned
 
 
 def merge_buttons(buttons: list[ButtonCandidate]) -> list[ButtonCandidate]:
@@ -574,6 +732,16 @@ def button_to_data(button: ButtonCandidate) -> dict[str, Any]:
     }
     if button.reason:
         data['reason'] = button.reason
+    if button.bbox:
+        x1, y1, x2, y2 = button.bbox
+        data['bbox'] = {
+            'x1': round(x1, 6),
+            'y1': round(y1, 6),
+            'x2': round(x2, 6),
+            'y2': round(y2, 6),
+        }
+    if button.template_path:
+        data['template_path'] = button.template_path
     return data
 
 
@@ -601,7 +769,9 @@ def write_ocr_yaml(
     metadata: dict[str, Any],
     strategy_path: Path,
     ocr_buttons: list[ButtonCandidate],
+    template_buttons: list[ButtonCandidate],
     llm_buttons: list[ButtonCandidate],
+    learned_templates: list[dict[str, Any]],
     buttons: list[ButtonCandidate],
     decision: Decision,
     verification: StateVerification | None = None,
@@ -620,7 +790,9 @@ def write_ocr_yaml(
             'path': str(strategy_path),
         },
         'ocr_buttons': [button_to_data(button) for button in ocr_buttons],
+        'template_buttons': [button_to_data(button) for button in template_buttons],
         'llm_buttons': [button_to_data(button) for button in llm_buttons],
+        'learned_templates': learned_templates,
         'ranked_buttons': [button_to_data(button) for button in buttons],
         'decision': {
             'status': decision.status,
@@ -671,6 +843,7 @@ def write_metadata_yaml(
     clicked: ButtonCandidate | None,
     verification: StateVerification | None,
     llm_used: bool,
+    learned_templates: list[dict[str, Any]],
 ) -> None:
     last_screenshot = (
         artifact_paths['last_screen'].name
@@ -695,6 +868,7 @@ def write_metadata_yaml(
             if artifact_paths['llm'].exists()
             else None,
             'last_screenshot_after_action': last_screenshot,
+            'template_images_dir': str(template_images_dir_for(game)),
         },
         'strategy': {
             'path': str(strategy_path),
@@ -711,6 +885,7 @@ def write_metadata_yaml(
             'strategy_change_recommendation': strategy_change_recommendation(
                 clicked, verification
             ),
+            'templates_learned': learned_templates,
             'last_screenshot_after_action': last_screenshot,
         },
     }
@@ -751,6 +926,8 @@ def score_buttons(
                 source=button.source,
                 reason=button.reason,
                 score=score,
+                bbox=button.bbox,
+                template_path=button.template_path,
             )
         )
     return sorted(scored, key=lambda item: item.score, reverse=True)
@@ -952,10 +1129,17 @@ buttons:
   - label: button/action label
     x: 0.5
     y: 0.5
+    bbox:
+      x1: 0.42
+      y1: 0.46
+      x2: 0.58
+      y2: 0.54
     confidence: 0.8
     reason: why this is clickable and what it likely does
 
 Do not include Markdown in the response YAML.
+For each button, include a tight normalized bbox around the actionable visual
+area or button. Include enough border for image-template matching later.
 
 ## Why LLM Vision Is Needed
 {decision.reason}
@@ -979,6 +1163,7 @@ def render_report(
     clicked: ButtonCandidate | None,
     verification: StateVerification | None,
     llm_prompt: str | None,
+    learned_templates: list[dict[str, Any]],
 ) -> str:
     lines = ['# Auto Play Observation', '']
     lines.append(f'- Game: {args.game}')
@@ -996,6 +1181,7 @@ def render_report(
     lines.append(f'- LLM YAML: {artifact_paths["llm"]} (optional)')
     lines.append(f'- Metadata YAML: {artifact_paths["metadata"]}')
     lines.append(f'- Strategy memory: {memory_path}')
+    lines.append(f'- Template images: {template_images_dir_for(args.game)}')
     lines.append(f'- Decision status: `{decision.status}`')
     lines.append(f'- Decision reason: {decision.reason}')
     lines.append('')
@@ -1061,31 +1247,46 @@ def render_report(
                     'new strategy.'
                 )
         lines.append('')
-    elif decision.status == 'needs_llm':
-        lines.extend(['## Next Step', ''])
-        lines.append(f'- Send `{artifact_paths["screen"]}` to the LLM.')
-        lines.append(f'- Save the returned YAML to `{artifact_paths["llm"]}`.')
-        lines.append(f'- Rerun with `--llm-result {artifact_paths["llm"]}`.')
-        if llm_prompt:
-            lines.extend(['', '## LLM Prompt', '', '```text', llm_prompt, '```'])
+    if learned_templates:
+        lines.extend(['## Learned Templates', ''])
+        for item in learned_templates:
+            label = markdown_escape(str(item.get('label') or 'unknown'))
+            status = markdown_escape(str(item.get('status') or 'unknown'))
+            path = item.get('path')
+            if path:
+                lines.append(f'- **{label}**: `{status}` at `{path}`')
+            else:
+                reason = markdown_escape(str(item.get('reason') or ''))
+                lines.append(f'- **{label}**: `{status}` {reason}')
         lines.append('')
-    elif decision.status == 'needs_user_choice':
-        lines.extend(['## Next Step', ''])
-        lines.append('- Ask the user to choose one of these options and explain why:')
-        for button in decision.choices:
+    if not clicked:
+        if decision.status == 'needs_llm':
+            lines.extend(['## Next Step', ''])
+            lines.append(f'- Send `{artifact_paths["screen"]}` to the LLM.')
+            lines.append(f'- Save the returned YAML to `{artifact_paths["llm"]}`.')
+            lines.append(f'- Rerun with `--llm-result {artifact_paths["llm"]}`.')
+            if llm_prompt:
+                lines.extend(['', '## LLM Prompt', '', '```text', llm_prompt, '```'])
+            lines.append('')
+        elif decision.status == 'needs_user_choice':
+            lines.extend(['## Next Step', ''])
             lines.append(
-                f'  - **{button.label}** at `{button.x:.4f}, {button.y:.4f}` '
-                f'(source `{button.source}`, score `{button.score:.3f}`)'
+                '- Ask the user to choose one of these options and explain why:'
             )
-        lines.append(
-            '- Remember the answer with `--remember-choice <label> '
-            '--choice-reason <reason>` so it becomes strategy.'
-        )
-        lines.append('')
-    else:
-        lines.extend(['## Action', ''])
-        lines.append('- Inspect-only. No click was performed.')
-        lines.append('')
+            for button in decision.choices:
+                lines.append(
+                    f'  - **{button.label}** at `{button.x:.4f}, {button.y:.4f}` '
+                    f'(source `{button.source}`, score `{button.score:.3f}`)'
+                )
+            lines.append(
+                '- Remember the answer with `--remember-choice <label> '
+                '--choice-reason <reason>` so it becomes strategy.'
+            )
+            lines.append('')
+        else:
+            lines.extend(['## Action', ''])
+            lines.append('- Inspect-only. No click was performed.')
+            lines.append('')
     return '\n'.join(lines)
 
 
@@ -1103,6 +1304,12 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=0.8,
         help='OCR confidence threshold for button text.',
+    )
+    parser.add_argument(
+        '--template-match-threshold',
+        type=float,
+        default=0.82,
+        help='Minimum confidence for per-game image-template action matches.',
     )
     parser.add_argument(
         '--click-recommended',
@@ -1215,6 +1422,8 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     if not 0.0 <= args.state_similarity_threshold <= 1.0:
         parser.error('--state-similarity-threshold must be between 0.0 and 1.0')
+    if not 0.0 <= args.template_match_threshold <= 1.0:
+        parser.error('--template-match-threshold must be between 0.0 and 1.0')
     if args.state_change_retries < 1:
         parser.error('--state-change-retries must be at least 1')
     if args.state_change_interval < 0.0:
@@ -1242,9 +1451,40 @@ def run_turn(args: argparse.Namespace) -> TurnResult:
     memory = load_memory(args.game)
     strategy_text = load_strategy_text(args.game)
     llm_result_path = stage_llm_result(args.llm_result, artifact_paths['llm'])
-    ocr_buttons = analyze_buttons(image, args.confidence)
+    detected_buttons = analyze_buttons(
+        image,
+        confidence=args.confidence,
+        game=args.game,
+        template_match_threshold=args.template_match_threshold,
+    )
+    ocr_buttons = [button for button in detected_buttons if button.source != 'template']
+    template_buttons = [
+        button for button in detected_buttons if button.source == 'template'
+    ]
     llm_buttons = load_llm_buttons(llm_result_path)
-    buttons = score_buttons(merge_buttons([*ocr_buttons, *llm_buttons]), memory)
+    learned_templates = learn_templates_from_llm(
+        game=args.game,
+        image=image,
+        llm_buttons=llm_buttons,
+        non_llm_buttons=[*ocr_buttons, *template_buttons],
+        turn_name=artifact_paths['turn_dir'].name,
+    )
+    if any(item.get('status') == 'saved' for item in learned_templates):
+        detected_buttons = analyze_buttons(
+            image,
+            confidence=args.confidence,
+            game=args.game,
+            template_match_threshold=args.template_match_threshold,
+        )
+        ocr_buttons = [
+            button for button in detected_buttons if button.source != 'template'
+        ]
+        template_buttons = [
+            button for button in detected_buttons if button.source == 'template'
+        ]
+    buttons = score_buttons(
+        merge_buttons([*ocr_buttons, *template_buttons, *llm_buttons]), memory
+    )
     decision = decide_next_move(
         buttons,
         min_action_score=args.min_action_score,
@@ -1285,7 +1525,9 @@ def run_turn(args: argparse.Namespace) -> TurnResult:
         metadata=metadata,
         strategy_path=memory_path,
         ocr_buttons=ocr_buttons,
+        template_buttons=template_buttons,
         llm_buttons=llm_buttons,
+        learned_templates=learned_templates,
         buttons=buttons,
         decision=decision,
         verification=verification,
@@ -1302,6 +1544,7 @@ def run_turn(args: argparse.Namespace) -> TurnResult:
         clicked=clicked,
         verification=verification,
         llm_used=bool(llm_buttons),
+        learned_templates=learned_templates,
     )
 
     report = render_report(
@@ -1315,6 +1558,7 @@ def run_turn(args: argparse.Namespace) -> TurnResult:
         clicked,
         verification,
         llm_prompt,
+        learned_templates,
     )
     print(report)
     return TurnResult(decision=decision, verification=verification)

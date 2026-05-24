@@ -1,6 +1,8 @@
 import re
 from abc import ABC, abstractmethod
+from pathlib import Path
 
+import cv2
 import numpy as np
 from paddleocr import PaddleOCR
 from PIL import ImageDraw
@@ -70,7 +72,11 @@ class ImageAnalyzer(ABC):
 
 
 class PaddleOCRAnalyzer(ImageAnalyzer):
-    def __init__(self):
+    def __init__(
+        self,
+        template_dirs: list[str | Path] | None = None,
+        template_match_threshold: float = 0.82,
+    ):
         self.reader = PaddleOCR(
             lang='en',
             use_doc_orientation_classify=False,
@@ -84,6 +90,8 @@ class PaddleOCRAnalyzer(ImageAnalyzer):
             re.compile(r'^[+\-]?\d+[./:]\d+$'),
             re.compile(r'^season\s*\d+', re.I),
         ]
+        self.template_dirs = [Path(path) for path in template_dirs or []]
+        self.template_match_threshold = template_match_threshold
 
     def _bbox_slice(self, img_array, x_coords, y_coords):
         h, w = img_array.shape[:2]
@@ -120,84 +128,73 @@ class PaddleOCRAnalyzer(ImageAnalyzer):
         score = (1.8 * contrast) + (1.2 * saturation) + (0.2 * brightness)
         return score
 
-    def _normalized_crop(self, img_array, x, y, half_width, half_height):
-        h, w = img_array.shape[:2]
-        center_x = x * w
-        center_y = y * h
-        return self._bbox_slice(
-            img_array,
-            [center_x - (half_width * w), center_x + (half_width * w)],
-            [center_y - (half_height * h), center_y + (half_height * h)],
-        )
-
     @staticmethod
-    def _is_near_existing_result(results, x, y, min_dist=0.055):
-        return any(
-            abs(item['x'] - x) <= min_dist and abs(item['y'] - y) <= min_dist
-            for item in results
-        )
+    def _template_label(path):
+        label = path.stem.split('--', 1)[0]
+        return label.replace('-', ' ').strip()
 
-    def _visual_action_hints(self, img_array, width, height, results):
-        if height <= width:
+    def _template_paths(self):
+        for directory in self.template_dirs:
+            if not directory.exists():
+                continue
+            yield from sorted(directory.glob('*.png'))
+
+    def _template_locations(self, img_array, width, height):
+        if not self.template_dirs:
             return []
 
-        hotspots = [
-            ('Adventure', 0.500, 0.925, 0.18, 0.045),
-            ('Dismiss Reward', 0.500, 0.925, 0.18, 0.045),
-            ('Next Room', 0.500, 0.925, 0.18, 0.045),
-            ('Enter Adventure', 0.500, 0.817, 0.18, 0.045),
-            ('Resume Adventure', 0.500, 0.548, 0.20, 0.050),
-            ('Pick Up Weapon', 0.500, 0.616, 0.18, 0.050),
-            ('Take Treasure', 0.500, 0.618, 0.18, 0.050),
-            ('Confirm', 0.735, 0.698, 0.14, 0.055),
-            ('Confirm Selected Card', 0.735, 0.698, 0.14, 0.055),
-            ('Merge Weapon', 0.762, 0.838, 0.14, 0.050),
-            ('Merge Card', 0.762, 0.838, 0.14, 0.050),
-            ('Battle Focus', 0.770, 0.432, 0.16, 0.085),
-            ('Next Room', 0.492, 0.586, 0.07, 0.045),
-            ('Map Left Arrow', 0.108, 0.708, 0.08, 0.055),
-            ('Chest', 0.276, 0.646, 0.11, 0.075),
-            ('Professional Backpack', 0.500, 0.715, 0.12, 0.080),
-            ('Normal Sword', 0.728, 0.646, 0.11, 0.075),
-            ('Scroll Room', 0.805, 0.641, 0.12, 0.080),
-            ('Scroll Room', 0.806, 0.666, 0.12, 0.080),
-            ('Move Right', 0.850, 0.265, 0.12, 0.080),
-            ('Obtained Loot', 0.887, 0.526, 0.10, 0.065),
-            ('visual bottom action', 0.500, 0.925, 0.18, 0.045),
-            ('visual primary button', 0.500, 0.817, 0.18, 0.045),
-            ('visual middle button', 0.500, 0.548, 0.20, 0.050),
-            ('visual card action', 0.500, 0.616, 0.18, 0.050),
-            ('visual card confirm', 0.735, 0.698, 0.14, 0.055),
-            ('visual upgrade action', 0.762, 0.838, 0.14, 0.050),
-            ('visual right card', 0.770, 0.432, 0.16, 0.085),
-            ('visual map connector', 0.492, 0.586, 0.07, 0.045),
-            ('visual map left arrow', 0.108, 0.708, 0.08, 0.055),
-            ('visual left room', 0.276, 0.646, 0.11, 0.075),
-            ('visual center room', 0.500, 0.715, 0.12, 0.080),
-            ('visual right room', 0.728, 0.646, 0.11, 0.075),
-            ('visual upper right room', 0.805, 0.641, 0.12, 0.080),
-            ('visual lower right room', 0.806, 0.666, 0.12, 0.080),
-            ('visual right path', 0.850, 0.265, 0.12, 0.080),
-            ('visual loot button', 0.887, 0.526, 0.10, 0.065),
-        ]
+        if img_array.ndim == 2:
+            screenshot = img_array
+        else:
+            screenshot = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
 
-        hints = []
-        for label, x, y, half_width, half_height in hotspots:
-            if self._is_near_existing_result(results, x, y):
+        locations = []
+        for template_path in self._template_paths():
+            template = cv2.imread(str(template_path), cv2.IMREAD_GRAYSCALE)
+            if template is None:
                 continue
-            crop = self._normalized_crop(img_array, x, y, half_width, half_height)
-            clickability = self._visual_clickability_score(crop)
-            hints.append(
+
+            template_height, template_width = template.shape[:2]
+            if (
+                template_width < 4
+                or template_height < 4
+                or template_width > width
+                or template_height > height
+            ):
+                continue
+
+            matches = cv2.matchTemplate(
+                screenshot,
+                template,
+                cv2.TM_CCOEFF_NORMED,
+            )
+            _, confidence, _, top_left = cv2.minMaxLoc(matches)
+            if confidence < self.template_match_threshold:
+                continue
+
+            x1, y1 = top_left
+            x2 = x1 + template_width
+            y2 = y1 + template_height
+            crop = self._bbox_slice(img_array, [x1, x2], [y1, y2])
+            locations.append(
                 {
-                    'text': label,
-                    'x': x,
-                    'y': y,
-                    'confidence': 0.62,
-                    'char_size': (width * half_width * height * half_height) / 6,
-                    'clickability': max(0.20, clickability),
+                    'text': self._template_label(template_path),
+                    'x': (x1 + (template_width / 2)) / width,
+                    'y': (y1 + (template_height / 2)) / height,
+                    'bbox': {
+                        'x1': x1 / width,
+                        'y1': y1 / height,
+                        'x2': x2 / width,
+                        'y2': y2 / height,
+                    },
+                    'confidence': float(confidence),
+                    'char_size': float(template_width * template_height),
+                    'clickability': self._visual_clickability_score(crop),
+                    'source': 'template',
+                    'template_path': str(template_path),
                 }
             )
-        return hints
+        return locations
 
     def _looks_like_noise_text(self, text):
         norm = text.strip().lower()
@@ -237,54 +234,58 @@ class PaddleOCRAnalyzer(ImageAnalyzer):
 
         results = []
 
-        # PaddleOCR returns empty list if no text detected
-        if not results_raw or not results_raw[0]:
-            return results
+        if results_raw and results_raw[0]:
+            ocr_result = results_raw[0]
+            bboxes = ocr_result['dt_polys']
+            texts = ocr_result['rec_texts']
+            confidences = ocr_result['rec_scores']
 
-        ocr_result = results_raw[0]
-        bboxes = ocr_result['dt_polys']
-        texts = ocr_result['rec_texts']
-        confidences = ocr_result['rec_scores']
+            for bbox, text, confidence in zip(bboxes, texts, confidences):
+                if confidence <= confidence_threshold:
+                    continue
 
-        for bbox, text, confidence in zip(bboxes, texts, confidences):
-            if confidence <= confidence_threshold:
-                continue
+                if self._looks_like_noise_text(text):
+                    continue
 
-            if self._looks_like_noise_text(text):
-                continue
+                # Calculate center from bounding box
+                # bbox format: [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+                x_coords, y_coords = zip(*bbox)
+                center_x = float(sum(x_coords) / len(x_coords))
+                center_y = float(sum(y_coords) / len(y_coords))
 
-            # Calculate center from bounding box
-            # bbox format: [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
-            x_coords, y_coords = zip(*bbox)
-            center_x = float(sum(x_coords) / len(x_coords))
-            center_y = float(sum(y_coords) / len(y_coords))
+                crop = self._bbox_slice(img_array, x_coords, y_coords)
+                clickability = self._visual_clickability_score(crop)
 
-            crop = self._bbox_slice(img_array, x_coords, y_coords)
-            clickability = self._visual_clickability_score(crop)
+                # Filter likely disabled / greyed-out text.
+                if clickability < 0.10:
+                    continue
 
-            # Filter likely disabled / greyed-out text.
-            if clickability < 0.10:
-                continue
+                # Calculate character size for sorting
+                bbox_width = float(max(x_coords) - min(x_coords))
+                bbox_height = float(max(y_coords) - min(y_coords))
+                bbox_area = bbox_width * bbox_height
+                char_count = len(text.strip())
+                char_size = bbox_area / char_count if char_count > 0 else 0.0
 
-            # Calculate character size for sorting
-            bbox_width = float(max(x_coords) - min(x_coords))
-            bbox_height = float(max(y_coords) - min(y_coords))
-            bbox_area = bbox_width * bbox_height
-            char_count = len(text.strip())
-            char_size = bbox_area / char_count if char_count > 0 else 0.0
+                results.append(
+                    {
+                        'text': text,
+                        'x': center_x / width,
+                        'y': center_y / height,
+                        'bbox': {
+                            'x1': float(min(x_coords)) / width,
+                            'y1': float(min(y_coords)) / height,
+                            'x2': float(max(x_coords)) / width,
+                            'y2': float(max(y_coords)) / height,
+                        },
+                        'confidence': float(confidence),
+                        'char_size': char_size,
+                        'clickability': clickability,
+                        'source': 'ocr',
+                    }
+                )
 
-            results.append(
-                {
-                    'text': text,
-                    'x': center_x / width,
-                    'y': center_y / height,
-                    'confidence': float(confidence),
-                    'char_size': char_size,
-                    'clickability': clickability,
-                }
-            )
-
-        results.extend(self._visual_action_hints(img_array, width, height, results))
+        results.extend(self._template_locations(img_array, width, height))
 
         # Sort with clickable-looking candidates first.
         results.sort(
@@ -294,11 +295,17 @@ class PaddleOCRAnalyzer(ImageAnalyzer):
 
         # Remove internal-only fields from final results
         for result in results:
-            del result['char_size']
+            result.pop('char_size', None)
 
         # Remove near-duplicate OCR hits that often happen on stylized UI text.
         return self._dedupe_similar_locations(results)
 
 
-def create_analyzer():
-    return PaddleOCRAnalyzer()
+def create_analyzer(
+    template_dirs: list[str | Path] | None = None,
+    template_match_threshold: float = 0.82,
+):
+    return PaddleOCRAnalyzer(
+        template_dirs=template_dirs,
+        template_match_threshold=template_match_threshold,
+    )
