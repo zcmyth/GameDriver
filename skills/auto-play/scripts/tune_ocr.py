@@ -52,8 +52,22 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
+def skill_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
 def local_root() -> Path:
-    return repo_root() / 'artifacts' / 'auto-play'
+    return skill_root()
+
+
+def games_root() -> Path:
+    return local_root() / 'games'
+
+
+def ensure_script_imports() -> None:
+    scripts_dir = Path(__file__).resolve().parent
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
 
 
 def slugify(value: str) -> str:
@@ -62,7 +76,7 @@ def slugify(value: str) -> str:
 
 
 def game_root_for(game: str) -> Path:
-    return local_root() / 'games' / slugify(game)
+    return games_root() / slugify(game)
 
 
 def template_images_dir_for(game: str) -> Path:
@@ -226,10 +240,9 @@ def buttons_from_saved_ocr(payload: dict[str, Any]) -> list[Button]:
 
 
 def create_analyzer(args: argparse.Namespace):
-    src_dir = repo_root() / 'src'
-    if str(src_dir) not in sys.path:
-        sys.path.insert(0, str(src_dir))
-    from game_driver.image_analyzer import create_analyzer as create
+    ensure_script_imports()
+
+    from image_analyzer import create_analyzer as create
 
     template_dirs = []
     if not args.disable_template_matching:
@@ -622,7 +635,7 @@ def build_llm_code_change_prompt(
     run_dir: Path,
 ) -> str:
     command = (
-        'uv run python skills/auto-play/scripts/tune_ocr.py '
+        'uv --directory skills/auto-play run python scripts/tune_ocr.py '
         f'--game {args.game} --mode regenerate'
     )
     if args.confidence != 0.8:
@@ -714,9 +727,9 @@ Please inspect the screenshots listed in `{summary_path}` and make a small code
 change that improves OCR action capture.
 
 Constraints:
-- Prefer changing `src/game_driver/image_analyzer.py`.
+- Prefer changing `skills/auto-play/scripts/image_analyzer.py`.
 - If OCR missed an LLM-captured action with a bbox, prefer learning a cropped
-  template image under `artifacts/auto-play/games/<game>/images/` and then
+  template image under `skills/auto-play/games/<game>/images/` and then
   matching that template before asking the LLM again.
 - Do not edit saved turn ground truth, strategy memory, or LLM YAML to improve
   the score.
@@ -760,14 +773,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         '--turns-dir',
         type=Path,
-        default=local_root() / 'turns',
-        help='Saved auto-play turns directory.',
+        help='Saved auto-play turns directory. Defaults to the game turns folder.',
     )
     parser.add_argument(
         '--output-dir',
         type=Path,
-        default=local_root() / 'ocr-tuning',
-        help='Directory for tuning reports and generated OCR YAML.',
+        help='Directory for tuning reports. Defaults to the game OCR tuning folder.',
     )
     parser.add_argument('--run-name', help='Optional output run folder name.')
     parser.add_argument(
@@ -855,6 +866,10 @@ def parse_args() -> argparse.Namespace:
         parser.error(f'--baseline-report does not exist: {args.baseline_report}')
     if args.fail_unless_improved and args.baseline_report is None:
         parser.error('--fail-unless-improved requires --baseline-report')
+    if args.turns_dir is None:
+        args.turns_dir = game_root_for(args.game) / 'turns'
+    if args.output_dir is None:
+        args.output_dir = game_root_for(args.game) / 'ocr-tuning'
     return args
 
 

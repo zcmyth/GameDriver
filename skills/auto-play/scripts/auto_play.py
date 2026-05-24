@@ -100,7 +100,17 @@ def skill_root() -> Path:
 
 
 def local_root() -> Path:
-    return repo_root() / 'artifacts' / 'auto-play'
+    return skill_root()
+
+
+def games_root() -> Path:
+    return local_root() / 'games'
+
+
+def ensure_script_imports() -> None:
+    scripts_dir = Path(__file__).resolve().parent
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
 
 
 def slugify(value: str) -> str:
@@ -125,13 +135,11 @@ def looks_like_noise_label(value: str) -> bool:
 
 
 def memory_path_for(game: str) -> Path:
-    strategy_dir = local_root() / 'strategy'
-    strategy_dir.mkdir(parents=True, exist_ok=True)
-    return strategy_dir / f'{slugify(game)}.md'
+    return game_root_for(game) / 'strategy.md'
 
 
 def game_root_for(game: str) -> Path:
-    path = local_root() / 'games' / slugify(game)
+    path = games_root() / slugify(game)
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -143,7 +151,7 @@ def template_images_dir_for(game: str) -> Path:
 
 
 def turns_root(args: argparse.Namespace) -> Path:
-    return args.turns_dir or args.fixed_dir or (local_root() / 'turns')
+    return args.turns_dir or args.fixed_dir or (game_root_for(args.game) / 'turns')
 
 
 def prune_turn_folders(root: Path, keep: int) -> None:
@@ -510,12 +518,9 @@ def analyze_buttons(
     game: str,
     template_match_threshold: float,
 ) -> list[ButtonCandidate]:
-    root = repo_root()
-    src_dir = root / 'src'
-    if str(src_dir) not in sys.path:
-        sys.path.insert(0, str(src_dir))
+    ensure_script_imports()
 
-    from game_driver.image_analyzer import create_analyzer
+    from image_analyzer import create_analyzer
 
     analyzer = create_analyzer(
         template_dirs=[template_images_dir_for(game)],
@@ -1072,12 +1077,9 @@ def verify_state_changed_after_click(
 def save_overlay(
     image: Image.Image, buttons: list[ButtonCandidate], path: Path
 ) -> None:
-    root = repo_root()
-    src_dir = root / 'src'
-    if str(src_dir) not in sys.path:
-        sys.path.insert(0, str(src_dir))
+    ensure_script_imports()
 
-    from game_driver.image_analyzer import draw_text_locations
+    from image_analyzer import draw_text_locations
 
     locations = [
         {

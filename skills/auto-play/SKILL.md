@@ -10,18 +10,20 @@ description: Android game auto-play assistance using the repo's Android MCP scre
 Use `scripts/auto_play.py` from the repo root to run one auto-play turn through the Android MCP project at `projects/android_access_mcp`.
 
 ```bash
-uv run python skills/auto-play/scripts/auto_play.py --game survivor --width 360 --height 800
+uv --directory skills/auto-play run python scripts/auto_play.py --game survivor --width 360 --height 800
 ```
 
 Each turn:
 
-- create a new turn folder under `artifacts/auto-play/turns/<turn-id>/`;
+- create a new turn folder under `skills/auto-play/games/<game>/turns/<turn-id>/`;
 - prune old turn folders so only the latest 100 are kept by default;
 - write the screenshot to that turn folder as `screenshot.png`;
-- read that file with the repo's OCR/clickability logic from `game_driver.image_analyzer`;
+- read that file with the skill-local OCR/clickability logic from
+  `scripts/image_analyzer.py`;
 - run a second detection pass using per-game cropped action templates from
-  `artifacts/auto-play/games/<game>/images/`;
-- read the per-game Markdown strategy at `artifacts/auto-play/strategy/<game>.md`;
+  `skills/auto-play/games/<game>/images/`;
+- read the per-game Markdown strategy at
+  `skills/auto-play/games/<game>/strategy.md`;
 - write OCR, ranked buttons, and decision data to `ocr.yaml` in the turn folder;
 - decide the next move from strategy plus OCR candidates;
 - if OCR and template matching are insufficient, send the screenshot to the LLM
@@ -52,7 +54,7 @@ Do not click by default. Add `--click-recommended` only when the user explicitly
 When the report says `Decision status: needs_llm`, open the reported turn folder's `screenshot.png` and use the report's LLM prompt. The LLM response must be YAML with `objects` and `buttons`, including normalized clickable positions. Save that YAML to that same turn folder as `llm.yaml`, then rerun:
 
 ```bash
-uv run python skills/auto-play/scripts/auto_play.py --game <game-name> --width 360 --height 800 --llm-result artifacts/auto-play/turns/<turn-id>/llm.yaml
+uv --directory skills/auto-play run python scripts/auto_play.py --game <game-name> --width 360 --height 800 --llm-result games/<game-name>/turns/<turn-id>/llm.yaml
 ```
 
 After the LLM result is merged with OCR, run the strategy decision again. Close choices are tried in score order by default; if a tried action does not change the screen, the strategy records it as ineffective and a later turn can try the next choice.
@@ -76,8 +78,8 @@ buttons:
 
 ## Image Template Learning
 
-Template images are local runtime artifacts, not strategy memory. They live under
-`artifacts/auto-play/games/<game>/images/`.
+Template images are durable game knowledge and should be committed with the
+repo. They live under `skills/auto-play/games/<game>/images/`.
 
 When an LLM button has a bbox and no non-LLM candidate already captured the same
 label or nearby coordinate, `auto_play.py` crops that bbox from the turn
@@ -88,7 +90,8 @@ Future turns run two visual passes before asking the LLM:
 - image-template matching against every `.png` in the game's `images/` folder.
 
 This lets the skill remember what recurring action buttons look like without
-putting transient screen state into the Markdown strategy.
+putting transient screen state into the Markdown strategy. Commit useful learned
+images; do not commit per-turn screenshots, OCR YAML, or tuning output.
 
 ## OCR Tuning Action
 
@@ -97,19 +100,21 @@ Use `scripts/tune_ocr.py` when the user wants to improve the "Ready actions capt
 Run the tuning action from the repo root:
 
 ```bash
-uv run python skills/auto-play/scripts/tune_ocr.py --game tower --mode regenerate
+uv --directory skills/auto-play run python scripts/tune_ocr.py --game tower --mode regenerate
 ```
 
 Each iteration:
 
-- read saved turns from `artifacts/auto-play/turns/`;
+- read saved turns from `skills/auto-play/games/<game>/turns/`;
 - identify actionable `ready` turns with a recommended or clicked action;
 - regenerate OCR and learned template matches with the current
-  `src/game_driver/image_analyzer.py`;
-- write generated per-turn OCR YAML under `artifacts/auto-play/ocr-tuning/<run>/turns/<turn>/ocr.yaml`;
+  `skills/auto-play/scripts/image_analyzer.py`;
+- write generated per-turn OCR YAML under
+  `skills/auto-play/games/<game>/ocr-tuning/<run>/turns/<turn>/ocr.yaml`;
 - compute `ready_actions_captured_by_ocr / ready_actions`;
 - summarize missing action clusters and symptoms in `summary.md`;
-- use the printed "LLM Code Change Prompt" to make a small code change, usually in `src/game_driver/image_analyzer.py`;
+- use the printed "LLM Code Change Prompt" to make a small code change, usually
+  in `skills/auto-play/scripts/image_analyzer.py`;
 - rerun the same command and compare the score.
 
 ### Guarded Commit Loop
@@ -119,23 +124,23 @@ When tuning OCR code, only commit a change that increases `ready_actions_capture
 1. Create a baseline report before editing OCR code:
 
 ```bash
-uv run python skills/auto-play/scripts/tune_ocr.py --game tower --mode regenerate --run-name baseline
+uv --directory skills/auto-play run python scripts/tune_ocr.py --game tower --mode regenerate --run-name baseline
 ```
 
-2. Make one small OCR code change, usually in `src/game_driver/image_analyzer.py`.
+2. Make one small OCR code change, usually in `skills/auto-play/scripts/image_analyzer.py`.
 3. Rerun with the baseline comparison:
 
 ```bash
-uv run python skills/auto-play/scripts/tune_ocr.py --game tower --mode regenerate --baseline-report artifacts/auto-play/ocr-tuning/baseline/report.yaml --fail-unless-improved
+uv --directory skills/auto-play run python scripts/tune_ocr.py --game tower --mode regenerate --baseline-report games/tower/ocr-tuning/baseline/report.yaml --fail-unless-improved
 ```
 
-4. If the verdict is `improved`, create or switch to a `codex/` branch, stage only the OCR source/test/docs changes, and commit. Do not commit `artifacts/auto-play/ocr-tuning/` output.
+4. If the verdict is `improved`, create or switch to a `codex/` branch, stage only the OCR source/test/docs changes plus useful `strategy.md` and `images/` updates, and commit. Do not commit `skills/auto-play/games/<game>/ocr-tuning/` output.
 5. If the verdict is `unchanged` or `regressed`, do not commit. Drop only the dirty OCR files changed during this attempt after checking the diff belongs to this attempt, summarize what the failed attempt taught, and try a different code change from the clean baseline.
 
 Do not edit saved turn ground truth, strategy memory, or LLM YAML to improve the score. The tuning loop should improve OCR code, then prove the improvement by regenerated OCR YAML containing the needed action button by label or by near coordinate. For a fast non-OCR baseline over existing YAML, run:
 
 ```bash
-uv run python skills/auto-play/scripts/tune_ocr.py --game tower --mode saved
+uv --directory skills/auto-play run python scripts/tune_ocr.py --game tower --mode saved
 ```
 
 ## Strategy Memory
@@ -149,12 +154,18 @@ Treat the Markdown memory file as the game strategy, not the current run state. 
 - decision rules;
 - strategic notes learned from the user or from deliberate review.
 
-Store strategy in the local ignored runtime folder, not under the skill folder: `artifacts/auto-play/strategy/<game>.md`. Do not store transient screen state, current counters, recent screenshots, button sightings, coordinates, or run history as memory. Before acting on a game, read its strategy file if it exists. Prefer buttons listed in "Preferred buttons" and avoid labels listed in "Avoid buttons". Users or agents may edit these Markdown lists directly to teach the skill how to play a game.
+Store strategy in the skill-local game folder and commit it:
+`skills/auto-play/games/<game>/strategy.md`. Do not store transient screen
+state, current counters, recent screenshots, button sightings, coordinates, or
+run history as strategy memory. Before acting on a game, read its strategy file
+if it exists. Prefer buttons listed in "Preferred buttons" and avoid labels
+listed in "Avoid buttons". Users or agents may edit these Markdown lists
+directly to teach the skill how to play a game.
 
 When the user chooses between multiple options, remember the durable strategic lesson, not the one-time screen state:
 
 ```bash
-uv run python skills/auto-play/scripts/auto_play.py --game <game-name> --remember-choice "<label>" --choice-reason "<why this should be preferred>"
+uv --directory skills/auto-play run python scripts/auto_play.py --game <game-name> --remember-choice "<label>" --choice-reason "<why this should be preferred>"
 ```
 
 ## Commands
@@ -162,16 +173,16 @@ uv run python skills/auto-play/scripts/auto_play.py --game <game-name> --remembe
 Inspect only:
 
 ```bash
-uv run python skills/auto-play/scripts/auto_play.py --game <game-name> --width 360 --height 800
+uv --directory skills/auto-play run python scripts/auto_play.py --game <game-name> --width 360 --height 800
 ```
 
 Inspect and save extra debug images:
 
 ```bash
-uv run python skills/auto-play/scripts/auto_play.py --game <game-name> --width 360 --height 800 --save-screen /tmp/screen.png --save-overlay /tmp/buttons.png
+uv --directory skills/auto-play run python scripts/auto_play.py --game <game-name> --width 360 --height 800 --save-screen /tmp/screen.png --save-overlay /tmp/buttons.png
 ```
 
-Turn folders are kept in `artifacts/auto-play/turns/`. The script keeps the newest 100 folders by default; change that with `--turn-history-limit`.
+Turn folders are kept in `skills/auto-play/games/<game>/turns/`. The script keeps the newest 100 folders by default; change that with `--turn-history-limit`.
 
 - `screenshot.png`
 - `ocr.yaml`
@@ -182,17 +193,17 @@ Turn folders are kept in `artifacts/auto-play/turns/`. The script keeps the newe
 Click the recommended button after analysis:
 
 ```bash
-uv run python skills/auto-play/scripts/auto_play.py --game <game-name> --width 360 --height 800 --click-recommended
+uv --directory skills/auto-play run python scripts/auto_play.py --game <game-name> --width 360 --height 800 --click-recommended
 ```
 
 Click with a custom state-change threshold:
 
 ```bash
-uv run python skills/auto-play/scripts/auto_play.py --game <game-name> --width 360 --height 800 --click-recommended --state-similarity-threshold 0.990 --state-change-retries 3
+uv --directory skills/auto-play run python scripts/auto_play.py --game <game-name> --width 360 --height 800 --click-recommended --state-similarity-threshold 0.990 --state-change-retries 3
 ```
 
 Loop clear turns, stopping when LLM or user input is needed:
 
 ```bash
-uv run python skills/auto-play/scripts/auto_play.py --game <game-name> --width 360 --height 800 --click-recommended --loop --max-turns 20
+uv --directory skills/auto-play run python scripts/auto_play.py --game <game-name> --width 360 --height 800 --click-recommended --loop --max-turns 20
 ```

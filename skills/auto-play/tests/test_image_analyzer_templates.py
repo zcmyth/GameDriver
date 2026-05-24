@@ -1,6 +1,22 @@
+import importlib.util
+import sys
+from pathlib import Path
+
 from PIL import Image, ImageDraw
 
-from game_driver.image_analyzer import PaddleOCRAnalyzer
+
+def load_image_analyzer_module():
+    path = Path(__file__).resolve().parents[1] / 'scripts'
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
+    spec = importlib.util.spec_from_file_location(
+        'image_analyzer_script', path / 'image_analyzer.py'
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 class EmptyReader:
@@ -8,8 +24,8 @@ class EmptyReader:
         return []
 
 
-def build_analyzer(template_dir, threshold=0.8):
-    analyzer = object.__new__(PaddleOCRAnalyzer)
+def build_analyzer(analyzer_cls, template_dir, threshold=0.8):
+    analyzer = object.__new__(analyzer_cls)
     analyzer.reader = EmptyReader()
     analyzer.noise_text_patterns = []
     analyzer.template_dirs = [template_dir]
@@ -18,6 +34,8 @@ def build_analyzer(template_dir, threshold=0.8):
 
 
 def test_template_images_are_reported_as_clickable_locations(tmp_path):
+    image_analyzer = load_image_analyzer_module()
+
     screenshot = Image.new('RGB', (120, 120), color='black')
     draw = ImageDraw.Draw(screenshot)
     draw.rectangle((30, 50, 70, 86), fill='white')
@@ -28,7 +46,7 @@ def test_template_images_are_reported_as_clickable_locations(tmp_path):
     templates_dir.mkdir()
     screenshot.crop((30, 50, 70, 86)).save(templates_dir / 'fight-button--fixture.png')
 
-    analyzer = build_analyzer(templates_dir)
+    analyzer = build_analyzer(image_analyzer.PaddleOCRAnalyzer, templates_dir)
 
     locations = analyzer.extract_text_locations(screenshot, confidence_threshold=0.9)
 

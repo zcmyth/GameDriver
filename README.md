@@ -5,36 +5,18 @@
 brew install android-platform-tools
 ```
 
-## Interaction Modes
-The engine supports two explicit click modes:
+## Current Layout
+The root `src/game_driver` package has been removed. Active Android automation
+work now lives in independent repo-local projects and skills:
 
-1. **Text-based (OCR)**
-   - `click_text(...)`
-   - `click_first_text(...)`
-   - `click_target("Start")` (compat route)
-   - `click_target(TargetSpec.text("Start"))` (preferred explicit route)
+- `projects/android_access_mcp`: MCP server for Android screenshots and clicks.
+- `skills/auto-play`: self-contained auto-play skill with its own Python
+  project, OCR analyzer, game strategy memory, and learned action images.
 
-2. **Image-based (template matching)**
-   - `register_template(name, path)`
-   - `register_templates_from_folder(path)`
-   - `click_target("image:Start")` (compat route)
-   - `click_target(TargetSpec.image("Start"))` (preferred explicit route)
-
-Notes:
-- `TargetSpec` is the v1 canonical script-facing target descriptor.
-- `image:` prefix remains supported and fail-fast (no fallback to text).
-- Folder-loaded template names can include source screen size using: `Name__1920x1080.png`.
-  The matcher scales templates to current screen size before matching.
-
-## Multi-game structure
-- Core engine stays generic in `src/game_driver/` (`game_engine.py`, `device.py`, analyzers).
-- Game-specific logic lives in `src/game_driver/games/` as strategy classes.
-- Each game script in `scripts/` should only wire `GameEngine + Strategy + run_game_loop`.
-
-To add a new game:
-1. Create `src/game_driver/games/<game>.py` with a `<Game>Strategy.step(engine, i)` method.
-2. Add a launcher script `scripts/<game>.py`.
-3. Reuse the same generic engine and runner.
+Durable auto-play knowledge is stored per game under
+`skills/auto-play/games/<game>/strategy.md` and
+`skills/auto-play/games/<game>/images/`. Runtime turn history and OCR tuning
+output stay local and ignored.
 
 ## Interactive Notebook
 
@@ -56,15 +38,17 @@ Canonical policy/config docs live in:
 
 ## Development
 ```bash
-# Run survivor automation
-uv run python scripts/survivor.py
+# Run auto-play skill tests
+uv --directory skills/auto-play run pytest tests
 
-# Run tests
-uv run pytest
+# Check auto-play skill lint and formatting
+uv --directory skills/auto-play run ruff check .
+uv --directory skills/auto-play run ruff format --check .
 
-# Add dependencies
-uv add requests
+# Run Android MCP tests
+uv --directory projects/android_access_mcp run --extra dev pytest tests
 
-# Remove dependencies
-uv remove requests
+# Check Android MCP lint and formatting
+uv run ruff check projects/android_access_mcp
+uv run ruff format --check projects/android_access_mcp
 ```

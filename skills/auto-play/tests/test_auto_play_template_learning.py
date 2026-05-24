@@ -6,7 +6,9 @@ from PIL import Image, ImageDraw
 
 
 def load_auto_play_module():
-    path = Path(__file__).resolve().parents[1] / 'skills' / 'auto-play' / 'scripts'
+    path = Path(__file__).resolve().parents[1] / 'scripts'
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
     spec = importlib.util.spec_from_file_location(
         'auto_play_script', path / 'auto_play.py'
     )
