@@ -242,14 +242,21 @@ def buttons_from_saved_ocr(payload: dict[str, Any]) -> list[Button]:
 def create_analyzer(args: argparse.Namespace):
     ensure_script_imports()
 
+    from auto_play import load_automation_config, load_ocr_config
     from image_analyzer import create_analyzer as create
 
+    automation_config = load_automation_config(args.game)
     template_dirs = []
     if not args.disable_template_matching:
         template_dirs.append(template_images_dir_for(args.game))
     return create(
         template_dirs=template_dirs,
         template_match_threshold=args.template_match_threshold,
+        template_configs=load_ocr_config(args.game),
+        noise_text_patterns=list(automation_config.noise_pattern_text),
+        navigation_template_labels=list(automation_config.navigation_labels),
+        navigation_template_keywords=list(automation_config.navigation_keywords),
+        navigation_template_glyphs=list(automation_config.navigation_glyphs),
     )
 
 
@@ -335,6 +342,15 @@ def discover_turns(turns_dir: Path, game: str | None) -> list[Path]:
     return [path for path in turn_dirs if path.name.endswith(suffix)]
 
 
+def selected_turn_dirs(args: argparse.Namespace) -> list[Path]:
+    turn_dirs = discover_turns(args.turns_dir, args.game)
+    if args.recent_turns:
+        turn_dirs = turn_dirs[-args.recent_turns :]
+    if args.max_turns:
+        turn_dirs = turn_dirs[: args.max_turns]
+    return turn_dirs
+
+
 def score_turns(args: argparse.Namespace, run_dir: Path) -> list[TurnScore]:
     statuses = {'ready'}
     if args.include_needs_user_choice:
@@ -343,10 +359,7 @@ def score_turns(args: argparse.Namespace, run_dir: Path) -> list[TurnScore]:
     analyzer = create_analyzer(args) if args.mode == 'regenerate' else None
     turn_scores: list[TurnScore] = []
 
-    for index, turn_dir in enumerate(discover_turns(args.turns_dir, args.game)):
-        if args.max_turns and index >= args.max_turns:
-            break
-
+    for turn_dir in selected_turn_dirs(args):
         ocr_path = turn_dir / 'ocr.yaml'
         metadata_path = turn_dir / 'metadata.yaml'
         screenshot = turn_dir / 'screenshot.png'
@@ -465,6 +478,7 @@ def build_report(
         'mode': args.mode,
         'game': args.game,
         'turns_dir': str(args.turns_dir),
+        'recent_turns': args.recent_turns,
         'template_images_dir': str(template_images_dir_for(args.game)),
         'template_matching_enabled': not args.disable_template_matching,
         'template_match_threshold': args.template_match_threshold,
@@ -490,6 +504,29 @@ def build_report(
 
     markdown = render_markdown_summary(report, args=args, run_dir=run_dir)
     return report, markdown
+
+
+def refresh_game_info(game: str | None) -> Path | None:
+    if not game:
+        return None
+    ensure_script_imports()
+
+    from auto_play import write_game_info_markdown
+
+    return write_game_info_markdown(game)
+
+
+def refresh_game_info_for_report(
+    report: dict[str, Any],
+    *,
+    args: argparse.Namespace,
+) -> Path | None:
+    path = refresh_game_info(args.game)
+    if path is None:
+        return None
+    report['game_info_path'] = str(path)
+    report['game_info_refreshed'] = True
+    return path
 
 
 def add_baseline_comparison(
@@ -558,14 +595,19 @@ def render_markdown_summary(
         '',
         f'- Game: `{args.game or "all"}`',
         f'- Mode: `{args.mode}`',
+        f'- Turn window: `last {args.recent_turns}`'
+        if args.recent_turns
+        else '- Turn window: `all`',
         f'- Ready actions captured from OCR: `{captured} / {ready}` '
         f'(`{capture_rate:.1f}%`)',
         f'- Missing ready actions: `{missing}`',
         f'- Template images: `{report["template_image_count"]}` in '
         f'`{report["template_images_dir"]}`',
         f'- Generated per-turn OCR YAML: `{run_dir / "turns"}`',
-        '',
     ]
+    if game_info_path := report.get('game_info_path'):
+        lines.append(f'- Game info refreshed: `{game_info_path}`')
+    lines.append('')
     if comparison := report.get('comparison'):
         baseline_captured = comparison['baseline_ready_actions_captured_by_ocr']
         baseline_ready = comparison['baseline_ready_actions']
@@ -644,6 +686,8 @@ def build_llm_code_change_prompt(
         command += f' --template-match-threshold {args.template_match_threshold}'
     if args.disable_template_matching:
         command += ' --disable-template-matching'
+    if args.recent_turns:
+        command += f' --recent-turns {args.recent_turns}'
     if args.baseline_report is not None:
         command += f' --baseline-report {args.baseline_report}'
         command += ' --fail-unless-improved'
@@ -838,6 +882,12 @@ def parse_args() -> argparse.Namespace:
         help='Limit evaluated turn directories for smoke tests. 0 means all.',
     )
     parser.add_argument(
+        '--recent-turns',
+        type=int,
+        default=0,
+        help='Evaluate only the most recent N turn directories. 0 means all.',
+    )
+    parser.add_argument(
         '--example-labels',
         type=int,
         default=8,
@@ -860,6 +910,8 @@ def parse_args() -> argparse.Namespace:
         parser.error('--coord-tolerance must be non-negative')
     if args.max_turns < 0:
         parser.error('--max-turns must be non-negative')
+    if args.recent_turns < 0:
+        parser.error('--recent-turns must be non-negative')
     if args.minimum_captured_delta < 1:
         parser.error('--minimum-captured-delta must be at least 1')
     if args.baseline_report is not None and not args.baseline_report.exists():
@@ -877,7 +929,13 @@ def main() -> int:
     args = parse_args()
     run_dir = create_run_dir(args)
     turn_scores = score_turns(args, run_dir)
-    report, markdown = build_report(args=args, run_dir=run_dir, turn_scores=turn_scores)
+    report, _ = build_report(
+        args=args,
+        run_dir=run_dir,
+        turn_scores=turn_scores,
+    )
+    refresh_game_info_for_report(report, args=args)
+    markdown = render_markdown_summary(report, args=args, run_dir=run_dir)
 
     (run_dir / 'report.yaml').write_text(
         yaml.safe_dump(

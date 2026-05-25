@@ -8,6 +8,7 @@ state/
 # Per-game durable knowledge is committed:
 # - games/<game>/strategy.md
 # - games/<game>/images/**
+# - games/<game>/ocr_config.yaml
 #
 # Per-game run history and tuning output stays local.
 games/*/turns/
@@ -15,3 +16,4 @@ games/*/ocr-tuning/
 games/*/current/
 games/*/smoke-turns/
 games/*/*.yaml
+!games/*/ocr_config.yaml

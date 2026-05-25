@@ -1,0 +1,15 @@
+templates:
+  battle active skill:
+    match_threshold: 0.40
+    search_roi:
+      - 0.70
+      - 0.65
+      - 1.00
+      - 0.92
+  close:
+    match_threshold: 0.88
+    search_roi:
+      - 0.80
+      - 0.15
+      - 1.00
+      - 0.35
