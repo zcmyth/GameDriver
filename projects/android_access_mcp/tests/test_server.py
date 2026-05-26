@@ -2,7 +2,12 @@ import json
 
 from PIL import Image
 
-from android_access_mcp.device import ClickResult, ScreenResult, SwipeResult
+from android_access_mcp.device import (
+    ClickResult,
+    KeyEventResult,
+    ScreenResult,
+    SwipeResult,
+)
 from android_access_mcp.server import AndroidAccessMcpServer
 
 
@@ -12,6 +17,7 @@ class FakeDevice:
     def __init__(self):
         self.clicks = []
         self.swipes = []
+        self.backs = 0
 
     def current_screen(self, max_height=None, width=None, height=None):
         image = Image.new('RGB', (1, 1), color='black')
@@ -54,6 +60,10 @@ class FakeDevice:
             duration_ms=int(duration_ms),
         )
 
+    def back(self):
+        self.backs += 1
+        return KeyEventResult(key='BACK', output='')
+
 
 def test_initialize_and_tools_list_do_not_connect_to_device():
     created = {'count': 0}
@@ -76,6 +86,7 @@ def test_initialize_and_tools_list_do_not_connect_to_device():
         'current_screen',
         'click',
         'swipe',
+        'back',
     ]
     assert created['count'] == 0
 
@@ -159,3 +170,23 @@ def test_current_screen_tool_returns_text_and_image_content():
         'data': 'fakepng',
         'mimeType': 'image/png',
     }
+
+
+def test_back_tool_returns_keyevent_payload():
+    fake_device = FakeDevice()
+    server = AndroidAccessMcpServer(device_factory=lambda: fake_device)
+
+    response = server.handle_message(
+        {
+            'jsonrpc': '2.0',
+            'id': 1,
+            'method': 'tools/call',
+            'params': {'name': 'back', 'arguments': {}},
+        }
+    )
+
+    content = response['result']['content']
+    payload = json.loads(content[0]['text'])
+    assert payload['key'] == 'BACK'
+    assert payload['serial'] == 'phone-1'
+    assert fake_device.backs == 1

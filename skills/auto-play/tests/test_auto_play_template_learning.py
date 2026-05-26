@@ -102,6 +102,18 @@ def test_turn_detection_overlays_are_saved(tmp_path):
     assert Image.open(artifact_paths['llm_overlay']).size == image.size
 
 
+def test_noisy_survivor_hud_labels_are_ignored():
+    auto_play = load_auto_play_module()
+
+    assert auto_play.looks_like_noise_label('4.778,77B7')
+    assert auto_play.looks_like_noise_label('06:2!')
+    assert auto_play.looks_like_noise_label('(5.06B')
+    assert auto_play.looks_like_noise_label('xK6224')
+    assert not auto_play.looks_like_noise_label('Drone')
+    assert not auto_play.looks_like_noise_label('Twinborn Type-B Drone')
+    assert not auto_play.looks_like_noise_label('1-tap buy')
+
+
 def test_turn_detection_overlays_skip_llm_when_no_llm_detections(tmp_path):
     auto_play = load_auto_play_module()
     image = Image.new('RGB', (120, 120), color='black')
@@ -838,6 +850,8 @@ def test_stat_delta_labels_are_not_action_candidates():
     assert auto_play.looks_like_noise_label('-5')
     assert auto_play.looks_like_noise_label('QQ')
     assert auto_play.looks_like_noise_label('QQ0')
+    assert auto_play.looks_like_noise_label('xx')
+    assert auto_play.looks_like_noise_label('XX')
     assert auto_play.looks_like_noise_label('BEA')
     assert auto_play.looks_like_noise_label('x1')
     assert auto_play.looks_like_noise_label('i2')
@@ -846,8 +860,12 @@ def test_stat_delta_labels_are_not_action_candidates():
     assert auto_play.looks_like_noise_label('50 >> 52')
     assert auto_play.looks_like_noise_label('>>')
     assert auto_play.looks_like_noise_label('@1943')
+    assert auto_play.looks_like_noise_label('123)')
     assert auto_play.looks_like_noise_label('1-1')
     assert auto_play.looks_like_noise_label('58-8M')
+    assert auto_play.looks_like_noise_label('-28M')
+    assert auto_play.looks_like_noise_label('6.72M-6.726.7')
+    assert auto_play.looks_like_noise_label('L-37B')
     assert auto_play.looks_like_noise_label('.5M')
     assert auto_play.looks_like_noise_label('.14BM')
     assert auto_play.looks_like_noise_label('72-5MEM')
@@ -1366,9 +1384,59 @@ def test_survivor_main_challenge_claimed_labels_belong_to_row_below_label():
         recent_actions=['Back from main challenge', 'Main Challenge'],
     )
 
-    assert [button.label for button in extras] == ['Third column unclaimed row']
-    assert extras[0].x == 0.83
-    assert extras[0].y == 0.90
+    assert [button.label for button in extras] == [
+        'Scroll main challenge to higher levels'
+    ]
+    assert extras[0].source == 'swipe'
+
+
+def test_survivor_main_challenge_scrolls_past_older_unclaimed_rewards():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'survivor')
+
+    extras = auto_play.configured_extra_candidates(
+        config,
+        [
+            auto_play.ButtonCandidate(
+                label='282.Wall of Entry',
+                x=0.5,
+                y=0.2838,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='283.Skirmish Within',
+                x=0.5,
+                y=0.4956,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='284.Maze Entrance',
+                x=0.5,
+                y=0.7181,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Claimed',
+                x=0.83,
+                y=0.8163,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+        ],
+        recent_actions=['Back from main challenge', 'Main Challenge'],
+    )
+
+    assert [button.label for button in extras] == [
+        'Scroll main challenge to higher levels'
+    ]
+    assert extras[0].source == 'swipe'
 
 
 def test_survivor_main_challenge_uses_rightmost_unclaimed_visible_cell():
@@ -1398,9 +1466,10 @@ def test_survivor_main_challenge_uses_rightmost_unclaimed_visible_cell():
         recent_actions=['Back from main challenge', 'Main Challenge'],
     )
 
-    assert [button.label for button in extras] == ['Third column unclaimed row']
-    assert extras[0].x == 0.5
-    assert extras[0].y == 0.90
+    assert [button.label for button in extras] == [
+        'Scroll main challenge to higher levels'
+    ]
+    assert extras[0].source == 'swipe'
 
 
 def test_survivor_reward_overlay_closes_before_grid_candidates():
@@ -1439,6 +1508,49 @@ def test_survivor_reward_overlay_closes_before_grid_candidates():
     )
 
     assert extras == []
+
+
+def test_survivor_reward_skip_beats_active_skill_template():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'survivor')
+
+    scored = auto_play.score_buttons(
+        [
+            auto_play.ButtonCandidate(
+                label='where to skip',
+                x=0.58,
+                y=0.74,
+                confidence=0.988,
+                clickability=1.625,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Lucky Train',
+                x=0.50,
+                y=0.27,
+                confidence=0.985,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='battle active skill',
+                x=0.87,
+                y=0.79,
+                confidence=0.401,
+                clickability=1.015,
+                source='template',
+            ),
+        ],
+        memory={
+            'preferred': ['Battle active skill'],
+            'avoid': [],
+            'ineffective': [],
+        },
+        automation_config=config,
+    )
+
+    assert scored[0].label == 'where to skip'
+    assert scored[-1].label == 'battle active skill'
 
 
 def test_survivor_main_challenge_scrolls_when_visible_cells_are_claimed():
@@ -1607,6 +1719,276 @@ def test_survivor_no_text_actual_battle_creates_active_skill_candidate():
     assert extras[0].y == 0.79
 
 
+def test_survivor_strategy_configures_repeated_active_skill_swipe():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'survivor')
+
+    spec = config.repeated_action_swipe_candidate
+
+    assert spec is not None
+    assert spec.trigger_label == 'battle active skill'
+    assert spec.min_count == 6
+    assert spec.label == 'Battle move toward boss'
+    assert spec.to_button().source == 'swipe'
+    assert spec.to_button().bbox == (0.22, 0.78, 0.22, 0.48)
+
+
+def test_survivor_repeated_active_skill_adds_movement_swipe():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'survivor')
+
+    extras = auto_play.configured_extra_candidates(
+        config,
+        [],
+        recent_actions=['Battle active skill'] * 6,
+    )
+
+    assert [button.label for button in extras] == [
+        'Battle move toward boss',
+        'Battle active skill',
+    ]
+    assert extras[0].source == 'swipe'
+    assert extras[0].bbox == (0.22, 0.78, 0.22, 0.48)
+
+
+def test_survivor_repeated_active_skill_swipe_does_not_interrupt_skill_choice():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'survivor')
+
+    extras = auto_play.configured_extra_candidates(
+        config,
+        [
+            auto_play.ButtonCandidate(
+                label='Skill Choice',
+                x=0.5,
+                y=0.23,
+                confidence=0.95,
+                clickability=0.2,
+            ),
+            auto_play.ButtonCandidate(
+                label='Select a skill to learn',
+                x=0.5,
+                y=0.72,
+                confidence=0.95,
+                clickability=0.2,
+            ),
+        ],
+        recent_actions=['Battle active skill'] * 6,
+    )
+
+    assert extras == []
+
+
+def test_survivor_repeated_active_skill_swipe_ignores_popup_with_stale_template():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'survivor')
+
+    extras = auto_play.configured_extra_candidates(
+        config,
+        [
+            auto_play.ButtonCandidate(
+                label='battle active skill',
+                x=0.86,
+                y=0.79,
+                confidence=0.45,
+                clickability=1.0,
+                source='template',
+            ),
+            auto_play.ButtonCandidate(
+                label='OK',
+                x=0.5,
+                y=0.59,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Revival',
+                x=0.5,
+                y=0.38,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+        ],
+        recent_actions=['Battle active skill'] * 6,
+    )
+
+    assert extras == []
+
+
+def test_survivor_safe_revival_popup_prefers_ok_over_stale_template():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'survivor')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='battle active skill',
+            x=0.86,
+            y=0.79,
+            confidence=0.66,
+            clickability=0.38,
+            source='template',
+        ),
+        auto_play.ButtonCandidate(
+            label='OK',
+            x=0.5,
+            y=0.59,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Revival',
+            x=0.5,
+            y=0.38,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label="Oops, you're nearly there!",
+            x=0.5,
+            y=0.55,
+            confidence=0.97,
+            clickability=1.7,
+            source='ocr',
+        ),
+    ]
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={
+            'preferred': ['Battle active skill'],
+            'avoid': [],
+            'ineffective': [],
+        },
+        automation_config=config,
+    )
+    decision = auto_play.decide_next_move(
+        scored,
+        min_action_score=0.95,
+        ambiguity_margin=0.2,
+        ask_on_ambiguous=False,
+        automation_config=config,
+    )
+
+    assert scored[0].label == 'OK'
+    assert decision.recommended.label == 'OK'
+
+
+def test_survivor_safe_revival_confirm_does_not_fire_for_ad_prompt():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'survivor')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='OK',
+            x=0.5,
+            y=0.59,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Revival',
+            x=0.5,
+            y=0.38,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Watch Ad',
+            x=0.5,
+            y=0.66,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        ),
+    ]
+
+    assert not auto_play.configured_safe_confirm_visible(config, buttons)
+
+
+def test_survivor_generic_item_inspection_skips_non_skill_choice_popup(tmp_path):
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'survivor')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='OK',
+            x=0.5,
+            y=0.59,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Revival',
+            x=0.5,
+            y=0.38,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='battle active skill',
+            x=0.86,
+            y=0.79,
+            confidence=0.45,
+            clickability=1.0,
+            source='template',
+        ),
+    ]
+
+    inspections, decision = auto_play.inspect_item_choices(
+        SimpleNamespace(game='survivor', image=None, click_recommended=True),
+        buttons=buttons,
+        memory={'fallback': [], 'avoid': [], 'ineffective': []},
+        artifact_paths={
+            'item_inspections': tmp_path / 'item_inspections.yaml',
+            'item_inspection_dir': tmp_path / 'item_inspections',
+        },
+        automation_config=config,
+    )
+
+    assert inspections == []
+    assert decision is None
+
+
+def test_survivor_game_info_filters_non_action_battle_labels():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'survivor')
+    entries = [
+        auto_play.GameInfoEntry(
+            label='battle active skill',
+            kind='skill',
+            description='Shuttle',
+            score=0.0,
+            reasons=['observed detail'],
+            sources=['item inspection'],
+            seen_count=1,
+            first_seen='turn-001',
+            last_seen='turn-001',
+            last_screenshot='screenshot.png',
+        ),
+        auto_play.GameInfoEntry(
+            label='Oil Bond',
+            kind='skill',
+            description='Gold gain +40%',
+            score=7.0,
+            reasons=['coin gain'],
+            sources=['item inspection'],
+            seen_count=1,
+            first_seen='turn-001',
+            last_seen='turn-001',
+            last_screenshot='screenshot.png',
+        ),
+    ]
+
+    filtered = auto_play.filter_game_info_entries_for_config(entries, config)
+
+    assert [entry.label for entry in filtered] == ['Oil Bond']
+
+
 def test_survivor_gray_disabled_button_is_filtered_without_active_skill_fallback():
     auto_play = load_auto_play_module()
     config = automation_config(auto_play, 'survivor')
@@ -1743,6 +2125,50 @@ def test_survivor_passive_battle_labels_fall_back_to_active_skill():
     assert [button.label for button in extras] == ['Battle active skill']
 
 
+def test_survivor_top_right_counter_noise_falls_back_to_active_skill():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'survivor')
+
+    assert auto_play.looks_like_noise_label('671N335M7', config)
+    assert auto_play.looks_like_noise_label('203M7 203N7 203M7', config)
+    assert auto_play.looks_like_noise_label('223 223N', config)
+    assert auto_play.looks_like_noise_label('589N 3.38B', config)
+
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='Kx3437',
+            x=0.9139,
+            y=0.0887,
+            confidence=0.85,
+            clickability=1.64,
+        ),
+        auto_play.ButtonCandidate(
+            label='*x4681',
+            x=0.9139,
+            y=0.0887,
+            confidence=0.84,
+            clickability=1.65,
+        ),
+        auto_play.ButtonCandidate(
+            label='B45B',
+            x=0.0653,
+            y=0.66,
+            confidence=0.98,
+            clickability=2.0,
+        ),
+    ]
+
+    filtered = [
+        button
+        for button in buttons
+        if not auto_play.looks_like_noise_label(button.label, config)
+    ]
+    extras = auto_play.configured_extra_candidates(config, filtered)
+
+    assert filtered == []
+    assert [button.label for button in extras] == ['Battle active skill']
+
+
 def test_survivor_top_left_battle_nameplates_fall_back_to_active_skill():
     auto_play = load_auto_play_module()
     config = automation_config(auto_play, 'survivor')
@@ -1769,6 +2195,33 @@ def test_survivor_top_left_battle_nameplates_fall_back_to_active_skill():
 
     assert filtered == []
     assert [button.label for button in extras] == ['Battle active skill']
+
+
+def test_survivor_top_left_battle_nameplate_does_not_hide_active_skill():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'survivor')
+
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='Divine Sage',
+            x=0.1208,
+            y=0.1938,
+            confidence=0.958,
+            clickability=1.678,
+        ),
+        auto_play.ButtonCandidate(
+            label='battle active skill',
+            x=0.86,
+            y=0.79,
+            confidence=0.58,
+            clickability=1.45,
+            source='template',
+        ),
+    ]
+
+    filtered = auto_play.filter_configured_non_action_buttons(config, buttons)
+
+    assert [button.label for button in filtered] == ['battle active skill']
 
 
 def test_survivor_skill_choice_keeps_passive_named_card_titles():
@@ -1927,8 +2380,13 @@ def test_survivor_strategy_prefers_always_preferred_skill_choices():
         'type-a drone',
         'type-b drone',
         'havoc',
+        'havo',
         'lavoc',
+        'lova havo',
+        'havoo',
+        'avoc',
         'starforge',
+        'starforg',
     )
 
     buttons = [
@@ -1990,7 +2448,7 @@ def test_survivor_strategy_prefers_always_preferred_skill_choices():
     )
     ranked = sorted(inspections, key=lambda item: item.score, reverse=True)
 
-    assert ranked[0].candidate.label == 'New Twinborn Type-A Drone'
+    assert ranked[0].candidate.label == 'Twinborn Type-A Drone'
     assert ranked[0].score > ranked[1].score
     assert ranked[0].reasons[0] == 'always preferred by strategy: drone'
 
@@ -2127,15 +2585,75 @@ items:
 
     assert '### item' not in knowledge
     assert 'Congratulations!' not in knowledge
-    assert knowledge.index('New Twinborn Type-A Drone') < knowledge.index('Oil Bond')
+    assert knowledge.index('Twinborn Type-A Drone') < knowledge.index('Oil Bond')
     assert knowledge.index('Havoc') < knowledge.index('Oil Bond')
     assert knowledge.index('Starforge') < knowledge.index('Oil Bond')
-    assert '| New Twinborn Type-A Drone | 100.00 |' in knowledge
-    assert '| Havoc | 104.00 |' in knowledge
-    assert '| Starforge | 104.00 |' in knowledge
+    assert '| Twinborn Type-A Drone | 100.00 |' in knowledge
+    assert '| Havoc | 106.00 |' in knowledge
+    assert '| Starforge | 106.00 |' in knowledge
+    assert 'New Twinborn Type-A Drone' not in knowledge
     assert 'always preferred by strategy: drone' in knowledge
     assert 'always preferred by strategy: havoc' in knowledge
     assert 'always preferred by strategy: starforge' in knowledge
+
+
+def test_survivor_game_info_strips_misread_new_badge_prefix(tmp_path, monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    write_game_strategy(tmp_path, 'survivor')
+
+    turn = tmp_path / 'games' / 'survivor' / 'turns' / 'turn-001'
+    turn.mkdir(parents=True)
+    (turn / 'item_inspections.yaml').write_text(
+        """
+items:
+  - candidate:
+      label: Ney Hi-Power Magnet
+    description: Item loot range
+    kind: skill
+    item_score: 0.0
+    reasons:
+      - no strong cue
+    screenshot: item_inspections/01-magnet.png
+"""
+    )
+
+    knowledge = auto_play.write_game_info_markdown('survivor').read_text()
+
+    assert '| Hi-Power Magnet | 4.00 |' in knowledge
+    assert 'Ney Hi-Power Magnet' not in knowledge
+
+
+def test_survivor_game_info_merges_bad_duplicate_item_names(tmp_path, monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    write_game_strategy(tmp_path, 'survivor')
+
+    turns = tmp_path / 'games' / 'survivor' / 'turns'
+    for index, label in enumerate(
+        ['Gold Pouch', 'Gold Pouch', 'Gold Pouch', 'ioldr'],
+        start=1,
+    ):
+        turn = turns / f'turn-{index:03d}'
+        turn.mkdir(parents=True)
+        (turn / 'item_inspections.yaml').write_text(
+            f"""
+items:
+  - candidate:
+      label: {label}
+    description: Obtain 50 Gold
+    kind: skill
+    item_score: 5.0
+    reasons:
+      - coin gain
+    screenshot: item_inspections/01-item.png
+"""
+        )
+
+    knowledge = auto_play.write_game_info_markdown('survivor').read_text()
+
+    assert '| Gold Pouch | 5.00 | 4 |' in knowledge
+    assert 'ioldr' not in knowledge
 
 
 def test_survivor_active_skill_verifies_main_battle_area():
@@ -2219,6 +2737,412 @@ def test_survivor_challenge_detail_does_not_reclick_grid_cell():
     assert extras == []
     assert decision.status == 'ready'
     assert decision.recommended.label == 'Start'
+
+
+def test_survivor_challenge_detail_prefers_start_over_bottom_nav_battle():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'survivor')
+
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='316.Battle of Past',
+            x=0.5014,
+            y=0.1981,
+            confidence=0.999,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Battle',
+            x=0.4958,
+            y=0.9825,
+            confidence=0.999,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Start',
+            x=0.5,
+            y=0.8069,
+            confidence=0.999,
+            clickability=2.0,
+            source='ocr',
+        ),
+    ]
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={
+            'preferred': ['Battle'],
+            'avoid': [],
+            'ineffective': [],
+        },
+        automation_config=config,
+    )
+    decision = auto_play.decide_next_move(
+        scored,
+        min_action_score=0.65,
+        ambiguity_margin=0.2,
+        ask_on_ambiguous=False,
+        fallback_labels=set(),
+        automation_config=config,
+    )
+
+    assert decision.status == 'ready'
+    assert decision.recommended.label == 'Start'
+
+
+def test_survivor_assist_pack_popup_dismisses_before_start_or_view():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'survivor')
+
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='320.Stargate Arrival',
+            x=0.495,
+            y=0.2,
+            confidence=0.999,
+            clickability=0.95,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Chapter 320 Assist',
+            x=0.714,
+            y=0.476,
+            confidence=0.989,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Assist Pack',
+            x=0.26,
+            y=0.642,
+            confidence=0.966,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='unlocked in Shop',
+            x=0.699,
+            y=0.523,
+            confidence=0.958,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='View',
+            x=0.743,
+            y=0.616,
+            confidence=0.999,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Start',
+            x=0.499,
+            y=0.806,
+            confidence=0.999,
+            clickability=0.9,
+            source='ocr',
+        ),
+    ]
+
+    extras = auto_play.configured_extra_candidates(config, buttons)
+    scored = auto_play.score_buttons(
+        [*buttons, *extras],
+        memory={
+            'preferred': ['Start', 'Battle'],
+            'avoid': [],
+            'ineffective': [],
+        },
+        automation_config=config,
+    )
+    decision = auto_play.decide_next_move(
+        scored,
+        min_action_score=0.65,
+        ambiguity_margin=0.2,
+        ask_on_ambiguous=False,
+        fallback_labels=set(),
+        automation_config=config,
+    )
+
+    assert [button.label for button in extras] == ['Dismiss assist pack popup']
+    assert decision.status == 'ready'
+    assert decision.recommended.label == 'Dismiss assist pack popup'
+
+
+def test_survivor_assist_pack_popup_uses_view_after_dismiss_fails():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'survivor')
+
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='Chapter 330 Assist',
+            x=0.714,
+            y=0.476,
+            confidence=0.989,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Part Assist Pack',
+            x=0.26,
+            y=0.642,
+            confidence=0.966,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Pack has been unlocked in Shop',
+            x=0.699,
+            y=0.523,
+            confidence=0.958,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='View',
+            x=0.743,
+            y=0.616,
+            confidence=0.999,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Start',
+            x=0.499,
+            y=0.806,
+            confidence=0.999,
+            clickability=0.9,
+            source='ocr',
+        ),
+    ]
+
+    extras = auto_play.configured_extra_candidates(config, buttons)
+    scored = auto_play.score_buttons(
+        [*buttons, *extras],
+        memory={
+            'preferred': ['Start', 'Battle'],
+            'avoid': [],
+            'ineffective': ['Dismiss assist pack popup'],
+        },
+        automation_config=config,
+    )
+    decision = auto_play.decide_next_move(
+        scored,
+        min_action_score=0.65,
+        ambiguity_margin=0.2,
+        ask_on_ambiguous=False,
+        fallback_labels=set(),
+        automation_config=config,
+    )
+
+    assert decision.status == 'ready'
+    assert decision.recommended.label == 'View'
+
+
+def test_survivor_shop_screen_uses_battle_tab_escape():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'survivor')
+
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='Limited Chapter Assist Pack',
+            x=0.5,
+            y=0.13,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Daily Shop',
+            x=0.5,
+            y=0.39,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Gems',
+            x=0.18,
+            y=0.47,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Tech Parts Crate',
+            x=0.61,
+            y=0.87,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+        ),
+    ]
+
+    extras = auto_play.configured_extra_candidates(config, buttons)
+    scored = auto_play.score_buttons(
+        [*buttons, *extras],
+        memory={
+            'preferred': ['Start', 'Battle'],
+            'avoid': [],
+            'ineffective': ['Gems', 'Tech Parts Crate'],
+        },
+        automation_config=config,
+    )
+    decision = auto_play.decide_next_move(
+        scored,
+        min_action_score=0.65,
+        ambiguity_margin=0.2,
+        ask_on_ambiguous=False,
+        fallback_labels=set(),
+        automation_config=config,
+    )
+
+    assert [button.label for button in extras] == ['Battle tab from shop']
+    assert decision.status == 'ready'
+    assert decision.recommended.label == 'Battle tab from shop'
+
+
+def test_survivor_weekly_goodies_claim_blocks_underlying_battle():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'survivor')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='Weekly Goodies',
+            x=0.5,
+            y=0.4,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Claim',
+            x=0.5,
+            y=0.6,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Battle',
+            x=0.47,
+            y=0.87,
+            confidence=1.0,
+            clickability=0.7,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Start',
+            x=0.5,
+            y=0.81,
+            confidence=1.0,
+            clickability=0.8,
+            source='ocr',
+        ),
+    ]
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={
+            'preferred': ['Start', 'Battle', 'Claim'],
+            'avoid': [],
+            'ineffective': [],
+        },
+        automation_config=config,
+    )
+    decision = auto_play.decide_next_move(
+        scored,
+        min_action_score=0.65,
+        ambiguity_margin=0.2,
+        ask_on_ambiguous=False,
+        fallback_labels=set(),
+        automation_config=config,
+    )
+
+    assert auto_play.weekly_goodies_popup_visible(buttons)
+    assert decision.status == 'ready'
+    assert decision.recommended.label == 'Claim'
+
+
+def test_blank_loading_screen_uses_wait_candidate():
+    auto_play = load_auto_play_module()
+
+    assert auto_play.is_mostly_blank_screen(Image.new('RGB', (360, 800), 'black'))
+    assert not auto_play.is_mostly_blank_screen(Image.new('RGB', (360, 800), 'white'))
+    assert auto_play.wait_for_loading_candidate().source == 'wait'
+
+
+def test_blank_loading_screen_ignores_bottom_gesture_bar():
+    auto_play = load_auto_play_module()
+    image = Image.new('RGB', (360, 800), 'black')
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((132, 786, 228, 790), radius=2, fill='white')
+
+    assert auto_play.is_mostly_blank_screen(image)
+
+
+def test_repeated_blank_wait_escalates_to_back_candidate():
+    auto_play = load_auto_play_module()
+
+    assert auto_play.repeated_blank_wait_detected(
+        [
+            'Wait for loading screen',
+            'Wait for loading screen',
+            'Wait for loading screen',
+        ]
+    )
+    assert auto_play.android_back_candidate('stuck').source == 'back'
+
+
+def test_back_candidate_uses_android_mcp_back_tool(monkeypatch):
+    auto_play = load_auto_play_module()
+    calls = []
+
+    class FakeMcpClient:
+        def __init__(self, command, timeout):
+            self.command = command
+            self.timeout = timeout
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def call_tool(self, name, arguments):
+            calls.append((name, arguments))
+
+    monkeypatch.setattr(auto_play, 'McpClient', FakeMcpClient)
+
+    args = SimpleNamespace(mcp_command='python -m android_access_mcp', timeout=3)
+    auto_play.click_button(args, auto_play.android_back_candidate('stuck'))
+
+    assert calls == [('back', {})]
+
+
+def test_google_play_purchase_sheet_is_back_context():
+    auto_play = load_auto_play_module()
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='Google Play',
+            x=0.15,
+            y=0.49,
+            confidence=0.98,
+            clickability=1.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='1-tap buy',
+            x=0.5,
+            y=0.94,
+            confidence=0.95,
+            clickability=1.8,
+            source='ocr',
+        ),
+    ]
+
+    assert auto_play.google_play_purchase_sheet_visible(buttons)
 
 
 def test_survivor_skill_choice_captures_game_info_and_selects_skill(
@@ -2465,6 +3389,86 @@ def test_survivor_no_change_active_skill_updates_rule_not_ineffective(
     ineffective = auto_play.extract_section(text, 'Ineffective Buttons')
     assert '- Battle active skill' not in ineffective
     assert 'keep treating it as an actual-battle fallback' in text
+
+
+def test_wait_candidate_no_change_is_not_learned_ineffective(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+
+    strategy = write_game_strategy(tmp_path, 'survivor')
+    wait = auto_play.ButtonCandidate(
+        label='Wait for loading screen',
+        x=0.5,
+        y=0.5,
+        confidence=1.0,
+        clickability=3.0,
+        source='wait',
+        reason='Mostly blank loading screen.',
+    )
+    verification = auto_play.StateVerification(
+        status='unchanged',
+        reason='Loading screen still blank.',
+        attempts=3,
+        threshold=0.995,
+        similarities=[1.0, 1.0, 1.0],
+        progress_threshold=0.985,
+        progress_similarities=[1.0, 1.0, 1.0],
+        progress_region='full',
+        strategy_updated=True,
+    )
+
+    changed = auto_play.append_no_change_learning('survivor', wait, verification)
+
+    text = strategy.read_text()
+    ineffective = auto_play.extract_section(text, 'Ineffective Buttons')
+    assert changed is False
+    assert '- Wait for loading screen' not in ineffective
+    assert (
+        auto_play.strategy_change_recommendation(
+            wait,
+            verification,
+            auto_play.load_automation_config('survivor'),
+        )
+        is None
+    )
+
+
+def test_android_lock_screen_uses_wait_candidate_not_system_text():
+    auto_play = load_auto_play_module()
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='Mon, May 25',
+            x=0.66,
+            y=0.11,
+            confidence=0.99,
+            clickability=1.7,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Charging is limited to protect...',
+            x=0.48,
+            y=0.25,
+            confidence=0.96,
+            clickability=1.7,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='91% - Done charging',
+            x=0.5,
+            y=0.94,
+            confidence=0.94,
+            clickability=1.5,
+            source='ocr',
+        ),
+    ]
+
+    assert auto_play.android_system_screen_visible(buttons)
+    candidate = auto_play.wait_for_android_unlock_candidate()
+    assert candidate.source == 'wait'
+    assert candidate.label == 'Wait for Android unlock'
 
 
 def test_fallback_arrow_loses_to_viable_strength_action():
@@ -3104,6 +4108,85 @@ def test_inspect_item_choices_selects_best_item_then_recommends_confirm(
     assert '| 1 | Royal Training |' in knowledge
     assert 'Permanent attack +1' in knowledge
     assert knowledge.index('Royal Training') < knowledge.index('Quick Spark')
+
+
+def test_result_screen_does_not_trigger_item_inspection(tmp_path, monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    write_game_strategy(tmp_path, 'survivor')
+
+    clicks: list[str] = []
+
+    def fake_click(_args, button):
+        clicks.append(button.label)
+
+    monkeypatch.setattr(auto_play, 'click_button', fake_click)
+
+    args = SimpleNamespace(
+        image=None,
+        click_recommended=True,
+        item_inspection_limit=4,
+        item_inspection_interval=0.0,
+        item_description_label_limit=12,
+        confidence=0.8,
+        game='survivor',
+        template_match_threshold=0.82,
+    )
+    turn_dir = tmp_path / 'turn'
+    artifact_paths = {
+        'item_inspections': turn_dir / 'item_inspections.yaml',
+        'item_inspection_dir': turn_dir / 'item_inspections',
+    }
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='Victory',
+            x=0.5,
+            y=0.23,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+            score=-0.2,
+        ),
+        auto_play.ButtonCandidate(
+            label='Best:05:00',
+            x=0.5,
+            y=0.39,
+            confidence=1.0,
+            clickability=1.9,
+            source='ocr',
+            score=1.8,
+        ),
+        auto_play.ButtonCandidate(
+            label='Chapter 314',
+            x=0.5,
+            y=0.36,
+            confidence=0.96,
+            clickability=1.5,
+            source='ocr',
+            score=1.6,
+        ),
+        auto_play.ButtonCandidate(
+            label='Confirm',
+            x=0.5,
+            y=0.81,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+            score=7.8,
+        ),
+    ]
+
+    inspections, decision = auto_play.inspect_item_choices(
+        args,
+        buttons=buttons,
+        memory={'fallback': [], 'avoid': [], 'ineffective': []},
+        artifact_paths=artifact_paths,
+    )
+
+    assert inspections == []
+    assert decision is None
+    assert clicks == []
+    assert not artifact_paths['item_inspections'].exists()
 
 
 def test_game_info_marks_card_like_choices_as_skills(tmp_path, monkeypatch):

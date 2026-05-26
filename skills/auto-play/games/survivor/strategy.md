@@ -9,8 +9,13 @@
 - Close
 - Drone
 - Havoc
+- Havo
 - lavoc
+- lova Havo
+- Havoo
+- avoc
 - Starforge
+- Starforg
 - Battle active skill
 - Battle
 - Fight
@@ -28,7 +33,6 @@
 - Upgrade
 - Weapon
 - Item
-- Skill
 - Last Icon
 - Last Challenge Icon
 - Third column unclaimed row
@@ -43,6 +47,10 @@
 - Watch Ad
 - Watch Ads
 - Advertisement
+- Google Play
+- 1-tap buy
+- Purchases are subject
+- Family payment method
 - Free With Ad
 - Free
 - Refresh
@@ -70,6 +78,33 @@
 - Cleared
 - Breeding Room
 - Incubation Room
+- Divine Fire Assault I
+- Nezha
+- COLLECT RESOURCES
+- Dismiss assist pack popup
+- Gems
+- Tech Parts Crate
+- Battle tab from shop
+- Skip
+- Revival
+- Zombies Incoming
+- Zombies Incoming!
+- Skill Choice
+- Select a skill to learn
+- Select a skill t
+- skill
+- Select
+- Select a
+- ielec
+- I to learn
+- skill to learr
+- skill to learn
+- a skill to learn
+- learn
+- elect
+- to learn
+- EVO:
+- vo
 
 ## Fallback Buttons
 - Back
@@ -81,9 +116,21 @@
 - When an **Announcement**, modal, or popup is visible and a real **Close**
   control is detected, close it before clicking underlying **Battle** /
   **Start** actions.
+- When **Weekly Goodies** is visible, click **Claim** before any underlying
+  **Battle** or **Start** controls.
+- When a **Chapter Assist Pack** popup blocks the chapter screen and tapping
+  outside has already failed, click **View** once to clear or route through the
+  shop unlock flow, then return to the chapter screen and continue battle.
+- When the shop opens from the assist pack flow, leave it via the bottom
+  **Battle** tab instead of clicking shop items.
+- If a Google Play purchase sheet appears, press Android Back immediately.
+  Never click **1-tap buy** or payment controls.
 - When a result screen shows **Victory**, **Congratulations!**, and **Confirm**,
   click **Confirm**. Do not click the title text or the battle active skill
   template on result screens.
+- When a **Revival** popup appears with a plain **OK** button and no ad/watch
+  wording, click **OK** before any underlying battle template. If ad/watch
+  wording is visible, do not use that revive route.
 - Do not click gray/greyed-out disabled buttons, even when OCR reads their text
   confidently.
 - Treat survivor as three main modes:
@@ -92,6 +139,9 @@
   - **Main Challenge**: use the grid/back/re-enter rules below to advance.
   - **Actual battle**: the character is strong enough; prioritize staying
     unblocked and choosing visible skill/item cards over rerolling or waiting.
+- If actual battle repeats only **battle active skill** while the timer/boss
+  state appears frozen, drag the movement joystick upward/toward the boss
+  before continuing active-skill taps.
 - If energy is sufficient, prefer **Steamroll** first, then **Battle** /
   **Fight** / **Start** actions. Do not treat **Start** as a preferred generic
   navigation action because **Regular Challenge** also exposes a **Start**
@@ -115,6 +165,9 @@
   back button and return to **Main Challenge** instead of clicking **Start**.
 - After re-entering **Main Challenge**, click the third column in the row that
   does not have **Claimed**.
+- If the only unclaimed-looking Main Challenge row is partly hidden at the
+  bottom edge, scroll instead of clicking it; re-evaluate once the row is safely
+  visible.
 - Once a main challenge chapter detail is open and **Start** or **Battle** is
   visible, click that action instead of clicking another grid cell.
 - In actual battle skill/item choice screens, capture every visible name and
@@ -124,6 +177,9 @@
   the card, not the small red icon in the card body.
 - If actual battle shows no text action, tap the bottom-right active skill
   button to keep the fight moving.
+- Do not click top battle enemy/nameplate labels such as **Crystal Worm**,
+  **Doommaker**, or **Nightmare Tulip**; treat them as passive HUD text and use
+  the active skill or wait fallback instead.
 - Verify active-skill progress against the main battle area, not the lower UI
   strip, because battle animation can leave the lower UI visually stable.
 - If a survivor skill-card banner click does not change state, try another
@@ -177,14 +233,36 @@
 - ^\d+([.,]\d+)?[kmb]{1,3}\.$
 - ^\d+([.,]\d+)?[kmb]\d+([.,]\d+)?$
 - ^\d+([.,]\d+)?[kmb]\d+([.,]\d+)?[kmb]\d*$
+- ^\d+[A-Za-z]\s+(?:\d+\s+)*\d+[A-Za-z]$
+- ^\d+[A-Za-z]:?[-–]?\s*[A-Za-z]?\s+\d+[A-Za-z]$
 - ^\d+[A-Za-z]{2,}$
+- ^[A-Za-z]{1,3}['’]\d+[A-Za-z]+$
+- ^[\d.,]+['’]\s*\d+[A-Za-z]+$
+- ^P[O0]{2}M$
+- ^Refreshes left:\s*\d+$
+- ^Refreshes left:*$
+- ^Refreshes left:+$
 - ^\d+([.,]\d+)?[a-z]$
 - ^[,.:;]?\d+[A-Za-z]$
+- ^[^A-Za-z0-9\s]\d+[A-Za-z]{1,3}$
 - ^\d+[^A-Za-z0-9\s]\d+[A-Za-z]$
 - ^[A-Za-z]\d+[.,]\d+[A-Za-z]$
+- ^[A-Za-z]\d+[A-Za-z]$
+- ^[A-Z]{1,3}\d+[A-Z]{1,3}$
+- ^[A-Za-z]\d+(?:[A-Za-z]\d+)+[A-Za-z]?$
+- ^[A-Za-z]\d+[A-Za-z]{2,}\d*$
+- ^[^a-z0-9]?[a-z]?[x×]\s*\d+$
 - ^\d+[A-Za-z]\s+\d+$
+- ^\d+\s+\d+[A-Za-z]+$
+- ^\d+(?:\s+\d+)+[A-Za-z*]+$
+- ^\d+[A-Za-z]\s+\d+([.,]\d+)?[A-Za-z]+$
 - ^[A-Za-z]?\.\d+[A-Za-z]$
 - ^\.\d+[a-z]\d+$
+- ^\.?\d+[A-Za-z]\d+[A-Za-z]+$
+- ^\d+[A-Za-z]{2,}\d+[A-Za-z]+$
+- ^\.?\d+[A-Za-z]\d+(?:[A-Za-z]\d+)+$
+- ^(?:\d+[A-Za-z]\d+\s*)+$
+- ^\d+\s+\d+[A-Za-z]\s+\d+(?:[.,]\d+)+$
 - ^:\d{2}$
 - ^\d{1,2}:\d{2}$
 - ^\d{1,2}:\d{2}\.?$
@@ -196,6 +274,8 @@
 - ^\d+[A-Za-z]\d+[-–]\d+(?:[.,]\d+)?$
 - ^\d+[A-Za-z]\s+\d+[A-Za-z]\s+[A-Za-z]?\d+[A-Za-z]$
 - ^\d+(?:\s+[\d.,]+)+\.?$
+- ^\d+\)$
+- ^of$
 
 ## Automation Command Labels
 - Steamroll
@@ -221,18 +301,42 @@
 
 ## Automation Reward Close Labels
 - Tap to Close
+- Tap anywhere to skip
+- Anywhere to skip
+- where to skip
 
 ## Automation Passive Non-Action Labels
 - Dawnguard
 - Dawnquard
+- Dawnauard
 - Shuttler
 - Shuttle
 - Center
 - Cent
 - Mission
 - Mission Center
+- Divine Sage
+- Maple Phantom
+- Maole Phantom
 - New
 - New!
+- Boss Assault
+- Zombies Incoming
+- Zombies Incoming!
+- Skill Choice
+- Select a skill to learn
+- Select a skill t
+- skill
+- Select
+- Select a
+- ielec
+- I to learn
+- skill to learr
+- skill to learn
+- a skill to learn
+- learn
+- elect
+- to learn
 
 ## Automation Result Progress Labels
 - Confirm
@@ -256,8 +360,24 @@
 - New!
 - New
 - "New
+- Select a skill t
+- skill
+- Select
+- Select a
+- ielec
+- I to learn
+- skill to learr
+- skill to learn
+- a skill to learn
+- learn
+- elect
+- to learn
+- ew
+- ew!
 - Nev
 - lew
+- lew!
+- Ney
 - Refresh
 
 ## Automation Level Row Patterns
@@ -284,6 +404,17 @@
 - starts in
 - season resets in
 
+## Automation Shop Screen Required Text
+- Daily Shop + Limited Chapter Assist Pack
+- Daily Shop + Chapter 320 Assist
+
+## Automation Safe Confirm Required Text
+- Revival
+- Oops, you're nearly there!
+
+## Automation Shop Escape Candidate
+- Battle tab from shop | 0.50 | 0.965 | 3.0 | Shop opened from the assist pack popup; return to the Battle tab and continue the chapter.
+
 ## Automation Energy Empty Labels
 - Not enough Energy
 
@@ -303,6 +434,9 @@
 ## Automation Empty Screen Candidate
 - Battle active skill | 0.86 | 0.79 | 2.6 | Actual battle has no text actions; tap the bottom-right active skill button to keep the fight moving.
 
+## Automation Repeated Action Swipe Candidate
+- battle active skill | 6 | Battle move toward boss | 0.22 | 0.78 | 0.22 | 0.48 | 3.4 | Repeated active-skill-only battle turns can stall on a boss; drag the joystick upward toward the boss.
+
 ## Automation Waiting Candidate
 - Back from unavailable showdown | 0.08 | 0.965 | 3.0 | Showdown is visible but matching has not started; go back to Path of Trials and choose Main Challenge.
 
@@ -316,7 +450,7 @@
 - gray-disabled-buttons
 
 ## Automation Passive Nameplate Region
-- 0.04 | 0.36 | 0.10 | 0.24 | 1.7
+- 0.04 | 0.46 | 0.10 | 0.24 | 1.9
 
 ## Automation Main Screen Verification Labels
 - Battle active skill
@@ -328,8 +462,13 @@
 - Type-A Drone
 - Type-B Drone
 - Havoc
+- Havo
 - lavoc
+- lova Havo
+- Havoo
+- avoc
 - Starforge
+- Starforg
 
 ## Automation Ignored Game Info Types
 - item
