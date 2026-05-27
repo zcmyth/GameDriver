@@ -53,6 +53,12 @@ def automation_config(auto_play, game: str):
     return auto_play.load_automation_config(game)
 
 
+def isolated_automation_config(auto_play, game: str, tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    write_game_strategy(tmp_path, game)
+    return auto_play.load_automation_config(game)
+
+
 def test_turn_detection_overlays_are_saved(tmp_path):
     auto_play = load_auto_play_module()
     image = Image.new('RGB', (120, 120), color='black')
@@ -109,9 +115,12 @@ def test_noisy_survivor_hud_labels_are_ignored():
     assert auto_play.looks_like_noise_label('06:2!')
     assert auto_play.looks_like_noise_label('(5.06B')
     assert auto_play.looks_like_noise_label('xK6224')
+    assert auto_play.looks_like_noise_label('374KS374')
+    assert auto_play.looks_like_noise_label('•02')
     assert not auto_play.looks_like_noise_label('Drone')
     assert not auto_play.looks_like_noise_label('Twinborn Type-B Drone')
     assert not auto_play.looks_like_noise_label('1-tap buy')
+    assert not auto_play.looks_like_noise_label('322.Refraction Passage')
 
 
 def test_turn_detection_overlays_skip_llm_when_no_llm_detections(tmp_path):
@@ -549,6 +558,216 @@ def test_survivor_energy_empty_allows_main_challenge_detail_start():
     )
 
     assert scored[0].label == 'Start'
+
+
+def test_survivor_progress_clicks_tracked_bottom_level(tmp_path, monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    write_game_strategy(tmp_path, 'survivor')
+    progress_path = tmp_path / 'games' / 'survivor' / 'main_challenge_progress.yaml'
+    progress_path.write_text(
+        """
+target_level: 330
+next_level: 315
+active_level: null
+cleared_levels:
+  - 314
+complete: false
+"""
+    )
+    config = automation_config(auto_play, 'survivor')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='Back to top',
+            x=0.84,
+            y=0.96,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='312.Book Dimension',
+            x=0.5,
+            y=0.15,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='313.Prologue Prison',
+            x=0.5,
+            y=0.36,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='314.Spatial Crystal',
+            x=0.5,
+            y=0.58,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='315.Crystal Forest',
+            x=0.5,
+            y=0.80,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+        ),
+    ]
+
+    extras = auto_play.configured_extra_candidates(config, buttons)
+
+    assert extras[0].label == 'Third column unclaimed row'
+    assert round(extras[0].y, 4) == 0.69
+    assert auto_play.candidate_level_number(extras[0]) == 315
+
+
+def test_survivor_progress_clicks_tracked_clamped_bottom_level(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    write_game_strategy(tmp_path, 'survivor')
+    progress_path = tmp_path / 'games' / 'survivor' / 'main_challenge_progress.yaml'
+    progress_path.write_text(
+        """
+target_level: 330
+next_level: 317
+active_level: null
+cleared_levels:
+  - 314
+  - 315
+  - 316
+complete: false
+"""
+    )
+    config = automation_config(auto_play, 'survivor')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='Back to top',
+            x=0.84,
+            y=0.96,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Claimed',
+            x=0.83,
+            y=0.31,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='314.Spatial Crystal',
+            x=0.5,
+            y=0.21,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='315.Crystal Forest',
+            x=0.5,
+            y=0.43,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='316.Battle of Past',
+            x=0.5,
+            y=0.64,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='317.Dawnlight Path',
+            x=0.5,
+            y=0.86,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+        ),
+    ]
+
+    extras = auto_play.configured_extra_candidates(config, buttons)
+
+    assert extras[0].label == 'Third column unclaimed row'
+    assert extras[0].y == 0.75
+    assert auto_play.candidate_level_number(extras[0]) == 317
+
+
+def test_survivor_progress_scrolls_down_to_skipped_level(tmp_path, monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    write_game_strategy(tmp_path, 'survivor')
+    progress_path = tmp_path / 'games' / 'survivor' / 'main_challenge_progress.yaml'
+    progress_path.write_text(
+        """
+target_level: 330
+next_level: 315
+active_level: 319
+cleared_levels:
+  - 314
+complete: false
+"""
+    )
+    config = automation_config(auto_play, 'survivor')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='Back to top',
+            x=0.84,
+            y=0.96,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='317.Dawnlight Path',
+            x=0.5,
+            y=0.18,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='318.Final Vortex',
+            x=0.5,
+            y=0.40,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='319.Breaching Codex',
+            x=0.5,
+            y=0.61,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='320.Stargate Arrival',
+            x=0.5,
+            y=0.83,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+        ),
+    ]
+
+    extras = auto_play.configured_extra_candidates(config, buttons)
+
+    assert extras[0].label == 'Scroll to lower challenge levels'
+    assert extras[0].bbox == (0.5, 0.38, 0.5, 0.64)
 
 
 def test_recruit_beats_adventure_when_no_adventurer_is_available():
@@ -1210,9 +1429,9 @@ def test_escape_menu_probe_beats_navigation_when_top_paths_are_exhausted():
     assert decision.recommended.label == 'Open settings'
 
 
-def test_survivor_claimed_page_creates_back_reset_candidate():
+def test_survivor_claimed_page_creates_back_reset_candidate(tmp_path, monkeypatch):
     auto_play = load_auto_play_module()
-    config = automation_config(auto_play, 'survivor')
+    config = isolated_automation_config(auto_play, 'survivor', tmp_path, monkeypatch)
 
     claimed = auto_play.ButtonCandidate(
         label='Claimed',
@@ -1253,9 +1472,12 @@ def test_non_survivor_claimed_page_does_not_create_swipe_candidate():
     assert extras == []
 
 
-def test_survivor_level_grid_creates_last_challenge_icon_candidate():
+def test_survivor_level_grid_creates_last_challenge_icon_candidate(
+    tmp_path,
+    monkeypatch,
+):
     auto_play = load_auto_play_module()
-    config = automation_config(auto_play, 'survivor')
+    config = isolated_automation_config(auto_play, 'survivor', tmp_path, monkeypatch)
 
     extras = auto_play.configured_extra_candidates(
         config,
@@ -1274,12 +1496,59 @@ def test_survivor_level_grid_creates_last_challenge_icon_candidate():
     assert len(extras) == 1
     assert extras[0].label == 'Third column unclaimed row'
     assert extras[0].x == 0.83
-    assert extras[0].y == 0.83
+    assert extras[0].y == 0.61
 
 
-def test_survivor_claimed_page_after_main_challenge_clicks_unclaimed_third_column():
+def test_survivor_unclaimed_row_candidate_is_not_claimed(tmp_path, monkeypatch):
     auto_play = load_auto_play_module()
-    config = automation_config(auto_play, 'survivor')
+    config = isolated_automation_config(auto_play, 'survivor', tmp_path, monkeypatch)
+    auto_play.write_main_challenge_progress(
+        'survivor',
+        {
+            'target_level': 330,
+            'next_level': 330,
+            'cleared_levels': [329],
+            'complete': False,
+        },
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='Third column unclaimed row',
+            x=0.83,
+            y=0.90,
+            confidence=1.0,
+            clickability=3.0,
+            source='vision',
+        ),
+        auto_play.ButtonCandidate(
+            label='330.Mysterious Star',
+            x=0.5,
+            y=0.91,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Back to top',
+            x=0.83,
+            y=0.96,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        ),
+    ]
+
+    assert not auto_play.configured_claimed_visible(config, buttons)
+    assert auto_play.configured_claimed_buttons(config, buttons) == []
+    assert auto_play.configured_level_grid_complete_reason(config, buttons) is None
+
+
+def test_survivor_claimed_page_after_main_challenge_clicks_unclaimed_third_column(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    config = isolated_automation_config(auto_play, 'survivor', tmp_path, monkeypatch)
 
     extras = auto_play.configured_extra_candidates(
         config,
@@ -1314,12 +1583,15 @@ def test_survivor_claimed_page_after_main_challenge_clicks_unclaimed_third_colum
 
     assert [button.label for button in extras] == ['Third column unclaimed row']
     assert extras[0].x == 0.83
-    assert extras[0].y == 0.83
+    assert extras[0].y == 0.4
 
 
-def test_survivor_main_challenge_claimed_labels_belong_to_row_below_label():
+def test_survivor_main_challenge_claimed_labels_belong_to_row_below_label(
+    tmp_path,
+    monkeypatch,
+):
     auto_play = load_auto_play_module()
-    config = automation_config(auto_play, 'survivor')
+    config = isolated_automation_config(auto_play, 'survivor', tmp_path, monkeypatch)
 
     extras = auto_play.configured_extra_candidates(
         config,
@@ -1335,7 +1607,7 @@ def test_survivor_main_challenge_claimed_labels_belong_to_row_below_label():
             auto_play.ButtonCandidate(
                 label='Claimed',
                 x=0.83,
-                y=0.2675,
+                y=0.12,
                 confidence=0.99,
                 clickability=2.0,
                 source='ocr',
@@ -1351,7 +1623,7 @@ def test_survivor_main_challenge_claimed_labels_belong_to_row_below_label():
             auto_play.ButtonCandidate(
                 label='Claimed',
                 x=0.83,
-                y=0.4900,
+                y=0.2762,
                 confidence=0.99,
                 clickability=2.0,
                 source='ocr',
@@ -1367,7 +1639,7 @@ def test_survivor_main_challenge_claimed_labels_belong_to_row_below_label():
             auto_play.ButtonCandidate(
                 label='Claimed',
                 x=0.83,
-                y=0.7006,
+                y=0.4919,
                 confidence=0.99,
                 clickability=2.0,
                 source='ocr',
@@ -1384,15 +1656,17 @@ def test_survivor_main_challenge_claimed_labels_belong_to_row_below_label():
         recent_actions=['Back from main challenge', 'Main Challenge'],
     )
 
-    assert [button.label for button in extras] == [
-        'Scroll main challenge to higher levels'
-    ]
-    assert extras[0].source == 'swipe'
+    assert [button.label for button in extras] == ['Third column unclaimed row']
+    assert extras[0].source == 'vision'
+    assert round(extras[0].y, 4) == 0.7031
 
 
-def test_survivor_main_challenge_scrolls_past_older_unclaimed_rewards():
+def test_survivor_main_challenge_reenters_past_older_unclaimed_rewards(
+    tmp_path,
+    monkeypatch,
+):
     auto_play = load_auto_play_module()
-    config = automation_config(auto_play, 'survivor')
+    config = isolated_automation_config(auto_play, 'survivor', tmp_path, monkeypatch)
 
     extras = auto_play.configured_extra_candidates(
         config,
@@ -1433,15 +1707,16 @@ def test_survivor_main_challenge_scrolls_past_older_unclaimed_rewards():
         recent_actions=['Back from main challenge', 'Main Challenge'],
     )
 
-    assert [button.label for button in extras] == [
-        'Scroll main challenge to higher levels'
-    ]
-    assert extras[0].source == 'swipe'
+    assert [button.label for button in extras] == ['Back from main challenge']
+    assert extras[0].source == 'vision'
 
 
-def test_survivor_main_challenge_uses_rightmost_unclaimed_visible_cell():
+def test_survivor_main_challenge_uses_rightmost_unclaimed_visible_cell(
+    tmp_path,
+    monkeypatch,
+):
     auto_play = load_auto_play_module()
-    config = automation_config(auto_play, 'survivor')
+    config = isolated_automation_config(auto_play, 'survivor', tmp_path, monkeypatch)
 
     extras = auto_play.configured_extra_candidates(
         config,
@@ -1466,10 +1741,474 @@ def test_survivor_main_challenge_uses_rightmost_unclaimed_visible_cell():
         recent_actions=['Back from main challenge', 'Main Challenge'],
     )
 
+    assert [button.label for button in extras] == ['Back from main challenge']
+    assert extras[0].source == 'vision'
+
+
+def test_survivor_main_challenge_uses_centered_title_when_level_number_is_missing(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    config = isolated_automation_config(auto_play, 'survivor', tmp_path, monkeypatch)
+
+    extras = auto_play.configured_extra_candidates(
+        config,
+        [
+            auto_play.ButtonCandidate(
+                label='297.Quantum Tunnel',
+                x=0.5,
+                y=0.1694,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='298.Tunnel Tempest',
+                x=0.5,
+                y=0.3862,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Claimed',
+                x=0.8222,
+                y=0.4844,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Anchor',
+                x=0.4972,
+                y=0.6100,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='300.Mirror Matrix',
+                x=0.5,
+                y=0.8187,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Back to top',
+                x=0.8326,
+                y=0.9625,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+        ],
+        recent_actions=['Back from main challenge', 'Main Challenge'],
+    )
+
+    assert [button.label for button in extras] == ['Third column unclaimed row']
+    assert extras[0].x == 0.83
+    assert round(extras[0].y, 4) == 0.7087
+
+
+def test_survivor_main_challenge_infers_missing_tracked_row_between_numbers(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    write_game_strategy(tmp_path, 'survivor')
+    progress_path = tmp_path / 'games' / 'survivor' / 'main_challenge_progress.yaml'
+    progress_path.write_text(
+        """
+target_level: 330
+next_level: 324
+cleared_levels:
+  - 314
+  - 315
+  - 316
+  - 317
+  - 318
+  - 319
+  - 320
+  - 321
+  - 322
+  - 323
+complete: false
+"""
+    )
+    config = automation_config(auto_play, 'survivor')
+
+    extras = auto_play.configured_extra_candidates(
+        config,
+        [
+            auto_play.ButtonCandidate(
+                label='323.Starlit Knight',
+                x=0.5,
+                y=0.2781,
+                confidence=0.996,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Array',
+                x=0.4972,
+                y=0.2919,
+                confidence=0.998,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Barragi',
+                x=0.4944,
+                y=0.5106,
+                confidence=0.949,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='325.Starglyph Plaza',
+                x=0.4986,
+                y=0.7212,
+                confidence=0.999,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Back to top',
+                x=0.8326,
+                y=0.9631,
+                confidence=0.991,
+                clickability=2.0,
+                source='ocr',
+            ),
+        ],
+    )
+
+    assert [button.label for button in extras] == ['Third column unclaimed row']
+    assert auto_play.candidate_level_number(extras[0]) == 324
+    assert extras[0].x == 0.83
+    assert round(extras[0].y, 4) == 0.3896
+
+
+def test_survivor_main_challenge_clicks_low_visible_row_after_reentry_loop(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    config = isolated_automation_config(auto_play, 'survivor', tmp_path, monkeypatch)
+
+    extras = auto_play.configured_extra_candidates(
+        config,
+        [
+            auto_play.ButtonCandidate(
+                label='297.Quantum Tunnel',
+                x=0.4986,
+                y=0.1694,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='298.Tunnel Tempest',
+                x=0.4972,
+                y=0.3862,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Claimed',
+                x=0.8222,
+                y=0.4844,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Anchor',
+                x=0.4972,
+                y=0.6106,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Claimed',
+                x=0.8250,
+                y=0.5006,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='300.Mirror Matrix',
+                x=0.4986,
+                y=0.8194,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Back to top',
+                x=0.8340,
+                y=0.9625,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+        ],
+        recent_actions=[
+            'Back from main challenge',
+            'Main Challenge',
+            'Back from main challenge',
+            'Main Challenge',
+        ],
+    )
+
+    assert [button.label for button in extras] == ['Third column unclaimed row']
+    assert extras[0].x == 0.83
+    assert round(extras[0].y, 4) == 0.7094
+
+
+def test_survivor_main_challenge_keeps_scrolling_when_bottom_row_below_target(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    config = isolated_automation_config(auto_play, 'survivor', tmp_path, monkeypatch)
+
+    reason = auto_play.configured_level_grid_complete_reason(
+        config,
+        [
+            auto_play.ButtonCandidate(
+                label='297.Quantum Tunnel',
+                x=0.4986,
+                y=0.1694,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='298.Tunnel Tempest',
+                x=0.4972,
+                y=0.3862,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Claimed',
+                x=0.8222,
+                y=0.4844,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Anchor',
+                x=0.4972,
+                y=0.6106,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Claimed',
+                x=0.8250,
+                y=0.7013,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='300.Mirror Matrix',
+                x=0.5,
+                y=0.8194,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Claimed',
+                x=0.8250,
+                y=0.9175,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Back to top',
+                x=0.8340,
+                y=0.9631,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+        ],
+        recent_actions=['Tap to Close', 'Back from main challenge', 'Main Challenge'],
+    )
+
+    assert reason is None
+
+    extras = auto_play.configured_extra_candidates(
+        config,
+        [
+            auto_play.ButtonCandidate(
+                label='297.Quantum Tunnel',
+                x=0.4986,
+                y=0.1694,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='298.Tunnel Tempest',
+                x=0.4972,
+                y=0.3862,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Claimed',
+                x=0.8222,
+                y=0.4844,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Anchor',
+                x=0.4972,
+                y=0.6106,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Claimed',
+                x=0.8250,
+                y=0.7013,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='300.Mirror Matrix',
+                x=0.5,
+                y=0.8194,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Claimed',
+                x=0.8250,
+                y=0.9175,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Back to top',
+                x=0.8340,
+                y=0.9631,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+        ],
+        recent_actions=['Tap to Close', 'Back from main challenge', 'Main Challenge'],
+    )
+
     assert [button.label for button in extras] == [
-        'Scroll main challenge to higher levels'
+        'Scroll to higher challenge levels',
     ]
     assert extras[0].source == 'swipe'
+
+
+def test_survivor_main_challenge_detects_complete_at_target_level(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    config = isolated_automation_config(auto_play, 'survivor', tmp_path, monkeypatch)
+
+    reason = auto_play.configured_level_grid_complete_reason(
+        config,
+        [
+            auto_play.ButtonCandidate(
+                label='327.End Times',
+                x=0.4986,
+                y=0.1694,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='328.Final Rampart',
+                x=0.4972,
+                y=0.3862,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Claimed',
+                x=0.8222,
+                y=0.4844,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='329.Last Defense',
+                x=0.4972,
+                y=0.6106,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Claimed',
+                x=0.8250,
+                y=0.7013,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='330.Zero Hour',
+                x=0.5,
+                y=0.8194,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Claimed',
+                x=0.8250,
+                y=0.9175,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='Back to top',
+                x=0.8340,
+                y=0.9631,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+        ],
+        recent_actions=['Tap to Close', 'Back from main challenge', 'Main Challenge'],
+    )
+
+    assert reason is not None
+    assert 'Main Challenge appears complete' in reason
 
 
 def test_survivor_reward_overlay_closes_before_grid_candidates():
@@ -1553,9 +2292,12 @@ def test_survivor_reward_skip_beats_active_skill_template():
     assert scored[-1].label == 'battle active skill'
 
 
-def test_survivor_main_challenge_scrolls_when_visible_cells_are_claimed():
+def test_survivor_main_challenge_scrolls_when_visible_cells_are_claimed_below_target(
+    tmp_path,
+    monkeypatch,
+):
     auto_play = load_auto_play_module()
-    config = automation_config(auto_play, 'survivor')
+    config = isolated_automation_config(auto_play, 'survivor', tmp_path, monkeypatch)
 
     extras = auto_play.configured_extra_candidates(
         config,
@@ -1592,15 +2334,20 @@ def test_survivor_main_challenge_scrolls_when_visible_cells_are_claimed():
                 clickability=2.0,
                 source='ocr',
             ),
+            auto_play.ButtonCandidate(
+                label='Back to top',
+                x=0.8340,
+                y=0.9631,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
         ],
         recent_actions=['Back from main challenge', 'Main Challenge'],
     )
 
-    assert [button.label for button in extras] == [
-        'Scroll main challenge to higher levels'
-    ]
+    assert [button.label for button in extras] == ['Scroll to higher challenge levels']
     assert extras[0].source == 'swipe'
-    assert extras[0].bbox == (0.5, 0.78, 0.5, 0.35)
 
 
 def test_survivor_main_challenge_beats_showdown_after_back_trick():
@@ -2369,6 +3116,76 @@ def test_survivor_skill_choice_ignores_damage_text_in_title_band():
     ]
 
 
+def test_survivor_skill_choice_closes_detail_overlay_before_clicking_fragments(
+    tmp_path,
+):
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'survivor')
+
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='Skill Choice',
+            x=0.5,
+            y=0.218,
+            confidence=0.99,
+            clickability=1.0,
+        ),
+        auto_play.ButtonCandidate(
+            label='Select a skill to learn',
+            x=0.5,
+            y=0.718,
+            confidence=0.99,
+            clickability=0.7,
+        ),
+        auto_play.ButtonCandidate(
+            label='Exo-radicator',
+            x=0.5,
+            y=0.33,
+            confidence=0.99,
+            clickability=1.8,
+        ),
+        auto_play.ButtonCandidate(
+            label='(Guardian Mode)',
+            x=0.5,
+            y=0.349,
+            confidence=0.99,
+            clickability=1.8,
+        ),
+        auto_play.ButtonCandidate(
+            label='Twinborn Guardian. Can be evolved',
+            x=0.51,
+            y=0.536,
+            confidence=0.98,
+            clickability=1.8,
+        ),
+        auto_play.ButtonCandidate(
+            label='Twinborn Guardian: Knockback',
+            x=0.48,
+            y=0.569,
+            confidence=0.99,
+            clickability=1.8,
+        ),
+        auto_play.ButtonCandidate(
+            label='cher',
+            x=0.918,
+            y=0.398,
+            confidence=1.0,
+            clickability=1.1,
+        ),
+    ]
+
+    inspections, decision = auto_play.inspect_configured_skill_choice(
+        SimpleNamespace(game='survivor'),
+        automation_config=config,
+        buttons=buttons,
+        artifact_paths={'item_inspections': tmp_path / 'item_inspections.yaml'},
+    )
+
+    assert inspections == []
+    assert decision is not None
+    assert decision.recommended.label == 'Close skill detail'
+
+
 def test_survivor_strategy_prefers_always_preferred_skill_choices():
     auto_play = load_auto_play_module()
     config = automation_config(auto_play, 'survivor')
@@ -2387,6 +3204,10 @@ def test_survivor_strategy_prefers_always_preferred_skill_choices():
         'avoc',
         'starforge',
         'starforg',
+    )
+    assert any(
+        rule.pattern == 'gold gain' and rule.points < 0
+        for rule in config.item_preference_rules
     )
 
     buttons = [
@@ -2467,11 +3288,25 @@ def test_survivor_strategy_prefers_always_preferred_skill_choices():
         'Gold gain +40%',
         config,
     )
+    fitness_score, fitness_reasons = auto_play.configured_item_preference_score(
+        'Fitness Guide',
+        'Max HP +40%',
+        config,
+    )
+    bullet_score, bullet_reasons = auto_play.configured_item_preference_score(
+        'Hi-Power Bullet',
+        'ATK +10%',
+        config,
+    )
 
     assert havoc_score > oil_score
     assert starforge_score > oil_score
+    assert fitness_score > oil_score
+    assert bullet_score > oil_score
     assert havoc_reasons[0] == 'always preferred by strategy: havoc'
     assert starforge_reasons[0] == 'always preferred by strategy: starforge'
+    assert 'survivor chapter clear: prefer survivability' in fitness_reasons
+    assert 'survivor chapter clear: prefer damage' in bullet_reasons
 
     split_drone_score, split_drone_reasons = auto_play.configured_item_preference_score(
         'Twinborn Type-B',
@@ -2620,7 +3455,7 @@ items:
 
     knowledge = auto_play.write_game_info_markdown('survivor').read_text()
 
-    assert '| Hi-Power Magnet | 4.00 |' in knowledge
+    assert '| Hi-Power Magnet | 1.00 |' in knowledge
     assert 'Ney Hi-Power Magnet' not in knowledge
 
 

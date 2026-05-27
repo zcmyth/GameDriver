@@ -2,26 +2,27 @@
 
 ## Objective
 - Fight as much as possible and advance the account while never choosing ads.
+- Current priority: clear Main Challenge entries before normal battle farming.
 
 ## Preferred Buttons
-- Steamroll
+- Main Challenge
+- Trial
+- Path of Trials
 - Confirm
 - Close
 - Drone
 - Havoc
 - Havo
+- avo
 - lavoc
 - lova Havo
 - Havoo
 - avoc
 - Starforge
 - Starforg
+- Steamroll
+- Quick Battle
 - Battle active skill
-- Battle
-- Fight
-- Main Challenge
-- Trial
-- Path of Trials
 - Advance
 - Continue
 - Next
@@ -36,6 +37,7 @@
 - Last Icon
 - Last Challenge Icon
 - Third column unclaimed row
+- Scroll to higher challenge levels
 - Back to
 - Back to Home
 - Back from main challenge
@@ -105,6 +107,10 @@
 - to learn
 - EVO:
 - vo
+- Supplies
+- Passage
+- Gate
+- Stele
 
 ## Fallback Buttons
 - Back
@@ -139,6 +145,11 @@
   - **Main Challenge**: use the grid/back/re-enter rules below to advance.
   - **Actual battle**: the character is strong enough; prioritize staying
     unblocked and choosing visible skill/item cards over rerolling or waiting.
+- While the current goal is clearing **Main Challenge**, prefer **Trial** /
+  **Path of Trials** / **Main Challenge** before any home-screen **Steamroll**,
+  **Battle**, **Fight**, or **Start** action. Only use **Steamroll** /
+  **Battle** / **Fight** / **Start** after a Main Challenge chapter detail is
+  open or an entered battle/result flow requires it.
 - If actual battle repeats only **battle active skill** while the timer/boss
   state appears frozen, drag the movement joystick upward/toward the boss
   before continuing active-skill taps.
@@ -151,10 +162,16 @@
   the fallback route is **Path of Trials** / **Main Challenge**.
 - If energy is not sufficient or normal battle is blocked, go to **Trial** and
   **Main Challenge** to advance more.
-- On the main challenge grid, always choose the last/highest available icon in
-  the grid. Avoid **Claimed** / **已领取** cells.
-- If all visible main challenge cells are **Claimed**, scroll the grid to reveal
-  higher levels instead of backing out repeatedly.
+- On the main challenge grid, clear levels in order. Prefer the lowest visible
+  unclaimed level at or after the tracked `next_level`, then click its
+  rightmost/third-column icon. Avoid **Claimed** / **已领取** cells.
+- Target is clearing Main Challenge through level **330**. If all visible main
+  challenge cells are **Claimed** and the tracked `next_level` is below 330,
+  use short swipes to reveal that exact level instead of jumping to the
+  deepest visible row.
+- If all visible main challenge cells are **Claimed** near the current level
+  range, click the bottom-left back button and re-enter **Main Challenge**;
+  re-entry can refresh the grid so the new/current level appears on screen.
 - When **Claimed** is visible, you are on the main challenge page. Click the
   bottom-left back button, then click **Main Challenge** again; this returns to
   the right level range.
@@ -163,11 +180,26 @@
   Operation**, or **Op Retreat**.
 - If **Survivor Showdown** says matching has not started, use the bottom-left
   back button and return to **Main Challenge** instead of clicking **Start**.
-- After re-entering **Main Challenge**, click the third column in the row that
-  does not have **Claimed**.
-- If the only unclaimed-looking Main Challenge row is partly hidden at the
-  bottom edge, scroll instead of clicking it; re-evaluate once the row is safely
-  visible.
+- After re-entering **Main Challenge**, click the third column in the lowest
+  visible row that does not have **Claimed** and matches the tracked next level.
+- If re-entry still shows **Claimed** and OCR misses the next level number, but
+  a centered level title is visible below the claimed row, treat that title as
+  the next row and click its third-column icon instead of repeating
+  back/re-enter.
+- If OCR sees the tracked `next_level` is between two visible numbered rows but
+  misses that row's number, infer the missing row from the surrounding row
+  spacing and click its third-column icon. Never click the centered row title
+  text itself.
+- If back/re-enter repeats and the same claimed rows remain visible, click the
+  low visible unclaimed row's third-column icon even when it is below the
+  normal safe band. Example: after clearing Chapter 299, **300.Mirror Matrix**
+  can remain near the bottom; click its third column rather than looping.
+- If a Main Challenge row is partly hidden or ambiguous, do not scroll. Back
+  out and re-enter **Main Challenge** so the current level is refreshed into a
+  safely clickable position.
+- Do not click **Back to top** while clearing levels 301-330; it jumps back to
+  the earliest levels. Use short swipe-up or swipe-down scrolling to reveal the
+  tracked `next_level` without skipping rows.
 - Once a main challenge chapter detail is open and **Start** or **Battle** is
   visible, click that action instead of clicking another grid cell.
 - In actual battle skill/item choice screens, capture every visible name and
@@ -175,6 +207,9 @@
   Do not click **Refresh** unless all visible choices are known bad or blocked.
 - When choosing a skill card in actual battle, click the yellow title banner of
   the card, not the small red icon in the card body.
+- If a skill description overlay opens on top of the skill-choice cards, close
+  the overlay first. Do not keep clicking partial text fragments from the card
+  hidden behind the overlay.
 - If actual battle shows no text action, tap the bottom-right active skill
   button to keep the fight moving.
 - Do not click top battle enemy/nameplate labels such as **Crystal Worm**,
@@ -204,11 +239,19 @@
 - The user said that when **Claimed** is visible, use bottom-left back, re-enter
   **Main Challenge**, then click the third column in the row that does not have
   **Claimed**.
+- The user corrected the Main Challenge strategy: avoid scrolling the grid;
+  back out and re-enter **Main Challenge** because that brings the new/current
+  level onto the screen.
 - The user said the back/re-enter trick restores the right main challenge level.
 - The user said survivor has three main modes: the battle screen, the main
   challenge screen, and the actual battle. In actual battle, we are strong
   enough; focus on not getting blocked and on storing skills/items in
   `game_info.md` so ranking can improve later.
+- The user asked to keep playing **Main Challenge** and try to clear all of the
+  entries; this takes priority over normal energy battle farming.
+- The current clearing goal is all levels through **330**, so the grid picker
+  must not skip visible lower unclaimed levels just because a deeper row is
+  clickable.
 
 ## Item Choice Priorities
 - Always prefer any Drone option when it appears, including Type-A Drone,
@@ -385,8 +428,8 @@
 
 ## Automation Challenge Detail Action Labels
 - Steamroll
+- Quick Battle
 - Start
-- Battle
 
 ## Automation Challenge Detail Patterns
 - \bchapter\s+\d+\b
@@ -444,7 +487,10 @@
 - Back from main challenge | 0.08 | 0.965 | 3.0 | Claimed is visible on the main challenge page; go back and re-enter Main Challenge to return to the right level.
 
 ## Automation Third Column Unclaimed Row Candidate
-- Third column unclaimed row | 0.83 | 0.11 | 3.0 | Main challenge grid is visible; click the rightmost unclaimed icon in the deepest visible row.
+- Third column unclaimed row | 0.83 | -0.11 | 3.0 | Main challenge grid is visible; click the rightmost unclaimed icon above the tracked next-level title.
+
+## Automation Target Level
+- 330
 
 ## Automation Disabled Visual Filters
 - gray-disabled-buttons
@@ -469,6 +515,19 @@
 - avoc
 - Starforge
 - Starforg
+
+## Automation Item Preference Rules
+- Max HP | 5 | survivor chapter clear: prefer survivability
+- heal | 5 | survivor chapter clear: prefer survivability
+- damage- | 5 | survivor chapter clear: prefer damage reduction
+- received damage | 5 | survivor chapter clear: prefer damage reduction
+- ATK | 4 | survivor chapter clear: prefer damage
+- All attack CD | 4 | survivor chapter clear: prefer attack cooldown
+- Firing interval | 4 | survivor chapter clear: prefer attack cooldown
+- Oil Bond | -6 | survivor chapter clear: gold-only picks lose to combat or survival choices
+- Oil Bone | -6 | survivor chapter clear: OCR variant of Oil Bond; gold-only picks lose to combat or survival choices
+- Gold gain | -6 | survivor chapter clear: gold-only picks lose to combat or survival choices
+- Item loot range | -3 | survivor chapter clear: loot range is lower priority than combat power
 
 ## Automation Ignored Game Info Types
 - item

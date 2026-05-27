@@ -3,23 +3,50 @@ from __future__ import annotations
 
 import argparse
 import base64
+import faulthandler
 import io
 import json
+import os
 import re
 import selectors
 import shlex
+import signal
 import subprocess
 import sys
 import time
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from shutil import rmtree
 from typing import Any
 
+import main_challenge_rules
 import numpy as np
 import yaml
+from automation_types import (
+    AutomationCandidateSpec,
+    AutomationRepeatedActionSwipeSpec,
+    AutomationRowCandidateSpec,
+    ButtonCandidate,
+    Decision,
+    GameAutomationConfig,
+    GameInfoEntry,
+    ItemInspection,
+    ItemPreferenceRule,
+    StateVerification,
+    TurnResult,
+    UnblockAssessment,
+)
 from PIL import Image, ImageChops, ImageStat
+
+if hasattr(signal, 'SIGUSR1'):
+    faulthandler.register(signal.SIGUSR1, file=sys.stderr, all_threads=True)
+
+
+def debug_progress(message: str) -> None:
+    if os.getenv('AUTOPLAY_DEBUG_PROGRESS'):
+        print(f'[auto-play] {message}', file=sys.stderr, flush=True)
+
 
 DEFAULT_PREFERRED = [
     'Start',
@@ -35,6 +62,23 @@ DEFAULT_PREFERRED = [
     'Confirm',
     'Accept',
 ]
+CHALLENGE_DETAIL_ACTION_KEYS = {
+    'steamroll',
+    'start',
+    'battle',
+    'fight',
+    'speed-up',
+    'speed up',
+    'battle speed-up',
+    'quick battle',
+}
+CHALLENGE_DETAIL_FAST_ACTION_KEYS = {
+    'steamroll',
+    'speed-up',
+    'speed up',
+    'battle speed-up',
+    'quick battle',
+}
 DEFAULT_AVOID = [
     'Abandon',
     'Abandon Adventure',
@@ -257,7 +301,6 @@ GENERIC_GAME_INFO_LABELS = {
     'stage title',
     'table room',
     'tavern keeper',
-    'tower map',
     'treasure event',
     'treasure tab',
     'tutorial prompt',
@@ -292,6 +335,8 @@ NOISE_LABEL_PATTERNS = [
         re.I,
     ),
     re.compile(r'^[a-z]{1,2}\d{3,}[a-z0-9]*$', re.I),
+    re.compile(r'^\d+[a-z]{1,3}\d+$', re.I),
+    re.compile(r'^[•·●]\s*\d+[a-z0-9]*$', re.I),
     re.compile(r'^\d+[./:]?\d*[kmb%]?$', re.I),
     re.compile(r'^lv[.\s]*\d+$', re.I),
     re.compile(r'^v[.\s]*\d+$', re.I),
@@ -325,214 +370,6 @@ TOP_PLAYFIELD_PATH_COORDS = {
     'up': (0.50, 0.13),
     'down': (0.50, 0.41),
 }
-
-
-@dataclass(frozen=True)
-class ButtonCandidate:
-    label: str
-    x: float
-    y: float
-    confidence: float
-    clickability: float
-    source: str = 'ocr'
-    reason: str = ''
-    score: float = 0.0
-    bbox: tuple[float, float, float, float] | None = None
-    template_path: str = ''
-
-
-@dataclass(frozen=True)
-class AutomationCandidateSpec:
-    label: str
-    x: float
-    y: float
-    clickability: float
-    reason: str = ''
-    confidence: float = 1.0
-    source: str = 'vision'
-
-    def to_button(self) -> ButtonCandidate:
-        return ButtonCandidate(
-            label=self.label,
-            x=max(0.0, min(1.0, self.x)),
-            y=max(0.0, min(1.0, self.y)),
-            confidence=max(0.0, min(1.0, self.confidence)),
-            clickability=self.clickability,
-            source=self.source,
-            reason=self.reason,
-        )
-
-
-@dataclass(frozen=True)
-class AutomationRowCandidateSpec:
-    label: str
-    x: float
-    y_offset: float
-    clickability: float
-    reason: str = ''
-    confidence: float = 1.0
-    source: str = 'vision'
-
-    def to_button_for_row(
-        self,
-        row: ButtonCandidate,
-        *,
-        x: float | None = None,
-    ) -> ButtonCandidate:
-        return ButtonCandidate(
-            label=self.label,
-            x=max(0.0, min(1.0, self.x if x is None else x)),
-            y=max(0.12, min(0.90, row.y + self.y_offset)),
-            confidence=max(0.0, min(1.0, self.confidence)),
-            clickability=self.clickability,
-            source=self.source,
-            reason=self.reason,
-        )
-
-
-@dataclass(frozen=True)
-class AutomationRepeatedActionSwipeSpec:
-    trigger_label: str
-    min_count: int
-    label: str
-    start_x: float
-    start_y: float
-    end_x: float
-    end_y: float
-    clickability: float
-    reason: str = ''
-    confidence: float = 1.0
-
-    def to_button(self) -> ButtonCandidate:
-        return ButtonCandidate(
-            label=self.label,
-            x=max(0.0, min(1.0, self.end_x)),
-            y=max(0.0, min(1.0, self.end_y)),
-            confidence=max(0.0, min(1.0, self.confidence)),
-            clickability=self.clickability,
-            source='swipe',
-            reason=self.reason,
-            bbox=(
-                max(0.0, min(1.0, self.start_x)),
-                max(0.0, min(1.0, self.start_y)),
-                max(0.0, min(1.0, self.end_x)),
-                max(0.0, min(1.0, self.end_y)),
-            ),
-        )
-
-
-@dataclass(frozen=True)
-class GameAutomationConfig:
-    game: str
-    noise_pattern_text: tuple[str, ...] = ()
-    noise_patterns: tuple[re.Pattern[str], ...] = ()
-    navigation_labels: frozenset[str] = frozenset()
-    navigation_keywords: tuple[str, ...] = ()
-    navigation_glyphs: tuple[str, ...] = ()
-    command_labels: frozenset[str] = frozenset()
-    defeat_recovery_labels: frozenset[str] = frozenset()
-    recruit_labels: frozenset[str] = frozenset()
-    combat_card_double_tap_labels: frozenset[str] = frozenset()
-    current_room_icon_labels: frozenset[str] = frozenset()
-    claimed_labels: frozenset[str] = frozenset()
-    reward_overlay_labels: frozenset[str] = frozenset()
-    reward_close_labels: frozenset[str] = frozenset()
-    passive_non_action_labels: frozenset[str] = frozenset()
-    result_progress_labels: frozenset[str] = frozenset()
-    skill_choice_required_labels: tuple[str, ...] = ()
-    skill_choice_instruction_labels: tuple[str, ...] = ()
-    skill_choice_split_instruction_labels: tuple[tuple[str, ...], ...] = ()
-    skill_choice_ignored_labels: frozenset[str] = frozenset()
-    level_row_patterns: tuple[re.Pattern[str], ...] = ()
-    challenge_detail_action_labels: frozenset[str] = frozenset()
-    challenge_detail_patterns: tuple[re.Pattern[str], ...] = ()
-    recent_reentry_keywords: tuple[str, ...] = ()
-    waiting_required_groups: tuple[tuple[str, ...], ...] = ()
-    waiting_hint_groups: tuple[tuple[str, ...], ...] = ()
-    shop_screen_required_groups: tuple[tuple[str, ...], ...] = ()
-    safe_confirm_required_groups: tuple[tuple[str, ...], ...] = ()
-    energy_empty_labels: frozenset[str] = frozenset()
-    energy_empty_destination_labels: frozenset[str] = frozenset()
-    energy_empty_action_exemption_labels: frozenset[str] = frozenset()
-    energy_empty_candidate: AutomationCandidateSpec | None = None
-    shop_escape_candidate: AutomationCandidateSpec | None = None
-    empty_screen_candidate: AutomationCandidateSpec | None = None
-    waiting_candidate: AutomationCandidateSpec | None = None
-    claimed_back_candidate: AutomationCandidateSpec | None = None
-    third_column_unclaimed_row_candidate: AutomationRowCandidateSpec | None = None
-    repeated_action_swipe_candidate: AutomationRepeatedActionSwipeSpec | None = None
-    disabled_visual_filters: frozenset[str] = frozenset()
-    passive_nameplate_region: tuple[float, float, float, float, float] | None = None
-    main_screen_verification_labels: frozenset[str] = frozenset()
-    always_preferred_choice_terms: tuple[str, ...] = ()
-    ignored_game_info_types: frozenset[str] = frozenset()
-    no_change_skill_choice_rule: str = ''
-    no_change_empty_screen_rule: str = ''
-
-
-@dataclass(frozen=True)
-class Decision:
-    status: str
-    reason: str
-    recommended: ButtonCandidate | None
-    choices: list[ButtonCandidate]
-
-
-@dataclass(frozen=True)
-class StateVerification:
-    status: str
-    reason: str
-    attempts: int
-    threshold: float
-    similarities: list[float]
-    progress_threshold: float
-    progress_similarities: list[float]
-    progress_region: str
-    strategy_updated: bool = False
-    last_screenshot: str | None = None
-
-
-@dataclass(frozen=True)
-class UnblockAssessment:
-    status: str
-    reason: str
-    window_size: int
-    threshold: float
-    similarities: list[float]
-    turn_dirs: list[str]
-    repeated_actions: list[str]
-    strategy_updated: bool = False
-
-
-@dataclass(frozen=True)
-class TurnResult:
-    decision: Decision
-    verification: StateVerification | None
-
-
-@dataclass(frozen=True)
-class ItemInspection:
-    candidate: ButtonCandidate
-    description: str
-    score: float
-    reasons: list[str]
-    screenshot: str
-    ocr_labels: list[str]
-    kind: str | None = None
-
-
-@dataclass(frozen=True)
-class GameInfoEntry:
-    label: str
-    kind: str
-    description: str
-    score: float
-    reasons: list[str]
-    sources: list[str]
-    seen_count: int
-    first_seen: str
-    last_seen: str
-    last_screenshot: str
 
 
 def repo_root() -> Path:
@@ -676,27 +513,26 @@ def configured_claimed_visible(
     automation_config: GameAutomationConfig,
     buttons: list[ButtonCandidate],
 ) -> bool:
-    if not automation_config.claimed_labels:
-        return False
-    for button in buttons:
-        key = normalize_label(button.label)
-        if key in automation_config.claimed_labels:
-            return True
-        if any(label in key for label in automation_config.claimed_labels):
-            return True
-    return False
+    return main_challenge_rules.configured_claimed_visible(automation_config, buttons)
+
+
+def configured_claimed_label_matches(
+    automation_config: GameAutomationConfig,
+    value: str,
+) -> bool:
+    return main_challenge_rules.configured_claimed_label_matches(
+        automation_config,
+        value,
+    )
 
 
 def configured_reward_overlay_visible(
     automation_config: GameAutomationConfig,
     buttons: list[ButtonCandidate],
 ) -> bool:
-    if not automation_config.reward_overlay_labels:
-        return False
-    return any(
-        normalize_label(button.label) in automation_config.reward_overlay_labels
-        for button in buttons
-        if button.source != 'template'
+    return main_challenge_rules.configured_reward_overlay_visible(
+        automation_config,
+        buttons,
     )
 
 
@@ -704,12 +540,9 @@ def configured_reward_close_visible(
     automation_config: GameAutomationConfig,
     buttons: list[ButtonCandidate],
 ) -> bool:
-    if not automation_config.reward_close_labels:
-        return False
-    return any(
-        configured_reward_close_label_match(button.label, automation_config)
-        for button in buttons
-        if button.source != 'template'
+    return main_challenge_rules.configured_reward_close_visible(
+        automation_config,
+        buttons,
     )
 
 
@@ -717,20 +550,9 @@ def configured_reward_close_label_match(
     label: str,
     automation_config: GameAutomationConfig | None,
 ) -> bool:
-    if automation_config is None or not automation_config.reward_close_labels:
-        return False
-    key = normalize_label(label)
-    if key in automation_config.reward_close_labels:
-        return True
-    if 'skip' in key and any(
-        'skip' in close_label for close_label in automation_config.reward_close_labels
-    ):
-        return True
-    return any(
-        len(key) >= 4
-        and len(close_label) >= 4
-        and (key in close_label or close_label in key)
-        for close_label in automation_config.reward_close_labels
+    return main_challenge_rules.configured_reward_close_label_match(
+        label,
+        automation_config,
     )
 
 
@@ -841,19 +663,16 @@ def configured_level_row_label(
     automation_config: GameAutomationConfig,
     label: str,
 ) -> bool:
-    return any(
-        pattern.search(label) for pattern in automation_config.level_row_patterns
-    )
+    return main_challenge_rules.configured_level_row_label(automation_config, label)
 
 
 def configured_level_grid_visible(
     automation_config: GameAutomationConfig,
     buttons: list[ButtonCandidate],
 ) -> bool:
-    return any(
-        configured_level_row_label(automation_config, button.label)
-        for button in buttons
-        if button.source != 'template'
+    return main_challenge_rules.configured_level_grid_visible(
+        automation_config,
+        buttons,
     )
 
 
@@ -861,12 +680,149 @@ def configured_level_rows(
     automation_config: GameAutomationConfig,
     buttons: list[ButtonCandidate],
 ) -> list[ButtonCandidate]:
-    return [
-        button
-        for button in buttons
-        if button.source != 'template'
-        and configured_level_row_label(automation_config, button.label)
-    ]
+    return main_challenge_rules.configured_level_rows(automation_config, buttons)
+
+
+def configured_visible_level_numbers(
+    automation_config: GameAutomationConfig,
+    buttons: list[ButtonCandidate],
+) -> list[int]:
+    return main_challenge_rules.configured_visible_level_numbers(
+        automation_config,
+        buttons,
+    )
+
+
+def configured_level_number(button: ButtonCandidate) -> int | None:
+    return main_challenge_rules.configured_level_number(button)
+
+
+def visible_chapter_number(buttons: list[ButtonCandidate]) -> int | None:
+    return main_challenge_rules.visible_chapter_number(buttons)
+
+
+def main_challenge_next_level(
+    automation_config: GameAutomationConfig,
+) -> int | None:
+    progress = load_main_challenge_progress(automation_config.game)
+    return main_challenge_rules.main_challenge_next_level(
+        automation_config,
+        progress,
+    )
+
+
+def button_for_level_row(
+    spec: AutomationRowCandidateSpec,
+    row: ButtonCandidate,
+    *,
+    level: int | None,
+) -> ButtonCandidate:
+    return main_challenge_rules.button_for_level_row(
+        spec,
+        row,
+        level=level,
+    )
+
+
+def candidate_level_number(button: ButtonCandidate) -> int | None:
+    return main_challenge_rules.candidate_level_number(button)
+
+
+def normalized_progress_levels(value: Any) -> list[int]:
+    return main_challenge_rules.normalized_progress_levels(value)
+
+
+def advance_main_challenge_next_level(
+    progress: dict[str, Any],
+    *,
+    target_level: int | None,
+) -> None:
+    main_challenge_rules.advance_main_challenge_next_level(
+        progress,
+        target_level=target_level,
+    )
+
+
+def mark_main_challenge_level_cleared(
+    progress: dict[str, Any],
+    level: int | None,
+    *,
+    target_level: int | None,
+) -> None:
+    main_challenge_rules.mark_main_challenge_level_cleared(
+        progress,
+        level,
+        target_level=target_level,
+    )
+
+
+def victory_result_visible(buttons: list[ButtonCandidate]) -> bool:
+    return main_challenge_rules.victory_result_visible(buttons)
+
+
+def update_main_challenge_progress_after_action(
+    game: str,
+    automation_config: GameAutomationConfig,
+    buttons: list[ButtonCandidate],
+    clicked: ButtonCandidate | None,
+) -> None:
+    progress = load_main_challenge_progress(game)
+    updated = main_challenge_rules.update_main_challenge_progress_after_action(
+        progress,
+        automation_config,
+        buttons,
+        clicked,
+    )
+    if updated:
+        write_main_challenge_progress(game, progress)
+
+
+def configured_fallback_level_title_rows(
+    automation_config: GameAutomationConfig,
+    buttons: list[ButtonCandidate],
+    *,
+    claimed_buttons: list[ButtonCandidate],
+    existing_rows: list[ButtonCandidate],
+    max_safe_click_y: float,
+) -> list[ButtonCandidate]:
+    return main_challenge_rules.configured_fallback_level_title_rows(
+        automation_config,
+        buttons,
+        claimed_buttons=claimed_buttons,
+        existing_rows=existing_rows,
+        max_safe_click_y=max_safe_click_y,
+    )
+
+
+def configured_inferred_missing_level_row(
+    rows: list[ButtonCandidate],
+    *,
+    next_level: int,
+    max_safe_click_y: float,
+) -> ButtonCandidate | None:
+    return main_challenge_rules.configured_inferred_missing_level_row(
+        rows,
+        next_level=next_level,
+        max_safe_click_y=max_safe_click_y,
+    )
+
+
+def configured_higher_levels_scroll_candidate(
+    automation_config: GameAutomationConfig,
+    buttons: list[ButtonCandidate],
+    recent_actions: list[str] | None = None,
+) -> ButtonCandidate | None:
+    _ = recent_actions
+    progress = load_main_challenge_progress(automation_config.game)
+    next_level = main_challenge_rules.main_challenge_next_level(
+        automation_config,
+        progress,
+    )
+    return main_challenge_rules.configured_higher_levels_scroll_candidate(
+        automation_config,
+        buttons,
+        next_level,
+    )
 
 
 def configured_result_progress_visible(
@@ -921,109 +877,86 @@ def configured_challenge_detail_visible(
     automation_config: GameAutomationConfig,
     buttons: list[ButtonCandidate],
 ) -> bool:
-    if (
-        not automation_config.challenge_detail_action_labels
-        or not automation_config.challenge_detail_patterns
-    ):
-        return False
-    labels = [
-        normalize_label(button.label)
-        for button in buttons
-        if button.source != 'template'
-    ]
-    action_visible = any(
-        label in automation_config.challenge_detail_action_labels for label in labels
+    return main_challenge_rules.configured_challenge_detail_visible(
+        automation_config,
+        buttons,
     )
-    chapter_visible = any(
-        pattern.search(label)
-        for label in labels
-        for pattern in automation_config.challenge_detail_patterns
-    )
-    return action_visible and chapter_visible
 
 
 def configured_claimed_y_positions(
     automation_config: GameAutomationConfig,
     buttons: list[ButtonCandidate],
 ) -> list[float]:
-    return [
-        button.y for button in configured_claimed_buttons(automation_config, buttons)
-    ]
+    return main_challenge_rules.configured_claimed_y_positions(
+        automation_config,
+        buttons,
+    )
 
 
 def configured_claimed_buttons(
     automation_config: GameAutomationConfig,
     buttons: list[ButtonCandidate],
 ) -> list[ButtonCandidate]:
-    if not automation_config.claimed_labels:
-        return []
-    return [
-        button
-        for button in buttons
-        if normalize_label(button.label) in automation_config.claimed_labels
-        or any(
-            label in normalize_label(button.label)
-            for label in automation_config.claimed_labels
-        )
-    ]
+    return main_challenge_rules.configured_claimed_buttons(
+        automation_config,
+        buttons,
+    )
 
 
 def configured_recently_reentered(
     automation_config: GameAutomationConfig,
     recent_actions: list[str] | None,
 ) -> bool:
-    if not automation_config.recent_reentry_keywords:
-        return False
-    return any(
-        keyword in normalize_label(label)
-        for label in recent_actions or []
-        for keyword in automation_config.recent_reentry_keywords
+    return main_challenge_rules.configured_recently_reentered(
+        automation_config,
+        recent_actions,
+    )
+
+
+def configured_reentry_loop_visible(
+    automation_config: GameAutomationConfig,
+    recent_actions: list[str] | None,
+) -> bool:
+    return main_challenge_rules.configured_reentry_loop_visible(
+        automation_config,
+        recent_actions,
     )
 
 
 def configured_third_column_unclaimed_row_candidate(
     automation_config: GameAutomationConfig,
     buttons: list[ButtonCandidate],
+    recent_actions: list[str] | None = None,
 ) -> ButtonCandidate | None:
-    spec = automation_config.third_column_unclaimed_row_candidate
-    if spec is None:
-        return None
-    claimed_buttons = configured_claimed_buttons(automation_config, buttons)
-    rows = sorted(
-        configured_level_rows(automation_config, buttons),
-        key=lambda button: button.y,
+    _ = recent_actions
+    progress = load_main_challenge_progress(automation_config.game)
+    next_level = main_challenge_rules.main_challenge_next_level(
+        automation_config,
+        progress,
     )
-    if not rows:
-        return None
-
-    max_safe_click_y = 0.86
-    deepest_claimed_y = (
-        max(claimed.y for claimed in claimed_buttons) if claimed_buttons else None
+    return main_challenge_rules.configured_third_column_unclaimed_row_candidate(
+        automation_config,
+        buttons,
+        next_level,
     )
-    for row in sorted(rows, key=lambda button: button.y, reverse=True):
-        if row.y + spec.y_offset > max_safe_click_y:
-            continue
-        row_button = spec.to_button_for_row(row)
-        if deepest_claimed_y is not None and row_button.y <= deepest_claimed_y + 0.03:
-            continue
-        row_claimed = any(
-            abs(claimed.y - row_button.y) <= 0.12 for claimed in claimed_buttons
-        )
-        if not row_claimed:
-            return row_button
-    return None
 
 
-def main_challenge_scroll_candidate() -> ButtonCandidate:
-    return ButtonCandidate(
-        label='Scroll main challenge to higher levels',
-        x=0.5,
-        y=0.55,
-        confidence=1.0,
-        clickability=3.0,
-        source='swipe',
-        reason='Visible main-challenge cells are claimed; scroll for higher levels.',
-        bbox=(0.5, 0.78, 0.5, 0.35),
+def configured_level_grid_complete_reason(
+    automation_config: GameAutomationConfig,
+    buttons: list[ButtonCandidate],
+    recent_actions: list[str] | None = None,
+) -> str | None:
+    progress = load_main_challenge_progress(automation_config.game)
+    next_level = main_challenge_rules.main_challenge_next_level(
+        automation_config,
+        progress,
+    )
+    _ = recent_actions
+    return main_challenge_rules.configured_level_grid_complete_reason(
+        automation_config,
+        buttons,
+        progress,
+        next_level,
     )
 
 
@@ -1210,15 +1143,24 @@ def configured_extra_candidates(
     third_column = configured_third_column_unclaimed_row_candidate(
         automation_config,
         buttons,
+        recent_actions,
     )
-    if configured_claimed_visible(automation_config, buttons):
-        if (
+    higher_levels_scroll = configured_higher_levels_scroll_candidate(
+        automation_config,
+        buttons,
+        recent_actions,
+    )
+    claimed_visible = configured_claimed_visible(automation_config, buttons)
+    if higher_levels_scroll is not None:
+        extras.append(higher_levels_scroll)
+    elif claimed_visible:
+        if third_column and main_challenge_next_level(automation_config) is not None:
+            extras.append(third_column)
+        elif (
             configured_recently_reentered(automation_config, recent_actions)
             and third_column
         ):
             extras.append(third_column)
-        elif configured_recently_reentered(automation_config, recent_actions):
-            extras.append(main_challenge_scroll_candidate())
         elif automation_config.claimed_back_candidate is not None:
             extras.append(automation_config.claimed_back_candidate.to_button())
     elif third_column:
@@ -1298,6 +1240,30 @@ def game_info_path_for(game: str) -> Path:
 
 def ocr_config_path_for(game: str) -> Path:
     return game_root_for(game) / 'ocr_config.yaml'
+
+
+def main_challenge_progress_path_for(game: str) -> Path:
+    return game_root_for(game) / 'main_challenge_progress.yaml'
+
+
+def load_main_challenge_progress(game: str) -> dict[str, Any]:
+    path = main_challenge_progress_path_for(game)
+    if not path.exists():
+        return {}
+    payload = safe_load_yaml_mapping(path)
+    return payload if isinstance(payload, dict) else {}
+
+
+def write_main_challenge_progress(game: str, progress: dict[str, Any]) -> None:
+    path = main_challenge_progress_path_for(game)
+    path.write_text(
+        yaml.safe_dump(
+            progress,
+            sort_keys=False,
+            allow_unicode=True,
+            default_flow_style=False,
+        )
+    )
 
 
 def load_ocr_config(game: str) -> dict[str, Any]:
@@ -1548,6 +1514,24 @@ def parse_label_groups(values: list[str]) -> tuple[tuple[str, ...], ...]:
     return tuple(groups)
 
 
+def parse_item_preference_rules(values: list[str]) -> tuple[ItemPreferenceRule, ...]:
+    rules: list[ItemPreferenceRule] = []
+    for value in values:
+        parts = [part.strip() for part in value.split('|')]
+        if len(parts) < 2:
+            continue
+        try:
+            points = float(parts[1])
+        except ValueError:
+            continue
+        pattern = normalize_label(parts[0])
+        if not pattern:
+            continue
+        reason = parts[2] if len(parts) > 2 else f'configured preference: {parts[0]}'
+        rules.append(ItemPreferenceRule(pattern=pattern, points=points, reason=reason))
+    return tuple(rules)
+
+
 def parse_passive_nameplate_region(
     text: str,
 ) -> tuple[float, float, float, float, float] | None:
@@ -1565,6 +1549,14 @@ def parse_passive_nameplate_region(
 def first_list_item(text: str, heading: str) -> str:
     items = extract_list_section(text, heading, [])
     return items[0] if items else ''
+
+
+def first_list_int(text: str, heading: str) -> int | None:
+    item = first_list_item(text, heading)
+    if not item:
+        return None
+    match = re.search(r'\d+', item)
+    return int(match.group(0)) if match else None
 
 
 def load_automation_config(game: str) -> GameAutomationConfig:
@@ -1779,6 +1771,9 @@ def load_automation_config(game: str) -> GameAutomationConfig:
             )
             if value.strip()
         ),
+        item_preference_rules=parse_item_preference_rules(
+            extract_list_section(text, 'Automation Item Preference Rules', [])
+        ),
         ignored_game_info_types=normalized_label_set(
             extract_list_section(
                 text,
@@ -1794,6 +1789,7 @@ def load_automation_config(game: str) -> GameAutomationConfig:
             text,
             'Automation No Change Empty Screen Rule',
         ),
+        target_level=first_list_int(text, 'Automation Target Level'),
     )
 
 
@@ -2036,6 +2032,7 @@ class McpClient:
         self.request_id = 0
 
     def __enter__(self) -> McpClient:
+        debug_progress(f'start MCP: {shlex.join(self.command)}')
         self.process = subprocess.Popen(
             self.command,
             stdin=subprocess.PIPE,
@@ -2046,6 +2043,7 @@ class McpClient:
         )
         self.selector = selectors.DefaultSelector()
         self.selector.register(self.process.stdout, selectors.EVENT_READ)
+        debug_progress('initialize MCP')
         self.request(
             'initialize',
             {
@@ -2079,6 +2077,7 @@ class McpClient:
         }
         self.process.stdin.write(json.dumps(payload, separators=(',', ':')) + '\n')
         self.process.stdin.flush()
+        debug_progress(f'MCP request {request_id}: {method}')
         return self._read_response(request_id)
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -2111,6 +2110,7 @@ class McpClient:
                 continue
             if 'error' in response:
                 raise RuntimeError(response['error'].get('message', response['error']))
+            debug_progress(f'MCP response {request_id}')
             return response
 
         stderr = ''
@@ -2855,6 +2855,51 @@ def configured_skill_choice_visible(
     return has_required and has_instruction
 
 
+def configured_skill_choice_detail_overlay_visible(
+    automation_config: GameAutomationConfig,
+    buttons: list[ButtonCandidate],
+) -> bool:
+    if not configured_skill_choice_visible(automation_config, buttons):
+        return False
+    overlay_title = any(
+        button.source != 'template'
+        and 0.28 <= button.y <= 0.36
+        and 0.34 <= button.x <= 0.66
+        and normalize_label(button.label)
+        not in automation_config.skill_choice_ignored_labels
+        for button in buttons
+    )
+    if not overlay_title:
+        return False
+    overlay_detail = any(
+        button.source != 'template'
+        and 0.48 <= button.y <= 0.66
+        and (
+            ':' in button.label
+            or 'can be evolved' in normalize_label(button.label)
+            or 'guardian mode' in normalize_label(button.label)
+            or 'evolved into' in normalize_label(button.label)
+        )
+        for button in buttons
+    )
+    return overlay_detail
+
+
+def configured_skill_choice_detail_close_candidate() -> ButtonCandidate:
+    return ButtonCandidate(
+        label='Close skill detail',
+        x=0.825,
+        y=0.33,
+        confidence=1.0,
+        clickability=4.0,
+        source='vision',
+        reason=(
+            'A skill description overlay is covering the cards; close it before '
+            'choosing another yellow card banner.'
+        ),
+    )
+
+
 def filter_configured_non_action_buttons(
     automation_config: GameAutomationConfig,
     buttons: list[ButtonCandidate],
@@ -2920,6 +2965,24 @@ def expanded_button_visual_crop(
     return np.asarray(image.crop((crop_left, crop_top, crop_right, crop_bottom)))
 
 
+def lower_toggle_visual_crop(
+    image: Image.Image,
+    button: ButtonCandidate,
+) -> np.ndarray | None:
+    width, height = image.size
+    center_x = max(0.0, min(1.0, button.x)) * width
+    center_y = max(0.0, min(1.0, button.y + 0.038)) * height
+    crop_width = width * 0.09
+    crop_height = height * 0.05
+    crop_left = max(0, int(round(center_x - (crop_width / 2.0))))
+    crop_top = max(0, int(round(center_y - (crop_height / 2.0))))
+    crop_right = min(width, int(round(center_x + (crop_width / 2.0))))
+    crop_bottom = min(height, int(round(center_y + (crop_height / 2.0))))
+    if crop_right <= crop_left or crop_bottom <= crop_top:
+        return None
+    return np.asarray(image.crop((crop_left, crop_top, crop_right, crop_bottom)))
+
+
 def is_low_chroma_gray_crop(crop: np.ndarray | None) -> bool:
     if crop is None or crop.size == 0:
         return False
@@ -2953,6 +3016,37 @@ def is_low_chroma_gray_crop(crop: np.ndarray | None) -> bool:
     )
 
 
+def is_disabled_toggle_crop(crop: np.ndarray | None) -> bool:
+    if crop is None or crop.size == 0:
+        return False
+
+    pixels = crop.astype(np.float32)
+    if pixels.ndim == 2:
+        gray = pixels
+        saturation = np.zeros_like(gray)
+    else:
+        red = pixels[..., 0]
+        green = pixels[..., 1]
+        blue = pixels[..., 2]
+        max_channel = np.maximum(np.maximum(red, green), blue)
+        min_channel = np.minimum(np.minimum(red, green), blue)
+        gray = 0.299 * red + 0.587 * green + 0.114 * blue
+        saturation = (max_channel - min_channel) / np.maximum(max_channel, 1.0)
+
+    mean_saturation = float(np.mean(saturation))
+    high_saturation = float(np.percentile(saturation, 90))
+    mean_brightness = float(np.mean(gray) / 255.0)
+    highlight = float(np.percentile(gray, 90) / 255.0)
+    contrast = float(np.std(gray) / 255.0)
+    return (
+        mean_saturation <= 0.30
+        and high_saturation <= 0.45
+        and 0.12 <= mean_brightness <= 0.70
+        and highlight <= 0.78
+        and contrast <= 0.30
+    )
+
+
 def is_configured_disabled_gray_button(
     automation_config: GameAutomationConfig,
     image: Image.Image,
@@ -2962,6 +3056,8 @@ def is_configured_disabled_gray_button(
         return False
     if button.source == 'vision':
         return False
+    if normalize_label(button.label) in CHALLENGE_DETAIL_FAST_ACTION_KEYS:
+        return is_disabled_toggle_crop(lower_toggle_visual_crop(image, button))
     return is_low_chroma_gray_crop(expanded_button_visual_crop(image, button))
 
 
@@ -3002,6 +3098,7 @@ def configured_skill_choice_groups(
                 or key in automation_config.skill_choice_ignored_labels
                 or key.startswith('refreshes left')
                 or looks_like_noise_label(label, automation_config)
+                or button.clickability < 1.25
             ):
                 continue
             if 0.35 <= button.y <= 0.43:
@@ -3164,6 +3261,18 @@ def inspect_configured_skill_choice(
     buttons: list[ButtonCandidate],
     artifact_paths: dict[str, Path],
 ) -> tuple[list[ItemInspection], Decision | None]:
+    if configured_skill_choice_detail_overlay_visible(automation_config, buttons):
+        close = configured_skill_choice_detail_close_candidate()
+        return [], Decision(
+            status='ready',
+            reason=(
+                'A skill detail overlay is open; close it before selecting the '
+                'yellow banner for the next choice.'
+            ),
+            recommended=close,
+            choices=[close],
+        )
+
     inspections = configured_skill_choice_inspections(
         automation_config=automation_config,
         game=args.game,
@@ -3408,8 +3517,11 @@ def preferred_choice_term_matches(term: str, text: str) -> bool:
     if compact_term and compact_term in compact_text:
         return True
 
-    if compact_term == 'drone':
-        return 'dron' in compact_text
+    if len(compact_term) >= 5:
+        for index in range(len(compact_term)):
+            shortened = compact_term[:index] + compact_term[index + 1 :]
+            if shortened and shortened in compact_text:
+                return True
     return False
 
 
@@ -3433,6 +3545,12 @@ def configured_item_preference_score(
     automation_config: GameAutomationConfig | None = None,
 ) -> tuple[float, list[str]]:
     score, reasons = item_preference_score(label, description)
+    if automation_config is not None:
+        text = normalize_label(f'{label} {description}')
+        for rule in automation_config.item_preference_rules:
+            if rule.pattern in text:
+                score += rule.points
+                reasons.append(rule.reason)
     match = configured_always_preferred_choice_match(
         label,
         description,
@@ -4457,6 +4575,25 @@ def score_buttons(
         if automation_config is not None
         else set()
     )
+    main_challenge_grid_labels = {
+        normalize_label(button.label)
+        for button in buttons
+        if button.source != 'template'
+    }
+    main_challenge_grid_visible = (
+        automation_config is not None
+        and automation_config.target_level is not None
+        and 'back to top' in main_challenge_grid_labels
+        and (
+            configured_level_grid_visible(automation_config, buttons)
+            or configured_claimed_visible(automation_config, buttons)
+        )
+    )
+    main_challenge_next = (
+        main_challenge_next_level(automation_config)
+        if main_challenge_grid_visible and automation_config is not None
+        else None
+    )
     defeat_recovery_labels = set(DEFEAT_RECOVERY_LABELS)
     recruit_labels = set(RECRUIT_LABELS)
     current_room_labels = set(CURRENT_ROOM_ICON_LABELS)
@@ -4468,6 +4605,11 @@ def score_buttons(
         energy_empty_destination_labels = set(
             automation_config.energy_empty_destination_labels
         )
+    fast_challenge_action_visible = challenge_detail_visible and any(
+        normalize_label(candidate.label) in CHALLENGE_DETAIL_FAST_ACTION_KEYS
+        for candidate in buttons
+        if candidate.source != 'template'
+    )
     scored = []
     for button in buttons:
         key = normalize_label(button.label)
@@ -4488,11 +4630,14 @@ def score_buttons(
             if key in energy_empty_destination_labels:
                 score += 2.25
             if (
-                key in {'steamroll', 'start', 'battle', 'fight'}
+                key in CHALLENGE_DETAIL_ACTION_KEYS
                 and not energy_empty_action_exemption_visible
             ):
                 score -= 3.0
-        if energy_empty_action_exemption_visible and key == 'start':
+        if (
+            energy_empty_action_exemption_visible
+            and key in CHALLENGE_DETAIL_ACTION_KEYS
+        ):
             score += 3.0
         if assist_pack_popup_visible:
             dismiss_ineffective = 'dismiss assist pack popup' in ineffective
@@ -4502,7 +4647,7 @@ def score_buttons(
                 score -= 4.0
             elif key == 'view' and dismiss_ineffective:
                 score += 4.0
-            elif key in {'start', 'steamroll', 'battle', 'fight', 'view'}:
+            elif key in (CHALLENGE_DETAIL_ACTION_KEYS | {'view'}):
                 score -= 5.0
         if shop_screen_visible and key == shop_escape_label:
             score += 4.0
@@ -4516,7 +4661,7 @@ def score_buttons(
         if weekly_goodies_visible:
             if key == 'claim':
                 score += 5.0
-            elif key in {'start', 'steamroll', 'battle', 'fight'}:
+            elif key in CHALLENGE_DETAIL_ACTION_KEYS:
                 score -= 5.0
         if (
             challenge_detail_visible
@@ -4527,6 +4672,10 @@ def score_buttons(
                 score -= 2.5
             else:
                 score += 2.5
+                if key in CHALLENGE_DETAIL_FAST_ACTION_KEYS:
+                    score += 3.0
+                elif key == 'start' and fast_challenge_action_visible:
+                    score -= 2.0
         if result_progress_visible and result_confirm_visible:
             if key in CONFIRM_LABELS:
                 score += 5.0
@@ -4538,6 +4687,19 @@ def score_buttons(
             if configured_reward_close_label_match(button.label, automation_config):
                 score += 4.0
             elif button.source == 'template':
+                score -= 3.0
+        if (
+            main_challenge_grid_visible
+            and not challenge_detail_visible
+            and not result_progress_visible
+            and not reward_close_visible
+        ):
+            if key == 'back to top' and main_challenge_next is not None:
+                score -= 6.0
+            if button.source in {'ocr', 'llm'} and configured_level_row_label(
+                automation_config,
+                button.label,
+            ):
                 score -= 3.0
         if key in avoid and not (ad_revive_context and key in CANCEL_LABELS):
             score -= 1.25
@@ -5967,10 +6129,13 @@ def parse_args() -> argparse.Namespace:
 
 
 def run_turn(args: argparse.Namespace) -> TurnResult:
+    debug_progress('turn: create artifacts')
     artifact_paths, timestamp = create_turn_artifacts(args)
 
+    debug_progress('turn: load image')
     image, metadata = load_image(args)
 
+    debug_progress('turn: save screenshot')
     artifact_paths['screen'].parent.mkdir(parents=True, exist_ok=True)
     image.save(artifact_paths['screen'])
     image = Image.open(artifact_paths['screen']).convert('RGB')
@@ -5983,6 +6148,7 @@ def run_turn(args: argparse.Namespace) -> TurnResult:
     strategy_text = load_strategy_text(args.game)
     automation_config = load_automation_config(args.game)
     llm_result_path = stage_llm_result(args.llm_result, artifact_paths['llm'])
+    debug_progress('turn: analyze buttons')
     detected_buttons = analyze_buttons(
         image,
         confidence=args.confidence,
@@ -6023,6 +6189,7 @@ def run_turn(args: argparse.Namespace) -> TurnResult:
         template_buttons=template_buttons,
         llm_buttons=llm_candidates,
     )
+    debug_progress('turn: score buttons')
     candidate_buttons = filter_conflicting_template_buttons(
         [*ocr_buttons, *template_buttons, *llm_candidates]
     )
@@ -6108,8 +6275,8 @@ def run_turn(args: argparse.Namespace) -> TurnResult:
                 clickability=0.0,
                 source='state',
                 reason=(
-                    'Recent low-energy popup; keep navigating toward Challenge, '
-                    'Trial, or Main Challenge.'
+                    'Recent low-energy popup; keep navigating toward the '
+                    'configured low-energy fallback destination.'
                 ),
             )
         )
@@ -6123,16 +6290,29 @@ def run_turn(args: argparse.Namespace) -> TurnResult:
         memory,
         automation_config,
     )
-    decision = decide_next_move(
+    completion_reason = configured_level_grid_complete_reason(
+        automation_config,
         buttons,
-        min_action_score=args.min_action_score,
-        ambiguity_margin=args.ambiguity_margin,
-        ask_on_ambiguous=args.ask_on_ambiguous,
-        fallback_labels={
-            normalize_label(label) for label in memory.get('fallback', [])
-        },
-        automation_config=automation_config,
+        recent_actions=recent_actions,
     )
+    if completion_reason is not None:
+        decision = Decision(
+            status='complete',
+            reason=completion_reason,
+            recommended=None,
+            choices=[],
+        )
+    else:
+        decision = decide_next_move(
+            buttons,
+            min_action_score=args.min_action_score,
+            ambiguity_margin=args.ambiguity_margin,
+            ask_on_ambiguous=args.ask_on_ambiguous,
+            fallback_labels={
+                normalize_label(label) for label in memory.get('fallback', [])
+            },
+            automation_config=automation_config,
+        )
     if getattr(args, 'force_unblock_next', False):
         decision = decide_unblock_move(
             buttons,
@@ -6142,6 +6322,8 @@ def run_turn(args: argparse.Namespace) -> TurnResult:
     item_inspections: list[ItemInspection] = []
     inspected_decision = None
     if decision.status == 'ready':
+        label = decision.recommended.label if decision.recommended else 'none'
+        debug_progress(f'turn: inspect choices for {label}')
         item_inspections, inspected_decision = inspect_item_choices(
             args,
             buttons=buttons,
@@ -6170,14 +6352,23 @@ def run_turn(args: argparse.Namespace) -> TurnResult:
     verification = None
     if args.click_recommended and decision.status == 'ready' and decision.recommended:
         clicked = decision.recommended
+        debug_progress(f'turn: click {clicked.label}')
         click_button(args, clicked)
+        debug_progress('turn: verify state change')
         verification = verify_state_changed_after_click(
             args,
             before_image=image,
             button=clicked,
             last_screenshot_path=artifact_paths['last_screen'],
         )
+        update_main_challenge_progress_after_action(
+            args.game,
+            automation_config,
+            buttons,
+            clicked,
+        )
 
+    debug_progress('turn: write artifacts')
     write_ocr_yaml(
         artifact_paths['ocr'],
         game=args.game,
@@ -6210,6 +6401,7 @@ def run_turn(args: argparse.Namespace) -> TurnResult:
         item_inspections=item_inspections,
     )
 
+    debug_progress('turn: render report')
     report = render_report(
         args,
         image,
@@ -6224,7 +6416,7 @@ def run_turn(args: argparse.Namespace) -> TurnResult:
         learned_templates,
         item_inspections,
     )
-    print(report)
+    print(report, flush=True)
     return TurnResult(decision=decision, verification=verification)
 
 
