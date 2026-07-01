@@ -7,15 +7,27 @@
 - Adventure
 - Enter Adventure
 - Start Adventure
+- Hard
+- Hard Mode
+- Dragon Forest
 - 冒险
 - 进入冒险
 - 开始冒险
+- 困难
+- 困难模式
+- 巨龙森林
+- 龙之森林
+- 龙森林
+- 龙族森林
+- 龙族森林 进入冒险
+- 深渊森林
 - 战斗
 - 开战
 - 挑战
 - 幼虫
 - 岩壳龙
 - 大龙
+- 侏儒怪
 - 爬塔
 - Fight
 - Battle
@@ -30,12 +42,16 @@
 - 发现弱点
 - 迅捷攻击
 - 迅捷
+- 小丑飞刺
+- 快速思考
+- 虚弱
 - 转身准备
 - 弱点打击
 - 专注宝石
 - Chest
 - Treasure
 - 宝箱
+- 前辈的宝物
 - Take Treasure
 - 拿走前辈的宝物
 - Backpack Room
@@ -59,15 +75,10 @@
 - Start
 - Play
 - Continue
+- Continue Adventure
+- 继续冒险
 - Resume Adventure
 - 恢复冒险
-- Recruit
-- Recruit Adventurer
-- 招募
-- 招募冒险者
-- Hire
-- Hire Adventurer
-- 雇佣
 - Next
 - OK
 - Claim
@@ -110,6 +121,23 @@
 - 遗忘法阵
 - Forget Card
 - Tap
+- SHOP
+- Shop
+- 商城
+- .•.
+- ...
+- ⋯
+- 快速冒险
+- 我再想想
+- 8$
+- P.
+- Recruit
+- Recruit Adventurer
+- 招募
+- 招募冒险者
+- Hire
+- Hire Adventurer
+- 雇佣
 
 ## Ineffective Buttons
 None yet.
@@ -137,21 +165,27 @@ None yet.
 
 ## Decision Rules
 - Prefer adventure, fight, battle, attack, challenge, start, continue, and retry actions.
+- For this run, choose the Adventure path, choose **Hard** / **困难** difficulty,
+  then choose **Dragon Forest** / **巨龙森林** / **龙之森林** before starting.
 - On the stage loadout screen, click **开始冒险** / **Start Adventure** to begin
   the selected run.
+- If character selection appears, pick any available character and continue;
+  do not spend turns comparing characters unless one is clearly locked or
+  unavailable.
+- On the Dragon Forest character-selection screen, prefer **开始冒险** over
+  **快速冒险** so the selected hard-mode stage is preserved.
 - Prefer resume adventure when a previous tower fight can be continued.
 - On a defeat screen (`游戏失败`), click **返回旅馆** / **Return to Inn** so the
   next run can start from the inn instead of tapping stat labels.
-- If the game says there is no usable adventurer (`当前无可用冒险者，请前往旅馆招募`),
-  return to the inn and click **招募** / **Recruit** before trying Adventure again.
-- On the recruit detail screen, click **雇佣** / **Hire** to add the adventurer;
-  do not click **拒绝** or the back control unless hire is unavailable.
-- After hiring succeeds and the new adventurer formally joins, click
-  **进入冒险** and avoid **稍后再说**.
+- The user explicitly said not to click **招募**; from the inn, choose
+  **冒险** / fighting routes instead of recruiting or hiring.
 - Prefer strength-building actions before navigation arrows: weapons, treasure, chest rooms, backpack/utility rooms, scroll/card rooms, combat cards, merge/upgrade actions, and reward pickups can improve the character.
 - Use arrow/path controls only when there is no visible fight, reward, room choice, equipment, treasure, card, chest, backpack, merge, pickup, confirm-after-selection, or other strength-building action available.
 - When choosing between items/cards/treasures, tap each option first to reveal and OCR its description, remember the description, then select the best option and confirm it.
 - In item choices, always prefer permanent stat changes first, then coin gain, then stat increases that trigger per battle or every battle.
+- Prefer items, skills, treasures, and event choices that increase money,
+  coins, permanent stats, attack, health, defense, crit, or other direct combat
+  stats.
 - Prefer sword/combat room choices over treasure, backpack, or utility rooms.
 - If no combat room is available, prefer treasure/chest rooms over backpack or utility rooms because they can improve character strength.
 - If only a backpack or utility room remains, choose it to keep the dungeon moving.
@@ -174,8 +208,9 @@ None yet.
   noise, stat text, useful combat/card actions, start/confirm actions, or
   context-dependent buttons here after a single failed click.
 - If map-room clicks do not open an event, tap the open path in the top playfield to move the hero.
-- On the in-run room map, click the visible enemy/current-room icon such as
-  **幼虫** to start the encounter; do not treat its `Lv.1` label as the action.
+- On the in-run room map, click the visible enemy icon such as **幼虫** or
+  **侏儒怪** to start the encounter; do not treat its `Lv.1`/`Lv.2` label as the
+  action.
 - In treasure selection, prefer offensive fight-scaling options such as Giant Fist.
 - In card learning, prefer combat focus or fight-scaling cards over cards that spend health.
 - On card-learning screens (`选一张卡牌学习`), never click **Abandon**; select
@@ -208,12 +243,19 @@ None yet.
 - If an action does not change the screen after retries, try a different
   fight-like option on the next turn; only update Ineffective Buttons after
   repeated high-confidence evidence.
-- Do not treat standalone stat delta text such as **±2**, **+4**, or **+5** as an action; those are descriptive values, not buttons.
+- Do not treat standalone currency/stat text such as **8$**, **±2**, **+4**,
+  or **+5** as an action; those are descriptive values, not buttons.
 - When the last few turn screenshots remain nearly identical, temporarily deprioritize repeated actions and try a different visible target, tutorial-highlighted control, close/detail/back control, or vision-identified clickable before retrying.
 - When a room arrow fails to change the screen after retries, pick the brighter route or a concrete room icon before retrying that arrow.
 
 ## Learned Choices
 - The user said the tower strategy is to keep fighting.
+- The user asked for Adventure -> hard mode -> Dragon Forest, then playing all
+  levels with any character while prioritizing money and stat increases.
+- On the Chinese adventure map, treat **深渊森林** as the requested forest
+  route after hard mode is selected.
+- On the hard-mode stage list, treat **龙族森林** as the requested Dragon Forest
+  route and click its own **进入冒险** button, not the earlier stages.
 - Choose **进入冒险** / **Enter Adventure** over the bottom Adventure tab when a selected stage is visible because it starts the selected tower fight.
 - Choose **开始冒险** / **Start Adventure** on the stage loadout screen because it
   launches the selected fight.
@@ -223,19 +265,19 @@ None yet.
   room that starts an encounter; ignore its `Lv.1` label as a standalone action.
 - Choose **大龙** on the in-run map when visible because it is a higher-level
   enemy room that starts an encounter; ignore its `Lv.2` label as a standalone action.
+- Choose **侏儒怪** on the in-run map when visible because it is the next enemy
+  room; ignore its `Lv.2` label as a standalone action.
 - Choose **恢复冒险** / **Resume Adventure** instead of **放弃冒险** / **Abandon Adventure** because resuming keeps fighting.
 - Choose **返回旅馆** / **Return to Inn** after defeat because it recovers to a
   playable state where the next tower attempt can begin.
-- If the inn/adventure flow loops through `当前无可用冒险者，请前往旅馆招募`,
-  choose **招募** on the inn panel before tapping **冒险** again.
-- After recruiting reveals an adventurer detail sheet, choose **雇佣** because
-  hiring restores a playable adventurer and should unblock the next run.
-- When the `正式加入！` screen appears, click **进入冒险** because the new
-  adventurer is ready for the tower run.
+- From the inn, choose **冒险** rather than **招募** because the user wants to go
+  fighting immediately.
 - Choose arrows only as fallback navigation when no better strength-building or event action is visible; improving the character is more valuable than blindly advancing.
 - Choose **普通小剑** / **Normal Sword** when room choices appear because it is the fight-like route.
 - On the branch map, the small up-arrow can highlight/shift focus without advancing; choose a concrete room icon instead.
 - Choose treasure/chest rooms when no fight-like room is available because they can increase strength.
+- Choose **前辈的宝物** over **职业背包** when both are visible because the treasure
+  room is more likely to improve money, stats, or combat power.
 - Choose backpack/utility rooms when fight-like and treasure rooms are not available because utility can still improve the character.
 - Choose scroll/paper rooms before arrows because cards/scrolls can improve future fights.
 - If the map appears stuck after clearing room rewards, use the top playfield path direction rather than the map.
@@ -251,6 +293,8 @@ None yet.
   settings first and look for a recovery, return, or other explicit progress
   control. The top run-menu button can open the external share panel instead,
   so use it only after settings is unavailable.
+- On the **设置界面** settings overlay during a live run, click **继续冒险** to
+  close the panel and keep the Dragon Forest run alive.
 - If the external share panel opens, close it with **关闭分享面板**; treat the
   green **Tap** badge in the title as a non-action label.
 - Hard loop observed on `2026-05-24`: after HP reached `0/55`, the visible
@@ -269,9 +313,11 @@ None yet.
 - If card descriptions cannot be read and **舍命一击** is one option, prefer
   a safer attack/buff card such as **闪耀挥击** or **战术准备** because
   `舍命` strongly implies a self-sacrifice or HP-cost effect.
-- In combat, prefer safer visible cards such as **发现弱点**, **迅捷攻击**,
-  **迅捷**, **转身准备**, or **弱点打击** before **End**. Avoid
+- In combat, prefer safer visible cards such as **小丑飞刺**, **快速思考**,
+  **虚弱**, **发现弱点**, **迅捷攻击**, **迅捷**, **转身准备**, or **弱点打击** before **End**. Avoid
   **舍命一击** when any safer card is playable.
+- When **小丑飞刺** is visible with a damage number such as `19`, play it before
+  defensive or utility cards because it directly helps finish the fight.
 - Choose **捡起** / **Pick Up** for weapons and combat gear because it supports the keep-fighting strategy.
 - Choose **融合** on the weapon reward upgrade panel because it improves combat gear; do not treat the side-panel fusion shortcut as a fight action.
 - Choose **融合** on combat-card reward upgrade panels because it improves fighting cards.
@@ -284,6 +330,8 @@ None yet.
 - Treat **Forget Card** as a screen title, not a card choice; avoid forgetting cards unless no progression alternative exists.
 - On the **Forget Card** screen, choose the return/back control instead of selecting a card to forget.
 - If an external game sidebar or sharing panel opens, close it before continuing the tower.
+- If **卡牌使用记录** opens during combat, click **返回** to close it; do not
+  treat OCR artifacts like **P.** near the top bar as combat actions.
 
 ## Automation Navigation Labels
 - 下一房间
@@ -308,21 +356,17 @@ None yet.
 ## Automation Command Labels
 - 冒险
 - 进入冒险
+- 开始冒险
 - 战斗
 - 挑战
 - 继续
 - 恢复冒险
-- 招募
-- 招募冒险者
-- 雇佣
 - 领取
 - 收集
 - 捡起
 - 强化
 - 点击空白处关闭
 - Return to Inn
-- Recruit Adventurer
-- Hire Adventurer
 - Dismiss Reward
 - Close Reward
 
@@ -331,13 +375,7 @@ None yet.
 - 返回旅馆
 
 ## Automation Recruit Labels
-- Recruit
-- Recruit Adventurer
-- Hire
-- Hire Adventurer
-- 招募
-- 招募冒险者
-- 雇佣
+- Disabled for this run; the user said not to click **招募**.
 
 ## Automation Combat Double Tap Labels
 - normal attack
@@ -363,14 +401,16 @@ None yet.
 - 发现弱点
 - 迅捷攻击
 - 迅捷
+- 小丑飞刺
+- 快速思考
+- 虚弱
 - 转身准备
 - 弱点打击
 - 舍命一击
 
 ## Automation Current Room Labels
-- 幼虫
-- 岩壳龙
-- 大龙
+- Disabled for this run; visible enemy names should start fights and must not
+  be penalized below connector arrows.
 
 ## Item Choice Priorities
 - Permanent stat changes are highest priority.
