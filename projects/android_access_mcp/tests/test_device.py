@@ -10,6 +10,7 @@ class FakeAdbDevice:
         self.info = {'serial': 'phone-1'}
         self.clicked = []
         self.swiped = []
+        self.shell_commands = []
 
     def window_size(self):
         return 1000, 2000
@@ -19,6 +20,10 @@ class FakeAdbDevice:
 
     def swipe(self, start_x, start_y, end_x, end_y, duration):
         self.swiped.append((start_x, start_y, end_x, end_y, duration))
+
+    def shell(self, command):
+        self.shell_commands.append(command)
+        return ''
 
     def screenshot(self, _display_id):
         return Image.new('RGB', (100, 200), color='black')
@@ -123,6 +128,39 @@ def test_swipe_rejects_non_positive_duration(monkeypatch):
         device.swipe(0.1, 0.1, 0.9, 0.9, duration_ms=0)
     except ValueError as error:
         assert str(error) == 'duration_ms must be greater than zero'
+    else:
+        raise AssertionError('Expected ValueError')
+
+
+def test_back_sends_android_back_keyevent(monkeypatch):
+    fake_device = FakeAdbDevice()
+    fake_adb = SimpleNamespace(
+        device_list=lambda: [SimpleNamespace(serial='phone-1', state='device')],
+        device=lambda serial=None: fake_device,
+    )
+    monkeypatch.setattr(device_module.adbutils, 'adb', fake_adb)
+
+    device = device_module.AndroidDevice()
+    result = device.back()
+
+    assert fake_device.shell_commands == [['input', 'keyevent', 'BACK']]
+    assert result.key == 'BACK'
+
+
+def test_keyevent_rejects_shell_metacharacters(monkeypatch):
+    fake_device = FakeAdbDevice()
+    fake_adb = SimpleNamespace(
+        device_list=lambda: [SimpleNamespace(serial='phone-1', state='device')],
+        device=lambda serial=None: fake_device,
+    )
+    monkeypatch.setattr(device_module.adbutils, 'adb', fake_adb)
+
+    device = device_module.AndroidDevice()
+
+    try:
+        device.keyevent('BACK;rm')
+    except ValueError as error:
+        assert str(error) == 'key must contain only letters, numbers, or underscores'
     else:
         raise AssertionError('Expected ValueError')
 

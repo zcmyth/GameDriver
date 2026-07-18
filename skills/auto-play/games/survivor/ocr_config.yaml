@@ -7,7 +7,7 @@ templates:
       - 1.00
       - 0.92
   close:
-    match_threshold: 0.88
+    match_threshold: 0.70
     search_roi:
       - 0.80
       - 0.15

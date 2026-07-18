@@ -4,6 +4,7 @@ import base64
 import io
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass
 from functools import wraps
@@ -52,6 +53,12 @@ class SwipeResult:
     width: int
     height: int
     duration_ms: int
+
+
+@dataclass(frozen=True)
+class KeyEventResult:
+    key: str
+    output: str
 
 
 @dataclass(frozen=True)
@@ -253,3 +260,21 @@ class AndroidDevice:
             height=height,
             duration_ms=duration_ms,
         )
+
+    @throttle(0.1)
+    def keyevent(self, key: str | int) -> KeyEventResult:
+        key_value = str(key).strip().upper()
+        if not re.fullmatch(r'[A-Z0-9_]+', key_value):
+            raise ValueError('key must contain only letters, numbers, or underscores')
+
+        try:
+            output = self._adb_device.shell(['input', 'keyevent', key_value])
+        except Exception:
+            self.logger.exception('Keyevent failed, reconnecting ADB and retrying once')
+            self._connect()
+            output = self._adb_device.shell(['input', 'keyevent', key_value])
+
+        return KeyEventResult(key=key_value, output=str(output or ''))
+
+    def back(self) -> KeyEventResult:
+        return self.keyevent('BACK')
