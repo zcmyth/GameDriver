@@ -138,7 +138,9 @@ class GameAutomationConfig:
     energy_empty_labels: frozenset[str] = frozenset()
     energy_empty_destination_labels: frozenset[str] = frozenset()
     energy_empty_action_exemption_labels: frozenset[str] = frozenset()
+    loadout_start_labels: frozenset[str] = frozenset()
     energy_empty_candidate: AutomationCandidateSpec | None = None
+    loadout_select_candidate: AutomationCandidateSpec | None = None
     shop_escape_candidate: AutomationCandidateSpec | None = None
     empty_screen_candidate: AutomationCandidateSpec | None = None
     waiting_candidate: AutomationCandidateSpec | None = None
