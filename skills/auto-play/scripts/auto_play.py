@@ -5,7 +5,6 @@ import argparse
 import base64
 import io
 import json
-import os
 import re
 import selectors
 import shlex
@@ -14,7 +13,6 @@ import sys
 import time
 from dataclasses import dataclass, replace
 from datetime import datetime
-from functools import lru_cache
 from pathlib import Path
 from shutil import rmtree
 from typing import Any
@@ -44,7 +42,6 @@ DEFAULT_AVOID = [
     '放弃',
     '放弃冒险',
 ]
-DEFAULT_TOWER_GUIDE_ROOT = Path('/Users/chunzhang/games/skills/game-tower/guide')
 HARD_AVOID_LABELS = {
     'abandon',
     'abandon adventure',
@@ -595,20 +592,6 @@ class GameInfoEntry:
     first_seen: str
     last_seen: str
     last_screenshot: str
-
-
-@dataclass(frozen=True)
-class TapTapCatalogMatch:
-    name: str
-    catalog: str
-    group: str
-    type: str
-    cost: str
-    effect: str
-    source: str
-    url: str
-    icon_path: str
-    detail_image_paths: list[str]
 
 
 def repo_root() -> Path:
@@ -1591,139 +1574,6 @@ def template_images_dir_for(game: str) -> Path:
     path = game_root_for(game) / 'images'
     path.mkdir(parents=True, exist_ok=True)
     return path
-
-
-def taptap_catalog_index_path_for(game: str) -> Path:
-    if slugify(game) == 'tower' and local_root().resolve() == skill_root().resolve():
-        guide = Path(os.environ.get('TOWER_GUIDE_ROOT', str(DEFAULT_TOWER_GUIDE_ROOT)))
-        return guide / 'taptap_search_index.json'
-    return game_root_for(game) / 'guide' / 'taptap_search_index.json'
-
-
-@lru_cache(maxsize=32)
-def load_taptap_catalog_index(path_text: str) -> tuple[dict[str, Any], ...]:
-    path = Path(path_text)
-    if not path.exists():
-        return ()
-    try:
-        payload = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError):
-        return ()
-    if isinstance(payload, list):
-        entries = payload
-    elif isinstance(payload, dict) and isinstance(payload.get('entries'), list):
-        entries = payload['entries']
-    else:
-        return ()
-    return tuple(entry for entry in entries if isinstance(entry, dict))
-
-
-def taptap_catalog_entries_for(game: str) -> tuple[dict[str, Any], ...]:
-    return load_taptap_catalog_index(str(taptap_catalog_index_path_for(game)))
-
-
-def taptap_catalog_match_for(
-    game: str | None,
-    label: str,
-) -> TapTapCatalogMatch | None:
-    if not game or not label.strip():
-        return None
-    entries = taptap_catalog_entries_for(game)
-    if not entries:
-        return None
-
-    key = normalize_label(label)
-    compact_key = compact_preference_text(label)
-    exact: list[dict[str, Any]] = []
-    compact: list[dict[str, Any]] = []
-    contains: list[dict[str, Any]] = []
-    for entry in entries:
-        name = str(entry.get('name') or '').strip()
-        if not name:
-            continue
-        name_key = normalize_label(name)
-        name_compact = compact_preference_text(name)
-        if name_key == key:
-            exact.append(entry)
-        elif name_compact and compact_key and name_compact == compact_key:
-            compact.append(entry)
-        elif (
-            len(compact_key) >= 3
-            and name_compact
-            and (compact_key in name_compact or name_compact in compact_key)
-        ):
-            contains.append(entry)
-
-    matches = exact or compact or contains
-    if not matches:
-        return None
-    entry = matches[0]
-    return TapTapCatalogMatch(
-        name=str(entry.get('name') or ''),
-        catalog=str(entry.get('catalog') or ''),
-        group=str(entry.get('group') or ''),
-        type=str(entry.get('type') or ''),
-        cost=str(entry.get('cost') or ''),
-        effect=str(entry.get('effect') or ''),
-        source=str(entry.get('source') or ''),
-        url=str(entry.get('url') or ''),
-        icon_path=str(entry.get('icon_path') or ''),
-        detail_image_paths=[
-            str(path) for path in entry.get('detail_image_paths') or []
-        ],
-    )
-
-
-def taptap_catalog_summary(match: TapTapCatalogMatch) -> str:
-    parts = [
-        f'TapTap catalog: {match.catalog}/{match.group}'.rstrip('/'),
-        f'类型：{match.type}' if match.type else '',
-        f'消耗：{match.cost}' if match.cost else '',
-        f'效果：{match.effect}' if match.effect else '',
-        f'来源：{match.source}' if match.source else '',
-    ]
-    return '; '.join(part for part in parts if part)
-
-
-def taptap_catalog_scoring_summary(match: TapTapCatalogMatch) -> str:
-    parts = [
-        f'类型：{match.type}' if match.type else '',
-        f'效果：{match.effect}' if match.effect else '',
-    ]
-    return '; '.join(part for part in parts if part)
-
-
-def enrich_description_with_taptap_catalog(
-    game: str | None,
-    label: str,
-    description: str,
-) -> tuple[str, TapTapCatalogMatch | None]:
-    match = taptap_catalog_match_for(game, label)
-    if match is None:
-        return description, None
-    catalog_summary = taptap_catalog_summary(match)
-    if not catalog_summary:
-        return description, match
-    if not description.strip() or normalize_label(description) in {
-        'abandon',
-        'description not captured',
-    }:
-        return catalog_summary, match
-    if catalog_summary in description:
-        return description, match
-    return f'{description}; {catalog_summary}', match
-
-
-def taptap_catalog_kind(match: TapTapCatalogMatch | None) -> str | None:
-    if match is None:
-        return None
-    if match.catalog == '卡牌图鉴':
-        return 'card'
-    if match.catalog == '宝物图鉴':
-        return 'treasure'
-    if match.catalog == '天赋图鉴':
-        return 'talent'
-    return None
 
 
 def turns_root(args: argparse.Namespace) -> Path:
@@ -3466,11 +3316,6 @@ def configured_skill_choice_inspections(
             automation_config,
             game=game,
         )
-        description, catalog_match = enrich_description_with_taptap_catalog(
-            game,
-            title,
-            description,
-        )
         confidence = max(button.confidence for button in title_buttons)
         title_click_y = max(
             0.36,
@@ -3493,7 +3338,7 @@ def configured_skill_choice_inspections(
                 reasons=reasons,
                 screenshot='screenshot.png',
                 ocr_labels=[*description_labels],
-                kind=taptap_catalog_kind(catalog_match) or 'skill',
+                kind='skill',
             )
         )
     return inspections
@@ -3707,36 +3552,10 @@ def configured_item_preference_score(
     automation_config: GameAutomationConfig | None = None,
     game: str | None = None,
 ) -> tuple[float, list[str]]:
-    enriched_description, catalog_match = enrich_description_with_taptap_catalog(
-        game,
-        label,
-        description,
-    )
-    scoring_description = enriched_description
-    if catalog_match is not None:
-        catalog_scoring_summary = taptap_catalog_scoring_summary(catalog_match)
-        if catalog_scoring_summary:
-            if not description.strip() or normalize_label(description) in {
-                'abandon',
-                'description not captured',
-            }:
-                scoring_description = catalog_scoring_summary
-            else:
-                scoring_description = f'{description}; {catalog_scoring_summary}'
-    score, reasons = item_preference_score(label, scoring_description)
-    if catalog_match is not None:
-        reasons = merge_reasons(
-            [
-                (
-                    'TapTap catalog match: '
-                    f'{catalog_match.catalog}/{catalog_match.group}'
-                ),
-                *reasons,
-            ],
-        )
+    score, reasons = item_preference_score(label, description)
     match = configured_always_preferred_choice_match(
         label,
-        enriched_description,
+        description,
         automation_config,
     )
     if match:
@@ -3860,11 +3679,6 @@ def inspection_records_from_yaml(
         if not label:
             continue
         description = str(item.get('description') or '').strip()
-        description, catalog_match = enrich_description_with_taptap_catalog(
-            game,
-            label,
-            description,
-        )
         score, fallback_reasons = record_score_and_reasons(
             label,
             description,
@@ -3875,10 +3689,9 @@ def inspection_records_from_yaml(
             score = max(float(item.get('item_score') or item.get('score')), score)
         except (TypeError, ValueError):
             pass
-        kind = (
-            str(item.get('kind') or '').strip()
-            or taptap_catalog_kind(catalog_match)
-            or classify_game_info_entry(label, description)
+        kind = str(item.get('kind') or '').strip() or classify_game_info_entry(
+            label,
+            description,
         )
         records.append(
             {
@@ -5074,11 +4887,6 @@ def inspect_item_choices(
             automation_config=automation_config,
         )
         description = '; '.join(labels[: args.item_description_label_limit])
-        description, catalog_match = enrich_description_with_taptap_catalog(
-            args.game,
-            candidate.label,
-            description,
-        )
         item_score, reasons = configured_item_preference_score(
             candidate.label,
             description,
@@ -5092,7 +4900,7 @@ def inspect_item_choices(
             reasons=reasons,
             screenshot=str(Path('item_inspections') / screenshot_name),
             ocr_labels=labels,
-            kind=taptap_catalog_kind(catalog_match),
+            kind=classify_game_info_entry(candidate.label, description),
         )
         inspections.append(inspection)
 

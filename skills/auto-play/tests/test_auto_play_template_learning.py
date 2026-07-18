@@ -1,5 +1,4 @@
 import importlib.util
-import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -47,14 +46,6 @@ def write_game_strategy(root: Path, game: str) -> Path:
     path = root / 'games' / slug / 'strategy.md'
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(game_strategy_text(slug))
-    return path
-
-
-def write_taptap_search_index(root: Path, game: str, entries: list[dict]) -> Path:
-    slug = game.strip().lower()
-    path = root / 'games' / slug / 'guide' / 'taptap_search_index.json'
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(entries, ensure_ascii=False))
     return path
 
 
@@ -3939,60 +3930,6 @@ def test_item_preference_does_not_penalize_crystal_currency_costs():
     assert 'cost or loss' in hp_cost_reasons
 
 
-def test_item_preference_uses_taptap_catalog_effect_when_description_is_missing(
-    tmp_path,
-    monkeypatch,
-):
-    auto_play = load_auto_play_module()
-    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
-    write_taptap_search_index(
-        tmp_path,
-        'tower',
-        [
-            {
-                'name': '神圣斩击',
-                'catalog': '卡牌图鉴',
-                'group': '战士卡牌',
-                'type': '物攻牌',
-                'cost': '3法力值',
-                'effect': '物理伤害：4/6/8，如果[斩杀]，则永久增加5/6/7点生命上限',
-                'source': '卡包获取、金币商店、魔术商店',
-                'icon_path': 'images/icons/011-神圣斩击.png',
-                'detail_image_paths': ['images/details/011-神圣斩击-1.png'],
-            },
-            {
-                'name': '舍命一击',
-                'catalog': '卡牌图鉴',
-                'group': '战士卡牌',
-                'type': '物攻牌',
-                'cost': '5法力值',
-                'effect': '物理伤害：10/15/20，减少自身2点生命',
-                'source': '卡包获取、金币商店、魔术商店',
-                'icon_path': 'images/icons/008-舍命一击.png',
-                'detail_image_paths': ['images/details/008-舍命一击-1.png'],
-            },
-        ],
-    )
-
-    sacred_score, sacred_reasons = auto_play.configured_item_preference_score(
-        '神圣斩击',
-        'Abandon',
-        game='Tower',
-    )
-    sacrifice_score, sacrifice_reasons = auto_play.configured_item_preference_score(
-        '舍命一击',
-        'Abandon',
-        game='Tower',
-    )
-
-    assert sacred_score > sacrifice_score
-    assert 'TapTap catalog match: 卡牌图鉴/战士卡牌' in sacred_reasons
-    assert 'permanent stat priority' in sacred_reasons
-    assert 'coin gain' not in sacred_reasons
-    assert 'cost or loss' not in sacred_reasons
-    assert 'self-sacrifice cue' in sacrifice_reasons
-
-
 def test_inspect_item_choices_selects_best_item_then_recommends_confirm(
     tmp_path,
     monkeypatch,
@@ -4094,117 +4031,6 @@ def test_inspect_item_choices_selects_best_item_then_recommends_confirm(
     assert '| 1 | Royal Training |' in knowledge
     assert 'Permanent attack +1' in knowledge
     assert knowledge.index('Royal Training') < knowledge.index('Quick Spark')
-
-
-def test_inspect_item_choices_uses_taptap_catalog_to_choose_card(
-    tmp_path,
-    monkeypatch,
-):
-    auto_play = load_auto_play_module()
-    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
-    write_taptap_search_index(
-        tmp_path,
-        'tower',
-        [
-            {
-                'name': '神圣斩击',
-                'catalog': '卡牌图鉴',
-                'group': '战士卡牌',
-                'type': '物攻牌',
-                'cost': '3法力值',
-                'effect': '物理伤害：4/6/8，如果[斩杀]，则永久增加5/6/7点生命上限',
-                'source': '卡包获取、金币商店、魔术商店',
-                'icon_path': 'images/icons/011-神圣斩击.png',
-                'detail_image_paths': ['images/details/011-神圣斩击-1.png'],
-            },
-            {
-                'name': '舍命一击',
-                'catalog': '卡牌图鉴',
-                'group': '战士卡牌',
-                'type': '物攻牌',
-                'cost': '5法力值',
-                'effect': '物理伤害：10/15/20，减少自身2点生命',
-                'source': '卡包获取、金币商店、魔术商店',
-                'icon_path': 'images/icons/008-舍命一击.png',
-                'detail_image_paths': ['images/details/008-舍命一击-1.png'],
-            },
-        ],
-    )
-
-    sacred = auto_play.ButtonCandidate(
-        label='神圣斩击',
-        x=0.25,
-        y=0.45,
-        confidence=0.8,
-        clickability=0.7,
-        source='ocr',
-        score=1.08,
-    )
-    sacrifice = auto_play.ButtonCandidate(
-        label='舍命一击',
-        x=0.75,
-        y=0.45,
-        confidence=0.8,
-        clickability=0.7,
-        source='ocr',
-        score=1.08,
-    )
-    confirm = auto_play.ButtonCandidate(
-        label='Confirm',
-        x=0.5,
-        y=0.9,
-        confidence=0.9,
-        clickability=0.8,
-        source='ocr',
-        score=2.22,
-    )
-    clicks: list[str] = []
-
-    def fake_click(_args, button):
-        clicks.append(button.label)
-
-    def fake_load_image(_args):
-        return Image.new('RGB', (100, 100), color='black'), {}
-
-    def fake_analyze_buttons(_image, *, confidence, game, template_match_threshold):
-        return []
-
-    monkeypatch.setattr(auto_play, 'click_button', fake_click)
-    monkeypatch.setattr(auto_play, 'load_image', fake_load_image)
-    monkeypatch.setattr(auto_play, 'analyze_buttons', fake_analyze_buttons)
-
-    args = SimpleNamespace(
-        image=None,
-        click_recommended=True,
-        item_inspection_limit=4,
-        item_inspection_interval=0.0,
-        item_description_label_limit=12,
-        confidence=0.8,
-        game='Tower',
-        template_match_threshold=0.82,
-    )
-    turn_dir = tmp_path / 'turn'
-    artifact_paths = {
-        'item_inspections': turn_dir / 'item_inspections.yaml',
-        'item_inspection_dir': turn_dir / 'item_inspections',
-    }
-
-    inspections, decision = auto_play.inspect_item_choices(
-        args,
-        buttons=[sacred, sacrifice, confirm],
-        memory={'fallback': [], 'avoid': [], 'ineffective': []},
-        artifact_paths=artifact_paths,
-    )
-
-    assert clicks == ['神圣斩击', '舍命一击', '神圣斩击']
-    assert [item.kind for item in inspections] == ['card', 'card']
-    assert decision is not None
-    assert decision.recommended.label == 'Confirm'
-    assert decision.choices[0].label == '神圣斩击'
-    knowledge = (tmp_path / 'games' / 'tower' / 'game_info.md').read_text()
-    assert '### card' in knowledge
-    assert 'TapTap catalog: 卡牌图鉴/战士卡牌' in knowledge
-    assert '永久增加5/6/7点生命上限' in knowledge
 
 
 def test_replace_adventure_confirmation_is_not_item_inspected(
