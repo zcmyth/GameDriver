@@ -5,6 +5,7 @@ import argparse
 import base64
 import io
 import json
+import os
 import re
 import selectors
 import shlex
@@ -13,10 +14,12 @@ import sys
 import time
 from dataclasses import dataclass, replace
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from shutil import rmtree
 from typing import Any
 
+import cv2
 import numpy as np
 import yaml
 from PIL import Image, ImageChops, ImageStat
@@ -41,6 +44,7 @@ DEFAULT_AVOID = [
     '放弃',
     '放弃冒险',
 ]
+DEFAULT_TOWER_GUIDE_ROOT = Path('/Users/chunzhang/games/skills/game-tower/guide')
 HARD_AVOID_LABELS = {
     'abandon',
     'abandon adventure',
@@ -55,9 +59,28 @@ AD_REVIVE_HINTS = (
     '看广告复活',
     '广告复活',
 )
+DEFEAT_CONTEXT_HINTS = (
+    'defeat',
+    'defeated',
+    'game over',
+    'game failed',
+    'failed',
+    '游戏失败',
+)
+LIVE_RUN_CONTINUE_LABELS = {
+    'continue adventure',
+    'resume adventure',
+    '继续冒险',
+    '恢复冒险',
+}
 CANCEL_LABELS = {
     'cancel',
     '取消',
+}
+PLAIN_BACK_LABELS = {
+    'back',
+    'return',
+    '返回',
 }
 WATCH_AD_LABELS = {
     'watch',
@@ -111,6 +134,96 @@ COMMAND_LABELS = {
     'swipe down',
 }
 COMBAT_CARD_DOUBLE_TAP_LABELS: set[str] = set()
+DIRECT_ATTACK_COMBAT_CARD_LABELS = {
+    'normal attack',
+    'normal sword',
+    'ordinary wooden sword',
+    'blind blade',
+    'swift attack',
+    'weakness strike',
+    'shield bash',
+    'clown stab',
+    'flash strike',
+    'visible attack-number card',
+    '普通攻击',
+    '普通小剑',
+    '普通木剑',
+    '归一',
+    '重影',
+    '撞击',
+    '盲击',
+    '登龙斩',
+    '推击',
+    '盲刃',
+    '迅捷攻击',
+    '盾牌猛击',
+    '弱点打击',
+    '小丑飞刺',
+    '闪耀挥击',
+}
+DIRECT_ATTACK_COMBAT_CARD_KEYWORDS = (
+    'attack',
+    'strike',
+    'sword',
+    'blade',
+    'stab',
+    'slash',
+    'damage',
+    '攻击',
+    '打击',
+    '木剑',
+    '小剑',
+    '剑',
+    '刃',
+    '刺',
+    '挥击',
+    '归一',
+    '重影',
+    '撞击',
+    '盲击',
+    '登龙斩',
+    '推击',
+)
+SELF_DAMAGE_COMBAT_CARD_KEYWORDS = (
+    'life sacrifice',
+    'sacrifice',
+    'self-damage',
+    'spend health',
+    '舍命',
+)
+DEFENSIVE_OR_SETUP_COMBAT_CARD_LABELS = {
+    'shield',
+    'focus gem',
+    'battle focus',
+    'swift',
+    'quick thinking',
+    'weak',
+    'turn preparation',
+    '举盾',
+    '专注宝石',
+    '战斗专注',
+    '迅捷',
+    '快速思考',
+    '虚弱',
+    '转身准备',
+}
+DEFENSIVE_OR_SETUP_COMBAT_CARD_KEYWORDS = (
+    'shield',
+    'block',
+    'defend',
+    'defense',
+    'focus',
+    'prepare',
+    'preparation',
+    'quick thinking',
+    'weak',
+    '盾',
+    '防守',
+    '防御',
+    '专注',
+    '准备',
+    '虚弱',
+)
 SKILL_KIND_PATTERNS = (
     'skill',
     'card',
@@ -280,7 +393,7 @@ NOISE_LABEL_PATTERNS = [
     re.compile(r'^[x×]\s*\d+$', re.I),
     re.compile(r'^[x×][x*×]\s*\d+$', re.I),
     re.compile(r'^[a-z]\s*\d+$', re.I),
-    re.compile(r'^[()\[\]{}%.,:;!?+\-*/\\|_~<>]+$'),
+    re.compile(r'^[()\[\]{}%.,:;!?+\-*/\\|_~<>•·]+$'),
 ]
 NAVIGATION_ARROW_LABELS = {
     'down arrow',
@@ -403,7 +516,9 @@ class GameAutomationConfig:
     energy_empty_labels: frozenset[str] = frozenset()
     energy_empty_destination_labels: frozenset[str] = frozenset()
     energy_empty_action_exemption_labels: frozenset[str] = frozenset()
+    loadout_start_labels: frozenset[str] = frozenset()
     energy_empty_candidate: AutomationCandidateSpec | None = None
+    loadout_select_candidate: AutomationCandidateSpec | None = None
     empty_screen_candidate: AutomationCandidateSpec | None = None
     waiting_candidate: AutomationCandidateSpec | None = None
     claimed_back_candidate: AutomationCandidateSpec | None = None
@@ -480,6 +595,20 @@ class GameInfoEntry:
     first_seen: str
     last_seen: str
     last_screenshot: str
+
+
+@dataclass(frozen=True)
+class TapTapCatalogMatch:
+    name: str
+    catalog: str
+    group: str
+    type: str
+    cost: str
+    effect: str
+    source: str
+    url: str
+    icon_path: str
+    detail_image_paths: list[str]
 
 
 def repo_root() -> Path:
@@ -583,6 +712,22 @@ def is_configured_combat_card_label(
     if automation_config is None:
         return False
     return key in automation_config.combat_card_double_tap_labels
+
+
+def is_direct_attack_combat_card_label(value: str) -> bool:
+    key = normalize_label(value)
+    if any(keyword in key for keyword in SELF_DAMAGE_COMBAT_CARD_KEYWORDS):
+        return False
+    if key in DIRECT_ATTACK_COMBAT_CARD_LABELS:
+        return True
+    return any(keyword in key for keyword in DIRECT_ATTACK_COMBAT_CARD_KEYWORDS)
+
+
+def is_defensive_or_setup_combat_card_label(value: str) -> bool:
+    key = normalize_label(value)
+    if key in DEFENSIVE_OR_SETUP_COMBAT_CARD_LABELS:
+        return True
+    return any(keyword in key for keyword in DEFENSIVE_OR_SETUP_COMBAT_CARD_KEYWORDS)
 
 
 def is_configured_command_label(
@@ -771,6 +916,20 @@ def configured_energy_empty_action_exemption_visible(
     )
 
 
+def configured_loadout_start_visible(
+    automation_config: GameAutomationConfig | None,
+    buttons: list[ButtonCandidate],
+) -> bool:
+    if (
+        automation_config is None
+        or automation_config.loadout_select_candidate is None
+        or not automation_config.loadout_start_labels
+    ):
+        return False
+    labels = {normalize_label(button.label) for button in buttons}
+    return any(label in labels for label in automation_config.loadout_start_labels)
+
+
 def configured_challenge_detail_visible(
     automation_config: GameAutomationConfig,
     buttons: list[ButtonCandidate],
@@ -899,6 +1058,8 @@ def configured_extra_candidates(
         return extras
     if configured_result_progress_visible(automation_config, buttons):
         return extras
+    if configured_loadout_start_visible(automation_config, buttons):
+        extras.append(automation_config.loadout_select_candidate.to_button())
     third_column = configured_third_column_unclaimed_row_candidate(
         automation_config,
         buttons,
@@ -978,6 +1139,428 @@ def escape_menu_probe_candidates() -> list[ButtonCandidate]:
     ]
 
 
+ESCAPE_MENU_PROBE_LABELS = {
+    'open settings',
+    'open run menu',
+}
+MIN_UNBLOCK_NON_MENU_SCORE = 0.65
+TOWER_MAP_ROOM_SKIP_LABELS = {
+    'end',
+    'abandon',
+    'back',
+    '返回',
+    'fight',
+    'battle',
+    'challenge',
+    '战斗',
+    '挑战',
+    'enhance card',
+    'forget card',
+    '点击空白处关闭',
+}
+TOWER_MAP_ROOM_BOTTOM_ACTION_LABELS = {
+    '强化',
+    '融合',
+    '捡起',
+    '捡起木剑',
+}
+
+
+def should_detect_tower_map_rooms(
+    automation_config: GameAutomationConfig,
+    buttons: list[ButtonCandidate],
+) -> bool:
+    if normalize_label(automation_config.game) != 'tower':
+        return False
+    if configured_loadout_start_visible(automation_config, buttons):
+        return False
+    navigation_buttons = [
+        button
+        for button in buttons
+        if button.source != 'ocr'
+        and is_navigation_arrow_label(button.label, automation_config)
+    ]
+    navigation_count = len(navigation_buttons)
+    navigation_visible = navigation_count >= 2
+    if any(
+        normalize_label(button.label) in automation_config.loadout_start_labels
+        for button in buttons
+    ):
+        return False
+    navigation_present = bool(navigation_buttons)
+    floor_visible = any(
+        re.fullmatch(r'm?\d/6', normalize_label(button.label)) for button in buttons
+    )
+    if not navigation_visible and not (floor_visible and navigation_present):
+        return False
+    for button in buttons:
+        key = normalize_label(button.label)
+        if key in CONFIRM_LABELS or key in CANCEL_LABELS:
+            return False
+        if key in TOWER_MAP_ROOM_SKIP_LABELS:
+            return False
+        if key in TOWER_MAP_ROOM_BOTTOM_ACTION_LABELS:
+            return False
+    return True
+
+
+def should_detect_tower_current_room(
+    automation_config: GameAutomationConfig,
+    buttons: list[ButtonCandidate],
+) -> bool:
+    if normalize_label(automation_config.game) != 'tower':
+        return False
+    if configured_loadout_start_visible(automation_config, buttons):
+        return False
+    navigation_present = any(
+        button.source != 'ocr'
+        and is_navigation_arrow_label(button.label, automation_config)
+        for button in buttons
+    )
+    if not navigation_present:
+        return False
+    if any(
+        button.source != 'ocr'
+        and is_navigation_arrow_label(button.label, automation_config)
+        and 0.35 <= button.x <= 0.65
+        and 0.56 <= button.y <= 0.70
+        for button in buttons
+    ):
+        return False
+    for button in buttons:
+        key = normalize_label(button.label)
+        if key in CONFIRM_LABELS or key in CANCEL_LABELS:
+            return False
+        if key in TOWER_MAP_ROOM_SKIP_LABELS:
+            return False
+        if key in TOWER_MAP_ROOM_BOTTOM_ACTION_LABELS:
+            return False
+    return True
+
+
+def tower_hp_looks_critical(image: Image.Image) -> bool:
+    rgb = np.asarray(image.convert('RGB'))
+    height, width = rgb.shape[:2]
+    if width <= 0 or height <= 0:
+        return False
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
+    y_index = np.arange(height)[:, None]
+    x_index = np.arange(width)[None, :]
+    status_region = (
+        (x_index >= int(width * 0.13))
+        & (x_index <= int(width * 0.42))
+        & (y_index >= int(height * 0.42))
+        & (y_index <= int(height * 0.49))
+    )
+    red_pixels = (
+        ((hsv[:, :, 0] <= 8) | (hsv[:, :, 0] >= 170))
+        & (hsv[:, :, 1] > 70)
+        & (hsv[:, :, 2] > 80)
+        & status_region
+    )
+    mask = np.zeros((height, width), dtype=np.uint8)
+    mask[red_pixels] = 255
+    red_columns = np.where(mask.any(axis=0))[0]
+    if red_columns.size == 0:
+        return False
+    red_span = int(red_columns.max() - red_columns.min() + 1)
+    return red_span <= max(16, int(width * 0.06))
+
+
+def tower_current_room_icon_candidates(
+    image: Image.Image,
+    automation_config: GameAutomationConfig,
+    buttons: list[ButtonCandidate],
+) -> list[ButtonCandidate]:
+    if not should_detect_tower_current_room(automation_config, buttons):
+        return []
+
+    rgb = np.asarray(image.convert('RGB'))
+    height, width = rgb.shape[:2]
+    if width <= 0 or height <= 0:
+        return []
+
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
+    y_index = np.arange(height)[:, None]
+    x_index = np.arange(width)[None, :]
+    center_map_region = (
+        (x_index >= int(width * 0.34))
+        & (x_index <= int(width * 0.66))
+        & (y_index >= int(height * 0.58))
+        & (y_index <= int(height * 0.82))
+    )
+    saturated = (hsv[:, :, 1] > 55) & (hsv[:, :, 2] > 65) & center_map_region
+    mask = np.zeros((height, width), dtype=np.uint8)
+    mask[saturated] = 255
+    mask = cv2.morphologyEx(
+        mask,
+        cv2.MORPH_CLOSE,
+        np.ones((5, 5), dtype=np.uint8),
+        iterations=2,
+    )
+    ys, xs = np.where(mask > 0)
+    if xs.size < max(160, int(width * height * 0.0007)):
+        return []
+
+    x1 = int(xs.min())
+    x2 = int(xs.max()) + 1
+    y1 = int(ys.min())
+    y2 = int(ys.max()) + 1
+    box_width = x2 - x1
+    box_height = y2 - y1
+    norm_width = box_width / width
+    norm_height = box_height / height
+    if not (0.08 <= norm_width <= 0.30 and 0.05 <= norm_height <= 0.24):
+        return []
+
+    center_x = (x1 + (box_width / 2)) / width
+    center_y = (y1 + (box_height / 2)) / height
+    if not (0.38 <= center_x <= 0.62 and 0.60 <= center_y <= 0.80):
+        return []
+
+    return [
+        ButtonCandidate(
+            label='Visible current room icon',
+            x=center_x,
+            y=min(0.80, max(center_y, 0.72)),
+            confidence=0.98,
+            clickability=6.8,
+            source='vision',
+            reason=(
+                'Detected the active room plaque in the center of the tower '
+                'map; click it to start the current room.'
+            ),
+            bbox=(x1 / width, y1 / height, x2 / width, y2 / height),
+        )
+    ]
+
+
+def tower_map_room_icon_candidates(
+    image: Image.Image,
+    automation_config: GameAutomationConfig,
+    buttons: list[ButtonCandidate],
+) -> list[ButtonCandidate]:
+    if not should_detect_tower_map_rooms(automation_config, buttons):
+        return []
+
+    rgb = np.asarray(image.convert('RGB'))
+    height, width = rgb.shape[:2]
+    if width <= 0 or height <= 0:
+        return []
+
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
+    y_index = np.arange(height)[:, None]
+    x_index = np.arange(width)[None, :]
+    map_region = (
+        (y_index >= int(height * 0.58))
+        & (y_index <= int(height * 0.82))
+        & (x_index >= int(width * 0.08))
+        & (x_index <= int(width * 0.94))
+    )
+    saturated = (hsv[:, :, 1] > 45) & (hsv[:, :, 2] > 70) & map_region
+    mask = np.zeros((height, width), dtype=np.uint8)
+    mask[saturated] = 255
+    mask = cv2.morphologyEx(
+        mask,
+        cv2.MORPH_CLOSE,
+        np.ones((3, 3), dtype=np.uint8),
+        iterations=2,
+    )
+    hp_critical = tower_hp_looks_critical(image)
+    contours, _hierarchy = cv2.findContours(
+        mask,
+        cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE,
+    )
+
+    candidates: list[tuple[float, ButtonCandidate]] = []
+    for contour in contours:
+        x, y, box_width, box_height = cv2.boundingRect(contour)
+        area = float(cv2.contourArea(contour))
+        if area < max(300.0, width * height * 0.001):
+            continue
+        norm_width = box_width / width
+        norm_height = box_height / height
+        center_x = (x + (box_width / 2)) / width
+        center_y = (y + (box_height / 2)) / height
+        if not (0.10 <= norm_width <= 0.36 and 0.05 <= norm_height <= 0.17):
+            continue
+        if not (0.14 <= center_x <= 0.90 and 0.60 <= center_y <= 0.76):
+            continue
+
+        crop_hsv = hsv[y : y + box_height, x : x + box_width]
+        crop_mask = mask[y : y + box_height, x : x + box_width] > 0
+        hues = crop_hsv[:, :, 0][crop_mask]
+        if hues.size == 0:
+            continue
+        warm_ratio = float(np.mean(((hues >= 0) & (hues <= 85)) | (hues >= 170)))
+        blue_ratio = float(np.mean((hues >= 86) & (hues <= 135)))
+        combat_like = warm_ratio >= 0.55 and blue_ratio <= 0.40
+        rest_like = blue_ratio >= 0.50 and warm_ratio <= 0.45
+        if hp_critical and rest_like:
+            clickability = 8.5
+            label = 'Visible rest room icon'
+        elif combat_like:
+            clickability = 6.0 if hp_critical else 7.0
+            label = 'Visible combat room icon'
+        else:
+            clickability = 3.2
+            label = 'Visible room icon'
+        priority = 2.0 if combat_like else 1.0
+        if hp_critical and rest_like:
+            priority = 3.0
+        candidates.append(
+            (
+                priority + (area / (width * height)),
+                ButtonCandidate(
+                    label=label,
+                    x=center_x,
+                    y=center_y,
+                    confidence=0.98,
+                    clickability=clickability,
+                    source='vision',
+                    reason=(
+                        'Detected a saturated room plaque on the tower map; '
+                        'prefer concrete rooms over connector arrows.'
+                    ),
+                    bbox=(
+                        x / width,
+                        y / height,
+                        (x + box_width) / width,
+                        (y + box_height) / height,
+                    ),
+                ),
+            )
+        )
+
+    return [
+        candidate
+        for _priority, candidate in sorted(
+            candidates,
+            key=lambda item: item[0],
+            reverse=True,
+        )
+    ][:4]
+
+
+TOWER_COMBAT_CARD_SLOT_CENTERS = (
+    (0.205, 0.635),
+    (0.500, 0.635),
+    (0.795, 0.635),
+    (0.205, 0.815),
+    (0.500, 0.815),
+    (0.795, 0.815),
+)
+
+
+def tower_attack_number_card_candidates(
+    image: Image.Image,
+    automation_config: GameAutomationConfig,
+    buttons: list[ButtonCandidate],
+) -> list[ButtonCandidate]:
+    if normalize_label(automation_config.game) != 'tower':
+        return []
+    if not any(normalize_label(button.label) == 'end' for button in buttons):
+        return []
+    if any(
+        normalize_label(button.label) in CONFIRM_LABELS | CANCEL_LABELS
+        for button in buttons
+    ):
+        return []
+
+    rgb = np.asarray(image.convert('RGB'))
+    height, width = rgb.shape[:2]
+    if width <= 0 or height <= 0:
+        return []
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
+    slot_width = int(width * 0.25)
+    slot_height = int(height * 0.16)
+    candidates: list[tuple[float, ButtonCandidate]] = []
+
+    for slot_index, (center_x, center_y) in enumerate(
+        TOWER_COMBAT_CARD_SLOT_CENTERS,
+        start=1,
+    ):
+        x1 = max(0, int((center_x * width) - (slot_width / 2)))
+        x2 = min(width, int((center_x * width) + (slot_width / 2)))
+        y1 = max(0, int((center_y * height) - (slot_height / 2)))
+        y2 = min(height, int((center_y * height) + (slot_height / 2)))
+        if x2 <= x1 or y2 <= y1:
+            continue
+
+        crop_hsv = hsv[y1:y2, x1:x2]
+        crop_rgb = rgb[y1:y2, x1:x2]
+        saturated = (crop_hsv[:, :, 1] > 55) & (crop_hsv[:, :, 2] > 70)
+        if float(np.mean(saturated)) < 0.18:
+            continue
+
+        hues = crop_hsv[:, :, 0][saturated]
+        if hues.size == 0:
+            continue
+        warm_ratio = float(np.mean(((hues >= 0) & (hues <= 35)) | (hues >= 170)))
+        if warm_ratio < 0.28:
+            continue
+
+        crop_height, crop_width = crop_rgb.shape[:2]
+        bottom = crop_rgb[
+            int(crop_height * 0.66) : int(crop_height * 0.92),
+            int(crop_width * 0.28) : int(crop_width * 0.76),
+        ]
+        if bottom.size == 0:
+            continue
+        whiteish = (
+            (bottom[:, :, 0] > 160) & (bottom[:, :, 1] > 150) & (bottom[:, :, 2] > 135)
+        )
+        if int(np.count_nonzero(whiteish)) < 25:
+            continue
+
+        clickability = 8.2 + min(warm_ratio, 0.6)
+        candidates.append(
+            (
+                clickability,
+                ButtonCandidate(
+                    label='Visible attack-number card',
+                    x=center_x,
+                    y=center_y,
+                    confidence=0.94,
+                    clickability=clickability,
+                    source='vision',
+                    reason=(
+                        'Detected a warm combat card with a white attack-number '
+                        f'mark in hand slot {slot_index}; prefer it over shield '
+                        'or setup cards.'
+                    ),
+                    bbox=(x1 / width, y1 / height, x2 / width, y2 / height),
+                ),
+            )
+        )
+
+    return [
+        candidate
+        for _score, candidate in sorted(
+            candidates,
+            key=lambda item: item[0],
+            reverse=True,
+        )
+    ]
+
+
+def configured_image_candidates(
+    automation_config: GameAutomationConfig,
+    image: Image.Image,
+    buttons: list[ButtonCandidate],
+) -> list[ButtonCandidate]:
+    return [
+        *tower_attack_number_card_candidates(image, automation_config, buttons),
+        *tower_current_room_icon_candidates(image, automation_config, buttons),
+        *tower_map_room_icon_candidates(image, automation_config, buttons),
+    ]
+
+
+def is_escape_menu_probe_button(button: ButtonCandidate) -> bool:
+    return normalize_label(button.label) in ESCAPE_MENU_PROBE_LABELS
+
+
 def memory_path_for(game: str) -> Path:
     return game_root_for(game) / 'strategy.md'
 
@@ -1008,6 +1591,139 @@ def template_images_dir_for(game: str) -> Path:
     path = game_root_for(game) / 'images'
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def taptap_catalog_index_path_for(game: str) -> Path:
+    if slugify(game) == 'tower' and local_root().resolve() == skill_root().resolve():
+        guide = Path(os.environ.get('TOWER_GUIDE_ROOT', str(DEFAULT_TOWER_GUIDE_ROOT)))
+        return guide / 'taptap_search_index.json'
+    return game_root_for(game) / 'guide' / 'taptap_search_index.json'
+
+
+@lru_cache(maxsize=32)
+def load_taptap_catalog_index(path_text: str) -> tuple[dict[str, Any], ...]:
+    path = Path(path_text)
+    if not path.exists():
+        return ()
+    try:
+        payload = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return ()
+    if isinstance(payload, list):
+        entries = payload
+    elif isinstance(payload, dict) and isinstance(payload.get('entries'), list):
+        entries = payload['entries']
+    else:
+        return ()
+    return tuple(entry for entry in entries if isinstance(entry, dict))
+
+
+def taptap_catalog_entries_for(game: str) -> tuple[dict[str, Any], ...]:
+    return load_taptap_catalog_index(str(taptap_catalog_index_path_for(game)))
+
+
+def taptap_catalog_match_for(
+    game: str | None,
+    label: str,
+) -> TapTapCatalogMatch | None:
+    if not game or not label.strip():
+        return None
+    entries = taptap_catalog_entries_for(game)
+    if not entries:
+        return None
+
+    key = normalize_label(label)
+    compact_key = compact_preference_text(label)
+    exact: list[dict[str, Any]] = []
+    compact: list[dict[str, Any]] = []
+    contains: list[dict[str, Any]] = []
+    for entry in entries:
+        name = str(entry.get('name') or '').strip()
+        if not name:
+            continue
+        name_key = normalize_label(name)
+        name_compact = compact_preference_text(name)
+        if name_key == key:
+            exact.append(entry)
+        elif name_compact and compact_key and name_compact == compact_key:
+            compact.append(entry)
+        elif (
+            len(compact_key) >= 3
+            and name_compact
+            and (compact_key in name_compact or name_compact in compact_key)
+        ):
+            contains.append(entry)
+
+    matches = exact or compact or contains
+    if not matches:
+        return None
+    entry = matches[0]
+    return TapTapCatalogMatch(
+        name=str(entry.get('name') or ''),
+        catalog=str(entry.get('catalog') or ''),
+        group=str(entry.get('group') or ''),
+        type=str(entry.get('type') or ''),
+        cost=str(entry.get('cost') or ''),
+        effect=str(entry.get('effect') or ''),
+        source=str(entry.get('source') or ''),
+        url=str(entry.get('url') or ''),
+        icon_path=str(entry.get('icon_path') or ''),
+        detail_image_paths=[
+            str(path) for path in entry.get('detail_image_paths') or []
+        ],
+    )
+
+
+def taptap_catalog_summary(match: TapTapCatalogMatch) -> str:
+    parts = [
+        f'TapTap catalog: {match.catalog}/{match.group}'.rstrip('/'),
+        f'类型：{match.type}' if match.type else '',
+        f'消耗：{match.cost}' if match.cost else '',
+        f'效果：{match.effect}' if match.effect else '',
+        f'来源：{match.source}' if match.source else '',
+    ]
+    return '; '.join(part for part in parts if part)
+
+
+def taptap_catalog_scoring_summary(match: TapTapCatalogMatch) -> str:
+    parts = [
+        f'类型：{match.type}' if match.type else '',
+        f'效果：{match.effect}' if match.effect else '',
+    ]
+    return '; '.join(part for part in parts if part)
+
+
+def enrich_description_with_taptap_catalog(
+    game: str | None,
+    label: str,
+    description: str,
+) -> tuple[str, TapTapCatalogMatch | None]:
+    match = taptap_catalog_match_for(game, label)
+    if match is None:
+        return description, None
+    catalog_summary = taptap_catalog_summary(match)
+    if not catalog_summary:
+        return description, match
+    if not description.strip() or normalize_label(description) in {
+        'abandon',
+        'description not captured',
+    }:
+        return catalog_summary, match
+    if catalog_summary in description:
+        return description, match
+    return f'{description}; {catalog_summary}', match
+
+
+def taptap_catalog_kind(match: TapTapCatalogMatch | None) -> str | None:
+    if match is None:
+        return None
+    if match.catalog == '卡牌图鉴':
+        return 'card'
+    if match.catalog == '宝物图鉴':
+        return 'treasure'
+    if match.catalog == '天赋图鉴':
+        return 'talent'
+    return None
 
 
 def turns_root(args: argparse.Namespace) -> Path:
@@ -1377,9 +2093,16 @@ def load_automation_config(game: str) -> GameAutomationConfig:
                 [],
             )
         ),
+        loadout_start_labels=normalized_label_set(
+            extract_list_section(text, 'Automation Loadout Start Labels', [])
+        ),
         energy_empty_candidate=parse_first_candidate_section(
             text,
             'Automation Energy Empty Candidate',
+        ),
+        loadout_select_candidate=parse_first_candidate_section(
+            text,
+            'Automation Loadout Select Candidate',
         ),
         empty_screen_candidate=parse_first_candidate_section(
             text,
@@ -1551,6 +2274,8 @@ def should_remember_ineffective_button(
         for item in extract_list_section(strategy_text, 'Avoid Buttons', [])
     }
     if verification.status != 'unchanged' or verification.attempts < 3:
+        return False
+    if button.source in {'vision', 'swipe', 'state'}:
         return False
     if looks_like_noise_label(button.label, automation_config):
         return False
@@ -2398,6 +3123,54 @@ def is_confirm_button(button: ButtonCandidate) -> bool:
     return normalize_label(button.label) in CONFIRM_LABELS
 
 
+NON_ITEM_CONFIRMATION_PROMPT_HINTS = ('replace old adventure',)
+
+
+def is_non_item_confirmation_dialog(buttons: list[ButtonCandidate]) -> bool:
+    labels = [
+        normalize_label(button.label)
+        for button in buttons
+        if button.source != 'template'
+    ]
+    if not any(label in CONFIRM_LABELS for label in labels):
+        return False
+    if not any(label in CANCEL_LABELS for label in labels):
+        return False
+    return any(
+        any(hint in label for hint in NON_ITEM_CONFIRMATION_PROMPT_HINTS)
+        or label.endswith('?')
+        or label.endswith('？')
+        for label in labels
+        if label not in CONFIRM_LABELS and label not in CANCEL_LABELS
+    )
+
+
+def tower_treasure_choice_candidate(
+    automation_config: GameAutomationConfig | None,
+    buttons: list[ButtonCandidate],
+) -> ButtonCandidate | None:
+    if automation_config is None or normalize_label(automation_config.game) != 'tower':
+        return None
+    labels = {normalize_label(button.label) for button in buttons}
+    if not (labels & CONFIRM_LABELS and 'back' in labels):
+        return None
+    if 'abandon' in labels or 'end' in labels:
+        return None
+    if any(
+        is_navigation_arrow_label(button.label, automation_config) for button in buttons
+    ):
+        return None
+    return ButtonCandidate(
+        label='Right treasure choice',
+        x=0.74,
+        y=0.43,
+        confidence=1.0,
+        clickability=3.0,
+        source='vision',
+        reason='Select a real treasure card before confirming the treasure panel.',
+    )
+
+
 def is_inspectable_item_candidate(
     button: ButtonCandidate,
     *,
@@ -2407,7 +3180,18 @@ def is_inspectable_item_candidate(
     automation_config: GameAutomationConfig | None = None,
 ) -> bool:
     key = normalize_label(button.label)
-    if key in CONFIRM_LABELS or is_configured_command_label(
+    if (
+        key in CONFIRM_LABELS
+        or key in CANCEL_LABELS
+        or is_configured_command_label(
+            button.label,
+            automation_config,
+        )
+    ):
+        return False
+    if key in {'back', '返回', 'return'}:
+        return False
+    if key in HARD_AVOID_LABELS or is_navigation_arrow_label(
         button.label,
         automation_config,
     ):
@@ -2680,6 +3464,12 @@ def configured_skill_choice_inspections(
             title,
             description,
             automation_config,
+            game=game,
+        )
+        description, catalog_match = enrich_description_with_taptap_catalog(
+            game,
+            title,
+            description,
         )
         confidence = max(button.confidence for button in title_buttons)
         title_click_y = max(
@@ -2703,7 +3493,7 @@ def configured_skill_choice_inspections(
                 reasons=reasons,
                 screenshot='screenshot.png',
                 ocr_labels=[*description_labels],
-                kind='skill',
+                kind=taptap_catalog_kind(catalog_match) or 'skill',
             )
         )
     return inspections
@@ -2915,11 +3705,38 @@ def configured_item_preference_score(
     label: str,
     description: str,
     automation_config: GameAutomationConfig | None = None,
+    game: str | None = None,
 ) -> tuple[float, list[str]]:
-    score, reasons = item_preference_score(label, description)
-    match = configured_always_preferred_choice_match(
+    enriched_description, catalog_match = enrich_description_with_taptap_catalog(
+        game,
         label,
         description,
+    )
+    scoring_description = enriched_description
+    if catalog_match is not None:
+        catalog_scoring_summary = taptap_catalog_scoring_summary(catalog_match)
+        if catalog_scoring_summary:
+            if not description.strip() or normalize_label(description) in {
+                'abandon',
+                'description not captured',
+            }:
+                scoring_description = catalog_scoring_summary
+            else:
+                scoring_description = f'{description}; {catalog_scoring_summary}'
+    score, reasons = item_preference_score(label, scoring_description)
+    if catalog_match is not None:
+        reasons = merge_reasons(
+            [
+                (
+                    'TapTap catalog match: '
+                    f'{catalog_match.catalog}/{catalog_match.group}'
+                ),
+                *reasons,
+            ],
+        )
+    match = configured_always_preferred_choice_match(
+        label,
+        enriched_description,
         automation_config,
     )
     if match:
@@ -2999,11 +3816,13 @@ def record_score_and_reasons(
     label: str,
     description: str,
     automation_config: GameAutomationConfig | None = None,
+    game: str | None = None,
 ) -> tuple[float, list[str]]:
     score, reasons = configured_item_preference_score(
         label,
         description,
         automation_config,
+        game=game,
     )
     return score, reasons or ['observed detail']
 
@@ -3031,6 +3850,7 @@ def safe_load_yaml_mapping(path: Path) -> dict[str, Any]:
 def inspection_records_from_yaml(
     path: Path,
     automation_config: GameAutomationConfig | None = None,
+    game: str | None = None,
 ) -> list[dict[str, Any]]:
     payload = safe_load_yaml_mapping(path)
     records = []
@@ -3040,18 +3860,25 @@ def inspection_records_from_yaml(
         if not label:
             continue
         description = str(item.get('description') or '').strip()
+        description, catalog_match = enrich_description_with_taptap_catalog(
+            game,
+            label,
+            description,
+        )
         score, fallback_reasons = record_score_and_reasons(
             label,
             description,
             automation_config,
+            game=game,
         )
         try:
             score = max(float(item.get('item_score') or item.get('score')), score)
         except (TypeError, ValueError):
             pass
-        kind = str(item.get('kind') or '').strip() or classify_game_info_entry(
-            label,
-            description,
+        kind = (
+            str(item.get('kind') or '').strip()
+            or taptap_catalog_kind(catalog_match)
+            or classify_game_info_entry(label, description)
         )
         records.append(
             {
@@ -3081,6 +3908,7 @@ def yaml_scalar_from_line(value: str) -> str:
 def loose_llm_object_records_from_yaml(
     path: Path,
     automation_config: GameAutomationConfig | None = None,
+    game: str | None = None,
 ) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     current: dict[str, str] | None = None
@@ -3103,6 +3931,7 @@ def loose_llm_object_records_from_yaml(
                         source='llm object',
                         require_durable=True,
                         automation_config=automation_config,
+                        game=game,
                     )
                 )
             current = {'label': yaml_scalar_from_line(stripped.split(':', 1)[1])}
@@ -3135,6 +3964,7 @@ def loose_llm_object_records_from_yaml(
                 source='llm object',
                 require_durable=True,
                 automation_config=automation_config,
+                game=game,
             )
         )
     return records
@@ -3245,6 +4075,7 @@ def llm_records_from_items(
     summary: str = '',
     require_durable: bool = False,
     automation_config: GameAutomationConfig | None = None,
+    game: str | None = None,
 ) -> list[dict[str, Any]]:
     records = []
     for item in items:
@@ -3265,6 +4096,7 @@ def llm_records_from_items(
             label,
             description,
             automation_config,
+            game=game,
         )
         records.append(
             {
@@ -3284,12 +4116,13 @@ def llm_records_from_items(
 def llm_records_from_yaml(
     path: Path,
     automation_config: GameAutomationConfig | None = None,
+    game: str | None = None,
 ) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     payload = safe_load_yaml_mapping(path)
     if not payload:
-        return loose_llm_object_records_from_yaml(path, automation_config)
+        return loose_llm_object_records_from_yaml(path, automation_config, game)
     summary = str(payload.get('summary') or '').strip()
     records = llm_records_from_items(
         payload.get('game_info', []),
@@ -3297,6 +4130,7 @@ def llm_records_from_yaml(
         source='llm game_info',
         summary=summary,
         automation_config=automation_config,
+        game=game,
     )
     records.extend(
         llm_records_from_items(
@@ -3306,6 +4140,7 @@ def llm_records_from_yaml(
             summary=summary,
             require_durable=True,
             automation_config=automation_config,
+            game=game,
         )
     )
     return records
@@ -3403,9 +4238,11 @@ def game_info_records(
     automation_config = automation_config or load_automation_config(game)
     records: list[dict[str, Any]] = []
     for path in item_inspection_paths(game, additional_inspection_path):
-        records.extend(inspection_records_from_yaml(path, automation_config))
+        records.extend(inspection_records_from_yaml(path, automation_config, game))
     for turn_dir in game_turn_dirs(game):
-        records.extend(llm_records_from_yaml(turn_dir / 'llm.yaml', automation_config))
+        records.extend(
+            llm_records_from_yaml(turn_dir / 'llm.yaml', automation_config, game)
+        )
     return records
 
 
@@ -3779,9 +4616,25 @@ def score_buttons(
     navigation_arrow_count = sum(
         1
         for button in buttons
-        if is_navigation_arrow_label(button.label, automation_config)
+        if button.source != 'ocr'
+        and is_navigation_arrow_label(button.label, automation_config)
     )
     navigation_arrow_visible = navigation_arrow_count > 0
+    center_navigation_visible = any(
+        button.source != 'ocr'
+        and is_navigation_arrow_label(button.label, automation_config)
+        and 0.35 <= button.x <= 0.65
+        and 0.56 <= button.y <= 0.70
+        for button in buttons
+    )
+    bottom_center_down_navigation_visible = not center_navigation_visible and any(
+        button.source != 'ocr'
+        and is_navigation_arrow_label(button.label, automation_config)
+        and navigation_direction(button.label) == 'down'
+        and 0.35 <= button.x <= 0.65
+        and button.y >= 0.84
+        for button in buttons
+    )
     combat_card_count = sum(
         1
         for button in non_end_buttons
@@ -3789,7 +4642,29 @@ def score_buttons(
     )
     end_visible = any(normalize_label(button.label) == 'end' for button in buttons)
     playable_combat_card_visible = combat_card_count > 0
+    direct_attack_combat_card_visible = end_visible and any(
+        is_configured_combat_card_label(button.label, automation_config)
+        and is_direct_attack_combat_card_label(button.label)
+        for button in non_end_buttons
+    )
     ad_revive_context = is_ad_revive_context(buttons)
+    tower_selected_choice_modal_visible = (
+        automation_config is not None
+        and normalize_label(automation_config.game) == 'tower'
+        and not ad_revive_context
+        and not end_visible
+        and any(
+            normalize_label(button.label) in CONFIRM_LABELS and button.y >= 0.6
+            for button in buttons
+        )
+        and any(
+            normalize_label(button.label) in PLAIN_BACK_LABELS and button.y >= 0.6
+            for button in buttons
+        )
+        and not any(
+            normalize_label(button.label) in HARD_AVOID_LABELS for button in buttons
+        )
+    )
     energy_empty_visible = configured_energy_empty_visible(
         automation_config,
         buttons,
@@ -3826,11 +4701,13 @@ def score_buttons(
         energy_empty_destination_labels = set(
             automation_config.energy_empty_destination_labels
         )
+    defeat_context = is_defeat_context(buttons, defeat_recovery_labels)
     scored = []
     for button in buttons:
         key = normalize_label(button.label)
+        is_defeat_recovery = key in defeat_recovery_labels
         score = button.confidence + (0.4 * button.clickability)
-        if key in preferred:
+        if key in preferred and not (is_defeat_recovery and not defeat_context):
             score += 1.0
         if (
             button.source != 'template'
@@ -3862,17 +4739,46 @@ def score_buttons(
         if key in avoid and not (ad_revive_context and key in CANCEL_LABELS):
             score -= 1.25
         if ad_revive_context and key in CANCEL_LABELS:
-            score += 1.5
-        if ad_revive_context and is_watch_ad_button(button):
+            score += 4.0
+        elif ad_revive_context and is_watch_ad_button(button):
+            score -= 4.0
+        elif ad_revive_context:
             score -= 2.5
-        if key in defeat_recovery_labels:
+        if tower_selected_choice_modal_visible:
+            if key in CONFIRM_LABELS:
+                score += 1.1
+            elif key in PLAIN_BACK_LABELS:
+                score -= 1.1
+        if is_defeat_recovery and defeat_context:
             score += 2.5
+        elif is_defeat_recovery:
+            score -= 3.0
         if key in recruit_labels:
             score += 2.5
         if key in current_room_labels and navigation_arrow_visible and not end_visible:
             score -= 1.75
+        if (
+            center_navigation_visible
+            and not end_visible
+            and is_tower_room_vision_candidate(button)
+            and button.bbox is None
+        ):
+            score -= 2.5
+        if (
+            bottom_center_down_navigation_visible
+            and not end_visible
+            and is_tower_room_vision_candidate(button)
+        ):
+            score -= 1.0
         if is_configured_combat_card_label(button.label, automation_config):
             score += 0.8
+            if end_visible and is_direct_attack_combat_card_label(button.label):
+                score += 1.35
+            elif (
+                direct_attack_combat_card_visible
+                and is_defensive_or_setup_combat_card_label(button.label)
+            ):
+                score -= 1.0
             if (
                 button.source == 'template'
                 and navigation_arrow_visible
@@ -3892,6 +4798,20 @@ def score_buttons(
             automation_config,
         ):
             score += 1.2 * button.clickability
+            direction = navigation_direction(button.label)
+            if (
+                bottom_center_down_navigation_visible
+                and direction == 'down'
+                and 0.35 <= button.x <= 0.65
+                and button.y >= 0.84
+            ):
+                score += 0.85
+            elif (
+                bottom_center_down_navigation_visible
+                and direction in {'left', 'right'}
+                and (button.x <= 0.16 or button.x >= 0.84)
+            ):
+                score -= 0.85
         if key == 'end' and playable_combat_card_visible:
             score -= 0.75
         if key == 'end' and not non_end_buttons:
@@ -3914,6 +4834,9 @@ def score_buttons(
 
 
 def is_ad_revive_context(buttons: list[ButtonCandidate]) -> bool:
+    labels = {normalize_label(button.label) for button in buttons}
+    if labels & CANCEL_LABELS and labels & WATCH_AD_LABELS:
+        return True
     for button in buttons:
         text = normalize_label(f'{button.label} {button.reason}')
         if any(hint in text for hint in AD_REVIVE_HINTS):
@@ -3925,6 +4848,30 @@ def is_ad_revive_context(buttons: list[ButtonCandidate]) -> bool:
     return False
 
 
+def is_defeat_context(
+    buttons: list[ButtonCandidate],
+    defeat_recovery_labels: set[str] | None = None,
+) -> bool:
+    for button in buttons:
+        text = normalize_label(f'{button.label} {button.reason}')
+        if any(hint in text for hint in DEFEAT_CONTEXT_HINTS):
+            return True
+    recovery_labels = (
+        set(DEFEAT_RECOVERY_LABELS)
+        if defeat_recovery_labels is None
+        else set(defeat_recovery_labels)
+    )
+    live_continue_visible = any(
+        normalize_label(button.label) in LIVE_RUN_CONTINUE_LABELS for button in buttons
+    )
+    if live_continue_visible:
+        return False
+    return any(
+        normalize_label(button.label) in recovery_labels and button.y >= 0.88
+        for button in buttons
+    )
+
+
 def is_watch_ad_button(button: ButtonCandidate) -> bool:
     key = normalize_label(button.label)
     text = normalize_label(f'{button.label} {button.reason}')
@@ -3933,6 +4880,22 @@ def is_watch_ad_button(button: ButtonCandidate) -> bool:
     if 'watch' in key and 'ad' in text:
         return True
     return '观看' in key and '广告' in text
+
+
+def is_generic_tower_room_vision_candidate(button: ButtonCandidate) -> bool:
+    return (
+        button.source == 'vision'
+        and normalize_label(button.label) == 'visible room icon'
+    )
+
+
+def is_tower_room_vision_candidate(button: ButtonCandidate) -> bool:
+    return button.source == 'vision' and normalize_label(button.label) in {
+        'visible current room icon',
+        'visible rest room icon',
+        'visible combat room icon',
+        'visible room icon',
+    }
 
 
 def decide_next_move(
@@ -3959,6 +4922,7 @@ def decide_next_move(
         if button.score >= min_action_score
         and normalize_label(button.label) not in fallback_labels
         and not is_navigation_arrow_label(button.label, automation_config)
+        and not is_tower_room_vision_candidate(button)
     ]
     candidates = viable_non_fallback or buttons
     top = candidates[0]
@@ -4052,6 +5016,22 @@ def inspect_item_choices(
     confirm_buttons = [button for button in buttons if is_confirm_button(button)]
     if not confirm_buttons:
         return [], None
+    if is_non_item_confirmation_dialog(buttons):
+        return [], None
+    treasure_choice = tower_treasure_choice_candidate(automation_config, buttons)
+    if treasure_choice is not None:
+        click_button(args, treasure_choice)
+        time.sleep(args.item_inspection_interval)
+        confirm = max(
+            confirm_buttons,
+            key=lambda button: (button.score, button.confidence, button.clickability),
+        )
+        return [], Decision(
+            status='ready',
+            reason='Selected a real treasure card and will confirm the treasure panel.',
+            recommended=confirm,
+            choices=[treasure_choice, confirm],
+        )
 
     fallback = {normalize_label(label) for label in memory.get('fallback', [])}
     avoid = {normalize_label(label) for label in memory.get('avoid', [])}
@@ -4094,10 +5074,16 @@ def inspect_item_choices(
             automation_config=automation_config,
         )
         description = '; '.join(labels[: args.item_description_label_limit])
+        description, catalog_match = enrich_description_with_taptap_catalog(
+            args.game,
+            candidate.label,
+            description,
+        )
         item_score, reasons = configured_item_preference_score(
             candidate.label,
             description,
             automation_config,
+            game=args.game,
         )
         inspection = ItemInspection(
             candidate=candidate,
@@ -4106,6 +5092,7 @@ def inspect_item_choices(
             reasons=reasons,
             screenshot=str(Path('item_inspections') / screenshot_name),
             ocr_labels=labels,
+            kind=taptap_catalog_kind(catalog_match),
         )
         inspections.append(inspection)
 
@@ -4356,13 +5343,53 @@ def decide_unblock_move(
             choices=[],
         )
 
-    candidates = [
+    normalized_repeated_actions = {
+        normalize_label(label) for label in repeated_actions
+    }
+    untried_candidates = [
         button
         for button in buttons
-        if normalize_label(button.label) not in repeated_actions
+        if normalize_label(button.label) not in normalized_repeated_actions
     ]
-    if not candidates:
-        candidates = buttons
+    candidates = untried_candidates or buttons
+    repeated_navigation_actions = {
+        normalize_label(label)
+        for label in normalized_repeated_actions
+        if is_navigation_arrow_label(label)
+        or any(token in normalize_label(label) for token in ('道路', '路线', '箭头'))
+    }
+    navigation_layers_exhausted = len(repeated_navigation_actions) >= 2
+    viable_non_menu_candidates = [
+        button
+        for button in candidates
+        if not is_escape_menu_probe_button(button)
+        and button.score >= MIN_UNBLOCK_NON_MENU_SCORE
+    ]
+    if viable_non_menu_candidates:
+        candidates = viable_non_menu_candidates
+    elif navigation_layers_exhausted and any(
+        is_escape_menu_probe_button(button) for button in candidates
+    ):
+        candidates = [
+            button for button in candidates if is_escape_menu_probe_button(button)
+        ]
+    else:
+        viable_non_menu_buttons = [
+            button
+            for button in buttons
+            if not is_escape_menu_probe_button(button)
+            and button.score >= MIN_UNBLOCK_NON_MENU_SCORE
+        ]
+        if viable_non_menu_buttons:
+            candidates = viable_non_menu_buttons
+        else:
+            non_menu_candidates = [
+                button
+                for button in candidates
+                if not is_escape_menu_probe_button(button)
+            ]
+            if non_menu_candidates:
+                candidates = non_menu_candidates
     top = candidates[0]
     return Decision(
         status='ready',
@@ -5323,6 +6350,10 @@ def run_turn(args: argparse.Namespace) -> TurnResult:
             candidate_buttons,
             recent_actions=recent_action_labels(turns_root(args), 6),
         ),
+    ]
+    candidate_buttons = [
+        *candidate_buttons,
+        *configured_image_candidates(automation_config, image, candidate_buttons),
     ]
     candidate_buttons = filter_configured_disabled_gray_buttons(
         automation_config,

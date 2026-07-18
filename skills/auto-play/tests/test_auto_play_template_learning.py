@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -46,6 +47,14 @@ def write_game_strategy(root: Path, game: str) -> Path:
     path = root / 'games' / slug / 'strategy.md'
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(game_strategy_text(slug))
+    return path
+
+
+def write_taptap_search_index(root: Path, game: str, entries: list[dict]) -> Path:
+    slug = game.strip().lower()
+    path = root / 'games' / slug / 'guide' / 'taptap_search_index.json'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(entries, ensure_ascii=False))
     return path
 
 
@@ -395,10 +404,65 @@ def test_ad_revive_context_prefers_cancel_over_watch_ad():
     assert decision.recommended.label == 'Cancel'
 
 
+def test_ad_revive_cancel_beats_stale_card_templates_without_prompt_ocr():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+
+    scored = auto_play.score_buttons(
+        [
+            auto_play.ButtonCandidate(
+                label='Cancel',
+                x=0.30,
+                y=0.64,
+                confidence=0.999,
+                clickability=1.82,
+                source='ocr',
+            ),
+            auto_play.ButtonCandidate(
+                label='观看',
+                x=0.69,
+                y=0.64,
+                confidence=1.0,
+                clickability=1.8,
+                source='template',
+            ),
+            auto_play.ButtonCandidate(
+                label='迅捷',
+                x=0.75,
+                y=0.64,
+                confidence=1.0,
+                clickability=1.55,
+                source='template',
+            ),
+            auto_play.ButtonCandidate(
+                label='发现弱点',
+                x=0.26,
+                y=0.64,
+                confidence=1.0,
+                clickability=1.45,
+                source='template',
+            ),
+        ],
+        memory={'preferred': ['迅捷', '发现弱点'], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert scored[0].label == 'Cancel'
+    assert scored[-1].label == '观看'
+
+
 def test_defeat_recovery_beats_stale_combat_card_templates():
     auto_play = load_auto_play_module()
     config = automation_config(auto_play, 'tower')
 
+    defeat_banner = auto_play.ButtonCandidate(
+        label='游戏失败',
+        x=0.5,
+        y=0.35,
+        confidence=0.95,
+        clickability=0.2,
+        source='ocr',
+    )
     return_to_inn = auto_play.ButtonCandidate(
         label='返回旅馆',
         x=0.5,
@@ -417,7 +481,7 @@ def test_defeat_recovery_beats_stale_combat_card_templates():
     )
 
     scored = auto_play.score_buttons(
-        [stale_card, return_to_inn],
+        [stale_card, return_to_inn, defeat_banner],
         memory={'preferred': ['普通木剑'], 'avoid': [], 'ineffective': []},
         automation_config=config,
     )
@@ -425,6 +489,104 @@ def test_defeat_recovery_beats_stale_combat_card_templates():
 
     assert scored[0].label == '返回旅馆'
     assert decision.recommended.label == '返回旅馆'
+
+
+def test_bottom_defeat_recovery_beats_stale_templates_without_ocr_banner():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+
+    return_to_inn = auto_play.ButtonCandidate(
+        label='返回旅馆',
+        x=0.51,
+        y=0.96,
+        confidence=1.0,
+        clickability=1.82,
+        source='template',
+    )
+    stale_card = auto_play.ButtonCandidate(
+        label='灵魂收割',
+        x=0.2,
+        y=0.76,
+        confidence=0.99,
+        clickability=1.74,
+        source='template',
+    )
+    stale_back = auto_play.ButtonCandidate(
+        label='返回',
+        x=0.44,
+        y=0.67,
+        confidence=0.84,
+        clickability=0.9,
+        source='template',
+    )
+
+    scored = auto_play.score_buttons(
+        [stale_card, stale_back, return_to_inn],
+        memory={'preferred': ['灵魂收割'], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert scored[0].label == '返回旅馆'
+
+
+def test_return_to_inn_loses_to_continue_without_defeat_context():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+
+    return_to_inn = auto_play.ButtonCandidate(
+        label='返回旅馆',
+        x=0.5,
+        y=0.58,
+        confidence=1.0,
+        clickability=1.8,
+        source='template',
+    )
+    continue_adventure = auto_play.ButtonCandidate(
+        label='继续冒险',
+        x=0.5,
+        y=0.72,
+        confidence=0.95,
+        clickability=1.6,
+        source='ocr',
+    )
+
+    scored = auto_play.score_buttons(
+        [return_to_inn, continue_adventure],
+        memory={'preferred': ['继续冒险', '返回旅馆'], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert scored[0].label == '继续冒险'
+
+
+def test_bottom_return_to_inn_loses_to_continue_on_live_settings_screen():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+
+    return_to_inn = auto_play.ButtonCandidate(
+        label='返回旅馆',
+        x=0.5,
+        y=0.96,
+        confidence=1.0,
+        clickability=1.8,
+        source='template',
+    )
+    continue_adventure = auto_play.ButtonCandidate(
+        label='继续冒险',
+        x=0.5,
+        y=0.63,
+        confidence=0.84,
+        clickability=1.9,
+        source='template',
+    )
+
+    scored = auto_play.score_buttons(
+        [return_to_inn, continue_adventure],
+        memory={'preferred': ['继续冒险', '返回旅馆'], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert scored[0].label == '继续冒险'
 
 
 def test_survivor_energy_empty_prefers_main_challenge_over_start():
@@ -627,6 +789,181 @@ def test_combat_card_beats_end_when_card_is_visible():
     )
 
     assert scored[0].label == '举盾'
+
+
+def test_attack_number_card_beats_shield_in_combat():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+
+    end = auto_play.ButtonCandidate(
+        label='End',
+        x=0.5,
+        y=0.92,
+        confidence=1.0,
+        clickability=1.88,
+        source='ocr',
+    )
+    shield = auto_play.ButtonCandidate(
+        label='举盾',
+        x=0.46,
+        y=0.56,
+        confidence=0.99,
+        clickability=1.9,
+        source='template',
+    )
+    attack = auto_play.ButtonCandidate(
+        label='普通攻击',
+        x=0.28,
+        y=0.56,
+        confidence=0.86,
+        clickability=1.3,
+        source='template',
+    )
+
+    scored = auto_play.score_buttons(
+        [end, shield, attack],
+        memory={'preferred': ['举盾', '普通攻击'], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert scored[0].label == '普通攻击'
+
+
+def test_tower_attack_number_card_vision_candidates_beat_shield():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    image = Image.new('RGB', (360, 800), color=(20, 24, 28))
+    draw = ImageDraw.Draw(image)
+
+    for index, (center_x, center_y) in enumerate(
+        auto_play.TOWER_COMBAT_CARD_SLOT_CENTERS
+    ):
+        card_center_x = int(center_x * 360)
+        card_center_y = int(center_y * 800)
+        x1 = card_center_x - 43
+        x2 = card_center_x + 43
+        y1 = card_center_y - 61
+        y2 = card_center_y + 61
+        is_attack = index in {1, 2, 4}
+        fill = (176, 77, 45) if is_attack else (56, 122, 158)
+        draw.rounded_rectangle((x1, y1, x2, y2), radius=8, fill=fill)
+        draw.rectangle(
+            (card_center_x - 10, y2 - 34, card_center_x + 10, y2 - 20),
+            fill=(235, 230, 216),
+        )
+
+    end = auto_play.ButtonCandidate(
+        label='End',
+        x=0.5,
+        y=0.92,
+        confidence=1.0,
+        clickability=1.88,
+        source='ocr',
+    )
+    shield = auto_play.ButtonCandidate(
+        label='举盾',
+        x=0.17,
+        y=0.73,
+        confidence=0.98,
+        clickability=1.65,
+        source='template',
+    )
+
+    attack_cards = auto_play.tower_attack_number_card_candidates(
+        image,
+        config,
+        [end, shield],
+    )
+    scored = auto_play.score_buttons(
+        [end, shield, *attack_cards],
+        memory={'preferred': ['举盾'], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert len(attack_cards) == 3
+    assert {round(card.x, 3) for card in attack_cards} == {0.5, 0.795}
+    assert scored[0].label == 'Visible attack-number card'
+
+
+def test_tower_treasure_panel_selects_real_card_before_confirming():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    back = auto_play.ButtonCandidate(
+        label='Back',
+        x=0.29,
+        y=0.70,
+        confidence=1.0,
+        clickability=2.0,
+        source='ocr',
+    )
+    confirm = auto_play.ButtonCandidate(
+        label='确定',
+        x=0.74,
+        y=0.70,
+        confidence=1.0,
+        clickability=2.0,
+        source='template',
+    )
+    stale_card = auto_play.ButtonCandidate(
+        label='迅捷攻击',
+        x=0.61,
+        y=0.70,
+        confidence=0.88,
+        clickability=1.5,
+        source='template',
+    )
+
+    choice = auto_play.tower_treasure_choice_candidate(
+        config,
+        [back, confirm, stale_card],
+    )
+
+    assert choice is not None
+    assert choice.label == 'Right treasure choice'
+    assert not auto_play.is_inspectable_item_candidate(
+        back,
+        fallback_labels=set(),
+        avoid_labels=set(),
+        ineffective_labels=set(),
+        automation_config=config,
+    )
+
+
+def test_tower_selected_choice_modal_confirms_instead_of_backing_out():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    back = auto_play.ButtonCandidate(
+        label='Back',
+        x=0.29,
+        y=0.70,
+        confidence=1.0,
+        clickability=2.0,
+        source='ocr',
+    )
+    confirm = auto_play.ButtonCandidate(
+        label='确定',
+        x=0.74,
+        y=0.70,
+        confidence=1.0,
+        clickability=2.0,
+        source='template',
+    )
+    stale_card = auto_play.ButtonCandidate(
+        label='迅捷攻击',
+        x=0.61,
+        y=0.70,
+        confidence=0.88,
+        clickability=1.5,
+        source='template',
+    )
+
+    scored = auto_play.score_buttons(
+        [back, confirm, stale_card],
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert scored[0].label == '确定'
 
 
 def test_periodic_ocr_tuning_runs_every_50_loop_turns():
@@ -1157,6 +1494,442 @@ def test_top_playfield_probe_beats_minimap_arrow_during_navigation_loop():
     assert decision.recommended.label == 'Top path up'
 
 
+def test_tower_map_room_detector_prefers_concrete_room_over_arrows():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    image = Image.new('RGB', (360, 800), color=(28, 32, 34))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((55, 495, 132, 572), fill=(92, 178, 60))
+    draw.rectangle((218, 492, 323, 584), fill=(80, 170, 210))
+    arrows = [
+        auto_play.ButtonCandidate(
+            label='上方道路',
+            x=0.48,
+            y=0.63,
+            confidence=0.89,
+            clickability=0.87,
+            source='template',
+        ),
+        auto_play.ButtonCandidate(
+            label='下方道路',
+            x=0.49,
+            y=0.92,
+            confidence=0.97,
+            clickability=1.22,
+            source='template',
+        ),
+    ]
+
+    room_candidates = auto_play.tower_map_room_icon_candidates(
+        image,
+        config,
+        arrows,
+    )
+    scored = auto_play.score_buttons(
+        [*arrows, *room_candidates],
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert [button.label for button in room_candidates] == [
+        'Visible combat room icon',
+        'Visible room icon',
+    ]
+    assert scored[0].label == 'Visible combat room icon'
+    assert scored[0].source == 'vision'
+
+
+def test_tower_map_room_detector_skips_confirm_dialogs():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    image = Image.new('RGB', (360, 800), color=(28, 32, 34))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((55, 495, 132, 572), fill=(92, 178, 60))
+
+    candidates = auto_play.tower_map_room_icon_candidates(
+        image,
+        config,
+        [
+            auto_play.ButtonCandidate(
+                label='下方道路',
+                x=0.49,
+                y=0.92,
+                confidence=0.97,
+                clickability=1.22,
+                source='template',
+            ),
+            auto_play.ButtonCandidate(
+                label='确定',
+                x=0.74,
+                y=0.69,
+                confidence=1.0,
+                clickability=2.0,
+                source='template',
+            ),
+        ],
+    )
+
+    assert candidates == []
+
+
+def test_tower_map_room_detector_skips_loadout_cards():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    image = Image.new('RGB', (360, 800), color=(28, 32, 34))
+    draw = ImageDraw.Draw(image)
+    for left in (55, 125, 195, 265):
+        draw.rectangle((left, 525, left + 50, 610), fill=(92, 178, 60))
+
+    candidates = auto_play.tower_map_room_icon_candidates(
+        image,
+        config,
+        [
+            auto_play.ButtonCandidate(
+                label='开始冒险',
+                x=0.56,
+                y=0.96,
+                confidence=1.0,
+                clickability=2.0,
+                source='template',
+            ),
+            auto_play.ButtonCandidate(
+                label='下方道路',
+                x=0.17,
+                y=0.49,
+                confidence=0.85,
+                clickability=0.64,
+                source='template',
+            ),
+        ],
+    )
+
+    assert candidates == []
+
+
+def test_tower_map_room_detector_skips_event_pickup_screen_with_ocr_arrow_noise():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    image = Image.new('RGB', (360, 800), color=(28, 32, 34))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((292, 530, 339, 588), fill=(80, 170, 210))
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='↑!',
+            x=0.34,
+            y=0.46,
+            confidence=0.84,
+            clickability=1.55,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='捡起木剑',
+            x=0.50,
+            y=0.57,
+            confidence=1.0,
+            clickability=1.01,
+            source='template',
+        ),
+        auto_play.ButtonCandidate(
+            label='下方道路',
+            x=0.82,
+            y=0.82,
+            confidence=0.84,
+            clickability=0.79,
+            source='template',
+        ),
+    ]
+
+    candidates = auto_play.tower_map_room_icon_candidates(
+        image,
+        config,
+        buttons,
+    )
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={'preferred': ['捡起木剑'], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert candidates == []
+    assert scored[0].label == '捡起木剑'
+
+
+def test_tower_current_room_detector_beats_stale_lower_route():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    image = Image.new('RGB', (360, 800), color=(28, 32, 34))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((146, 496, 214, 603), fill=(116, 76, 150))
+    draw.rectangle((164, 485, 194, 510), fill=(210, 40, 45))
+    draw.ellipse((158, 520, 202, 570), fill=(205, 178, 90))
+    lower_route = auto_play.ButtonCandidate(
+        label='下方道路',
+        x=0.44,
+        y=0.92,
+        confidence=0.98,
+        clickability=0.84,
+        source='template',
+    )
+
+    candidates = auto_play.configured_image_candidates(
+        config,
+        image,
+        [lower_route],
+    )
+    scored = auto_play.score_buttons(
+        [lower_route, *candidates],
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert [button.label for button in candidates] == ['Visible current room icon']
+    assert scored[0].label == 'Visible current room icon'
+
+
+def test_tower_current_room_detector_skips_center_navigation_arrow():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    image = Image.new('RGB', (360, 800), color=(28, 32, 34))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((150, 485, 205, 540), fill=(120, 210, 210))
+    up_route = auto_play.ButtonCandidate(
+        label='上方道路',
+        x=0.48,
+        y=0.64,
+        confidence=0.99,
+        clickability=1.13,
+        source='template',
+    )
+    down_route = auto_play.ButtonCandidate(
+        label='下方道路',
+        x=0.44,
+        y=0.92,
+        confidence=0.98,
+        clickability=0.84,
+        source='template',
+    )
+
+    candidates = auto_play.tower_current_room_icon_candidates(
+        image,
+        config,
+        [up_route, down_route],
+    )
+    scored = auto_play.score_buttons(
+        [up_route, down_route, *candidates],
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert candidates == []
+    assert scored[0].label == '上方道路'
+
+
+def test_generic_tower_room_icon_loses_to_strong_route_arrow():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    image = Image.new('RGB', (360, 800), color=(28, 32, 34))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((50, 486, 136, 580), fill=(120, 82, 164))
+    draw.rectangle((70, 505, 114, 554), fill=(150, 92, 170))
+    left_route = auto_play.ButtonCandidate(
+        label='左侧道路',
+        x=0.10,
+        y=0.75,
+        confidence=1.0,
+        clickability=1.13,
+        source='template',
+    )
+    lower_route = auto_play.ButtonCandidate(
+        label='下方道路',
+        x=0.50,
+        y=0.92,
+        confidence=0.88,
+        clickability=0.86,
+        source='template',
+    )
+
+    room_candidates = auto_play.tower_map_room_icon_candidates(
+        image,
+        config,
+        [left_route, lower_route],
+    )
+    scored = auto_play.score_buttons(
+        [left_route, lower_route, *room_candidates],
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+    decision = auto_play.decide_next_move(
+        scored,
+        min_action_score=0.5,
+        ambiguity_margin=0.25,
+        ask_on_ambiguous=False,
+        automation_config=config,
+    )
+
+    assert [button.label for button in room_candidates] == ['Visible room icon']
+    assert scored[0].label == '下方道路'
+    assert decision.recommended.label == '下方道路'
+
+
+def test_bottom_center_down_route_beats_edge_back_arrow():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    left_route = auto_play.ButtonCandidate(
+        label='左侧道路',
+        x=0.10,
+        y=0.75,
+        confidence=1.0,
+        clickability=1.13,
+        source='template',
+    )
+    down_route = auto_play.ButtonCandidate(
+        label='下方道路',
+        x=0.50,
+        y=0.92,
+        confidence=0.88,
+        clickability=0.86,
+        source='template',
+    )
+
+    scored = auto_play.score_buttons(
+        [left_route, down_route],
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+    decision = auto_play.decide_next_move(
+        scored,
+        min_action_score=0.5,
+        ambiguity_margin=0.25,
+        ask_on_ambiguous=False,
+        automation_config=config,
+    )
+
+    assert scored[0].label == '下方道路'
+    assert decision.recommended.label == '下方道路'
+
+
+def test_bottom_center_down_route_beats_stale_combat_room_icon():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    stale_room = auto_play.ButtonCandidate(
+        label='Visible combat room icon',
+        x=0.68,
+        y=0.67,
+        confidence=0.98,
+        clickability=7.0,
+        source='vision',
+    )
+    down_route = auto_play.ButtonCandidate(
+        label='下方道路',
+        x=0.50,
+        y=0.92,
+        confidence=0.88,
+        clickability=0.86,
+        source='template',
+    )
+    edge_route = auto_play.ButtonCandidate(
+        label='左侧道路',
+        x=0.10,
+        y=0.75,
+        confidence=0.96,
+        clickability=1.12,
+        source='template',
+    )
+
+    scored = auto_play.score_buttons(
+        [stale_room, down_route, edge_route],
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+    decision = auto_play.decide_next_move(
+        scored,
+        min_action_score=0.5,
+        ambiguity_margin=0.25,
+        ask_on_ambiguous=False,
+        automation_config=config,
+    )
+
+    assert scored[0].label == '下方道路'
+    assert decision.recommended.label == '下方道路'
+
+
+def test_tower_map_room_detector_prefers_rest_when_hp_is_critical():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    image = Image.new('RGB', (360, 800), color=(28, 32, 34))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((56, 354, 69, 366), fill=(210, 30, 40))
+    draw.rectangle((55, 495, 132, 572), fill=(92, 178, 60))
+    draw.rectangle((218, 492, 323, 584), fill=(80, 170, 210))
+
+    room_candidates = auto_play.tower_map_room_icon_candidates(
+        image,
+        config,
+        [
+            auto_play.ButtonCandidate(
+                label='上方道路',
+                x=0.48,
+                y=0.63,
+                confidence=0.89,
+                clickability=0.87,
+                source='template',
+            ),
+            auto_play.ButtonCandidate(
+                label='下方道路',
+                x=0.23,
+                y=0.63,
+                confidence=0.85,
+                clickability=0.82,
+                source='template',
+            )
+        ],
+    )
+
+    assert [button.label for button in room_candidates] == [
+        'Visible rest room icon',
+        'Visible combat room icon',
+    ]
+
+
+def test_tower_map_room_detector_does_not_treat_half_hp_as_critical():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    image = Image.new('RGB', (360, 800), color=(28, 32, 34))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((56, 354, 101, 366), fill=(210, 30, 40))
+    draw.rectangle((55, 495, 132, 572), fill=(92, 178, 60))
+    draw.rectangle((218, 492, 323, 584), fill=(80, 170, 210))
+
+    room_candidates = auto_play.tower_map_room_icon_candidates(
+        image,
+        config,
+        [
+            auto_play.ButtonCandidate(
+                label='上方道路',
+                x=0.48,
+                y=0.63,
+                confidence=0.89,
+                clickability=0.87,
+                source='template',
+            ),
+            auto_play.ButtonCandidate(
+                label='下方道路',
+                x=0.23,
+                y=0.63,
+                confidence=0.85,
+                clickability=0.82,
+                source='template',
+            ),
+        ],
+    )
+
+    assert auto_play.tower_hp_looks_critical(image) is False
+    assert [button.label for button in room_candidates] == [
+        'Visible combat room icon',
+        'Visible room icon',
+    ]
+
+
 def test_escape_menu_probe_beats_navigation_when_top_paths_are_exhausted():
     auto_play = load_auto_play_module()
     config = automation_config(auto_play, 'tower')
@@ -1233,6 +2006,139 @@ def test_non_survivor_claimed_page_does_not_create_swipe_candidate():
     )
 
     assert extras == []
+
+
+def test_tower_loadout_adds_adventurer_selection_fallback():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+
+    start = auto_play.ButtonCandidate(
+        label='开始冒险',
+        x=0.56,
+        y=0.96,
+        confidence=1.0,
+        clickability=2.0,
+        source='template',
+    )
+
+    extras = auto_play.configured_extra_candidates(config, [start])
+    scored = auto_play.score_buttons(
+        [start, *extras],
+        memory={
+            'preferred': ['开始冒险'],
+            'avoid': [],
+            'ineffective': [],
+        },
+        automation_config=config,
+    )
+    normal_decision = auto_play.decide_next_move(
+        scored,
+        min_action_score=0.65,
+        ambiguity_margin=0.2,
+        ask_on_ambiguous=False,
+        fallback_labels=set(),
+        automation_config=config,
+    )
+    unblock_decision = auto_play.decide_unblock_move(
+        scored,
+        {'开始冒险'},
+    )
+
+    assert [button.label for button in extras] == ['选择冒险者']
+    assert normal_decision.recommended.label == '开始冒险'
+    assert unblock_decision.recommended.label == '选择冒险者'
+
+
+def test_item_inspection_skips_hard_avoid_navigation_and_noise():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+
+    for label in ['Abandon', '↑!', '••']:
+        candidate = auto_play.ButtonCandidate(
+            label=label,
+            x=0.5,
+            y=0.6,
+            confidence=1.0,
+            clickability=1.0,
+            source='ocr',
+        )
+
+        assert not auto_play.is_inspectable_item_candidate(
+            candidate,
+            fallback_labels=set(),
+            avoid_labels=set(),
+            ineffective_labels=set(),
+            automation_config=config,
+        )
+
+
+def test_unblock_prefers_repeated_route_over_menu_probe():
+    auto_play = load_auto_play_module()
+
+    route = auto_play.ButtonCandidate(
+        label='下方道路',
+        x=0.5,
+        y=0.93,
+        confidence=0.76,
+        clickability=0.81,
+        source='template',
+        score=2.05,
+    )
+    settings = auto_play.ButtonCandidate(
+        label='Open settings',
+        x=0.94,
+        y=0.46,
+        confidence=1.0,
+        clickability=3.2,
+        source='vision',
+        score=1.03,
+    )
+
+    decision = auto_play.decide_unblock_move(
+        [route, settings],
+        {'下方道路'},
+    )
+
+    assert decision.recommended.label == '下方道路'
+
+
+def test_unblock_prefers_viable_repeated_route_over_menu_probe_loophole():
+    auto_play = load_auto_play_module()
+
+    route = auto_play.ButtonCandidate(
+        label='右侧道路',
+        x=0.78,
+        y=0.75,
+        confidence=0.89,
+        clickability=1.49,
+        source='template',
+        score=3.28,
+    )
+    settings = auto_play.ButtonCandidate(
+        label='Open settings',
+        x=0.94,
+        y=0.46,
+        confidence=1.0,
+        clickability=3.2,
+        source='vision',
+        score=1.03,
+    )
+    stale_card = auto_play.ButtonCandidate(
+        label='弱点打击',
+        x=0.77,
+        y=0.75,
+        confidence=0.91,
+        clickability=0.86,
+        source='template',
+        score=0.30,
+    )
+
+    decision = auto_play.decide_unblock_move(
+        [route, settings, stale_card],
+        {'右侧道路'},
+    )
+
+    assert decision.recommended.label == '右侧道路'
 
 
 def test_survivor_level_grid_creates_last_challenge_icon_candidate():
@@ -2723,6 +3629,36 @@ def test_exit_arrow_beats_current_room_icon_when_arrow_is_visible():
     assert scored[0].label == '右侧道路'
 
 
+def test_center_route_arrow_beats_stale_vision_room_icon():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+
+    stale_room = auto_play.ButtonCandidate(
+        label='Visible combat room icon',
+        x=0.19,
+        y=0.66,
+        confidence=0.98,
+        clickability=7.0,
+        source='vision',
+    )
+    center_arrow = auto_play.ButtonCandidate(
+        label='上方道路',
+        x=0.48,
+        y=0.64,
+        confidence=0.97,
+        clickability=1.12,
+        source='template',
+    )
+
+    scored = auto_play.score_buttons(
+        [stale_room, center_arrow],
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert scored[0].label == '上方道路'
+
+
 def test_bright_navigation_arrow_wins_even_when_other_arrow_not_in_fallback_list():
     auto_play = load_auto_play_module()
     config = automation_config(auto_play, 'tower')
@@ -3003,6 +3939,60 @@ def test_item_preference_does_not_penalize_crystal_currency_costs():
     assert 'cost or loss' in hp_cost_reasons
 
 
+def test_item_preference_uses_taptap_catalog_effect_when_description_is_missing(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    write_taptap_search_index(
+        tmp_path,
+        'tower',
+        [
+            {
+                'name': '神圣斩击',
+                'catalog': '卡牌图鉴',
+                'group': '战士卡牌',
+                'type': '物攻牌',
+                'cost': '3法力值',
+                'effect': '物理伤害：4/6/8，如果[斩杀]，则永久增加5/6/7点生命上限',
+                'source': '卡包获取、金币商店、魔术商店',
+                'icon_path': 'images/icons/011-神圣斩击.png',
+                'detail_image_paths': ['images/details/011-神圣斩击-1.png'],
+            },
+            {
+                'name': '舍命一击',
+                'catalog': '卡牌图鉴',
+                'group': '战士卡牌',
+                'type': '物攻牌',
+                'cost': '5法力值',
+                'effect': '物理伤害：10/15/20，减少自身2点生命',
+                'source': '卡包获取、金币商店、魔术商店',
+                'icon_path': 'images/icons/008-舍命一击.png',
+                'detail_image_paths': ['images/details/008-舍命一击-1.png'],
+            },
+        ],
+    )
+
+    sacred_score, sacred_reasons = auto_play.configured_item_preference_score(
+        '神圣斩击',
+        'Abandon',
+        game='Tower',
+    )
+    sacrifice_score, sacrifice_reasons = auto_play.configured_item_preference_score(
+        '舍命一击',
+        'Abandon',
+        game='Tower',
+    )
+
+    assert sacred_score > sacrifice_score
+    assert 'TapTap catalog match: 卡牌图鉴/战士卡牌' in sacred_reasons
+    assert 'permanent stat priority' in sacred_reasons
+    assert 'coin gain' not in sacred_reasons
+    assert 'cost or loss' not in sacred_reasons
+    assert 'self-sacrifice cue' in sacrifice_reasons
+
+
 def test_inspect_item_choices_selects_best_item_then_recommends_confirm(
     tmp_path,
     monkeypatch,
@@ -3104,6 +4094,177 @@ def test_inspect_item_choices_selects_best_item_then_recommends_confirm(
     assert '| 1 | Royal Training |' in knowledge
     assert 'Permanent attack +1' in knowledge
     assert knowledge.index('Royal Training') < knowledge.index('Quick Spark')
+
+
+def test_inspect_item_choices_uses_taptap_catalog_to_choose_card(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    write_taptap_search_index(
+        tmp_path,
+        'tower',
+        [
+            {
+                'name': '神圣斩击',
+                'catalog': '卡牌图鉴',
+                'group': '战士卡牌',
+                'type': '物攻牌',
+                'cost': '3法力值',
+                'effect': '物理伤害：4/6/8，如果[斩杀]，则永久增加5/6/7点生命上限',
+                'source': '卡包获取、金币商店、魔术商店',
+                'icon_path': 'images/icons/011-神圣斩击.png',
+                'detail_image_paths': ['images/details/011-神圣斩击-1.png'],
+            },
+            {
+                'name': '舍命一击',
+                'catalog': '卡牌图鉴',
+                'group': '战士卡牌',
+                'type': '物攻牌',
+                'cost': '5法力值',
+                'effect': '物理伤害：10/15/20，减少自身2点生命',
+                'source': '卡包获取、金币商店、魔术商店',
+                'icon_path': 'images/icons/008-舍命一击.png',
+                'detail_image_paths': ['images/details/008-舍命一击-1.png'],
+            },
+        ],
+    )
+
+    sacred = auto_play.ButtonCandidate(
+        label='神圣斩击',
+        x=0.25,
+        y=0.45,
+        confidence=0.8,
+        clickability=0.7,
+        source='ocr',
+        score=1.08,
+    )
+    sacrifice = auto_play.ButtonCandidate(
+        label='舍命一击',
+        x=0.75,
+        y=0.45,
+        confidence=0.8,
+        clickability=0.7,
+        source='ocr',
+        score=1.08,
+    )
+    confirm = auto_play.ButtonCandidate(
+        label='Confirm',
+        x=0.5,
+        y=0.9,
+        confidence=0.9,
+        clickability=0.8,
+        source='ocr',
+        score=2.22,
+    )
+    clicks: list[str] = []
+
+    def fake_click(_args, button):
+        clicks.append(button.label)
+
+    def fake_load_image(_args):
+        return Image.new('RGB', (100, 100), color='black'), {}
+
+    def fake_analyze_buttons(_image, *, confidence, game, template_match_threshold):
+        return []
+
+    monkeypatch.setattr(auto_play, 'click_button', fake_click)
+    monkeypatch.setattr(auto_play, 'load_image', fake_load_image)
+    monkeypatch.setattr(auto_play, 'analyze_buttons', fake_analyze_buttons)
+
+    args = SimpleNamespace(
+        image=None,
+        click_recommended=True,
+        item_inspection_limit=4,
+        item_inspection_interval=0.0,
+        item_description_label_limit=12,
+        confidence=0.8,
+        game='Tower',
+        template_match_threshold=0.82,
+    )
+    turn_dir = tmp_path / 'turn'
+    artifact_paths = {
+        'item_inspections': turn_dir / 'item_inspections.yaml',
+        'item_inspection_dir': turn_dir / 'item_inspections',
+    }
+
+    inspections, decision = auto_play.inspect_item_choices(
+        args,
+        buttons=[sacred, sacrifice, confirm],
+        memory={'fallback': [], 'avoid': [], 'ineffective': []},
+        artifact_paths=artifact_paths,
+    )
+
+    assert clicks == ['神圣斩击', '舍命一击', '神圣斩击']
+    assert [item.kind for item in inspections] == ['card', 'card']
+    assert decision is not None
+    assert decision.recommended.label == 'Confirm'
+    assert decision.choices[0].label == '神圣斩击'
+    knowledge = (tmp_path / 'games' / 'tower' / 'game_info.md').read_text()
+    assert '### card' in knowledge
+    assert 'TapTap catalog: 卡牌图鉴/战士卡牌' in knowledge
+    assert '永久增加5/6/7点生命上限' in knowledge
+
+
+def test_replace_adventure_confirmation_is_not_item_inspected(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='Replace Old Adventure and Enter Tower?',
+            x=0.5,
+            y=0.5,
+            confidence=0.98,
+            clickability=1.7,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='Cancel',
+            x=0.3,
+            y=0.6,
+            confidence=1.0,
+            clickability=1.8,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='OK',
+            x=0.69,
+            y=0.6,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        ),
+    ]
+
+    def fail_click(_args, button):
+        raise AssertionError(f'Unexpected item inspection click: {button.label}')
+
+    monkeypatch.setattr(auto_play, 'click_button', fail_click)
+
+    args = SimpleNamespace(
+        image=None,
+        click_recommended=True,
+        game='Tower',
+    )
+    artifact_paths = {
+        'item_inspections': tmp_path / 'item_inspections.yaml',
+        'item_inspection_dir': tmp_path / 'item_inspections',
+    }
+
+    inspections, decision = auto_play.inspect_item_choices(
+        args,
+        buttons=buttons,
+        memory={'fallback': [], 'avoid': [], 'ineffective': []},
+        artifact_paths=artifact_paths,
+    )
+
+    assert inspections == []
+    assert decision is None
+    assert not artifact_paths['item_inspections'].exists()
 
 
 def test_game_info_marks_card_like_choices_as_skills(tmp_path, monkeypatch):
