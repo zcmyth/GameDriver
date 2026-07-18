@@ -22,14 +22,28 @@ Extract text with center coordinates and confidence.
 NOISE_TEXT_PATTERNS = [
     re.compile(r'^@\s*\d{2,}$'),
     re.compile(r'^\d{1,2}\s*-\s*\d{1,2}$'),
+    re.compile(r'^[±+\-]?\s*\d+([.,]\d+)?[kmb]{1,3}$', re.I),
+    re.compile(
+        r'^\d+([.,]\d+)?[kmb]{1,3}\s*[-–]\s*[+\-]?\d+([.,]\d+)?[a-z0-9.]*$',
+        re.I,
+    ),
+    re.compile(r'^[a-z]\s*[-–]\s*\d+([.,]\d+)?[kmb]{1,3}$', re.I),
     re.compile(r'^[±+\-]\s*\d+([.]\d+)?%?[;；]?$'),
     re.compile(r'^q{2,}\d*$', re.I),
+    re.compile(r'^[x×]{2,}\d*$', re.I),
     re.compile(r'^\d+[./:]?\d*[kmb]?$'),
     re.compile(r'^lv[.\s]*\d+$', re.I),
     re.compile(r'^[+\-]?\d+[./:]\d+$'),
     re.compile(r'^\d+\s*>{1,2}\s*\d+$'),
+    re.compile(r'^\d+\)$'),
     re.compile(r'^[\[(]?\s*\d+\s*/\s*\d+\s*[\])]?$'),
     re.compile(r'^[\[(]\s*\d+\s*[\])]?$'),
+    re.compile(
+        r'^(?!1[- ]?tap$)(?=[a-z0-9()\[\]{},.:;!?+\-*/\\|_~<>]+$)'
+        r'(?=.*\d)(?=.*[()\[\]{},.:;!?+\-*/\\|_~<>]).{2,}$',
+        re.I,
+    ),
+    re.compile(r'^[a-z]{1,2}\d{3,}[a-z0-9]*$', re.I),
     re.compile(r'^[x×]\s*\d+$', re.I),
     re.compile(r'^[a-z]\s*\d+$', re.I),
     re.compile(r'^[()\[\]{}%.,:;!?+\-*/\\|_~<>]+$'),

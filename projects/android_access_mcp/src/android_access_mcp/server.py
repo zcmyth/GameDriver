@@ -194,6 +194,15 @@ class AndroidAccessMcpServer:
                     'additionalProperties': False,
                 },
             },
+            {
+                'name': 'back',
+                'description': 'Press the Android Back key.',
+                'inputSchema': {
+                    'type': 'object',
+                    'properties': {},
+                    'additionalProperties': False,
+                },
+            },
         ]
 
     def _call_tool(self, params: JsonObject) -> JsonObject:
@@ -208,6 +217,8 @@ class AndroidAccessMcpServer:
             return self._click(arguments)
         if name == 'swipe':
             return self._swipe(arguments)
+        if name == 'back':
+            return self._back()
         raise McpError(-32602, f'Unknown tool: {name}')
 
     def _current_screen(self, arguments: JsonObject) -> JsonObject:
@@ -267,6 +278,17 @@ class AndroidAccessMcpServer:
             arguments['end_y'],
             duration_ms=arguments.get('duration_ms', 300),
         )
+        text = json.dumps(
+            {**asdict(result), 'serial': self.device.serial},
+            separators=(',', ':'),
+        )
+        return {
+            'content': [{'type': 'text', 'text': text}],
+            'isError': False,
+        }
+
+    def _back(self) -> JsonObject:
+        result = self.device.back()
         text = json.dumps(
             {**asdict(result), 'serial': self.device.serial},
             separators=(',', ':'),
