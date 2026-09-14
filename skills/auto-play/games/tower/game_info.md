@@ -4,150 +4,79 @@ This file stores durable descriptions captured from item inspections, explicit L
 
 ## Manual Observations
 
-### Floor-6 乐子巫 Lv.5 Fight
-- Enemy repeatedly healed and chipped damage, so unbuffed small attacks were not
-  enough. Winning line was to stack physical attack, then play multiple attack
-  cards per turn.
-- Key scaling: **强壮愿望** raised physical attack by about `34%` with
-  **骑士之誓** active; **胜势II** raised physical attack from `264%` to `298%`.
-- Key damage after scaling: **劈砍II** displayed up to `41`, **全力一击**
-  displayed `48-55`, **归一** displayed up to `22`, **迅捷攻击** displayed
-  `19-22`, **神圣斩击** displayed `19-22`, **无限攻击** reached `23`, and
-  **普通木剑II** dealt `8`.
-- **全力一击** could not be used while a defense card was in hand. Playing
-  **守势** first cleared the blocker and allowed **全力一击** to fire.
-- **法力愿望** cost 2 and gave `+4` mana. **健康愿望** cost 2 and healed about
-  `8` HP. **迅捷愿望** appeared to buff speed/quickness rather than deal damage.
-- **神圣斩击** as the finishing blow appeared to apply its max-HP bonus before
-  the level-up screen.
+### 本次深渊楼梯：铁面奇莫
+- `铁面奇莫` 每消耗 8 金币增加 2 点最大生命，适合把必要商店消费同时转成生存；但清空商店会显著污染牌组，后续只买爆发链、续航链或核心升级。
+- `快速切牌III*` 可以把整手牌转成 5 张 `黑桃4*`；每张 0 费，造成 6 点穿透伤害并回复 6 点生命，是当前最快的爆发兼回血手段。
+- `愤怒宝石I` 在使用物理攻击牌时抽取物理攻击，适合短牌组连打；`剧毒宝石I` 让物理或魔法牌顺带叠毒，适合作为攻击链附加收益。
+- `毒药攻击II`、`涂毒小刀II` 负责快速叠毒；`特殊信念I` 每 3 层敌方毒获得 2 点祈愿且不清毒，`慈悲II` 可在需要爆发或保命时把毒转成祈愿。
+- `暴富水袋` 每施加 10 层毒获得 1 点知识，`巨人布袋` 战斗胜利后回复 8 点生命；前者成长，后者保证连续爬层续航。
+- 战斗中每打出一张牌，手牌都会重排。自动化必须重新截图再点，不能沿用上一张牌的坐标。
+- 第 6 层楼梯选择中，左路识别到 `精英怪×1`，右路普通怪更多；为了补完“击败 2 只普通怪”取得 `残影`，选择右路更稳。
 
-### Floor-6 Shops And Rewards
-- **BOSS战补给** restored `100%` of max HP; take it before the final boss route.
-- Mystery shop buys used in this run: **巨人药水** cost 40 coins, card cost 0,
-  consumable, increases max HP by `600`; **净化药水** cost 40 coins, card cost 0,
-  consumable, clears all own mark effects without triggering marks.
-- Crystal shop buys used in this run: **赤铁巨斧III** cost 3 crystals,
-  `物攻 +5`, `暴击 +3`; **断刃匕首IV** cost 3 crystals, `速度 +1`, `物攻 +7`;
-  **骑士盾牌** cost 5 crystals, first round grants `6` shield.
-- Skipped **诅咒饭团** because it reduced max HP by `25` and only grows after
-  later victories, making it risky near the boss.
+### 既有第 6 层战斗经验
+- 面对反复回血的敌人，小额未强化攻击不够快；先叠物攻，再在同一回合连续打出多张攻击牌。
+- `强壮愿望`、`胜势II/III` 与 `骑士之盔` / `骑士之誓` 的物攻联动明显，适合在 `劈砍II`、`全力一击`、`归一`、`神圣斩击` 前完成增幅。
+- `法力愿望` 2 费获得 4 法力；`健康愿望` 2 费约回复 8 生命；`神圣斩击` 作为终结牌可能在升级前先增加最大生命。
+- `BOSS战补给` 回复 100% 最大生命。`巨人药水` 0 费、消耗型、增加 600 最大生命；`净化药水` 清除自身全部印记且不触发印记。
+
+### 2026-09-13 每日任务实测
+- 深渊楼梯使用 `铁面奇莫`，最高到第 20 层。第 15 层被 `小恶魔` 击败后看广告满血复活，最终在第 20 层被 `恶龙` 击败；说明广告复活值得保留给首次致命失误，但当前毒祈愿牌组远未达到 124 层所需的首回合防御与爆发门槛。
+- 这次深渊的主要问题不是续航资源不足，而是牌组被商店和事件逐渐撑厚，毒、祈愿、宝石、诅咒多条链互相争夺抽牌与法力。下一次开局应只保留“稳定触发/回费或抽牌、爆发结算、必要回血”三段，不能为了单卡强度破坏循环。
+- 旅馆招募到 `快活的卤蛋`，战力 2542。初始牌组为 `死里镰刀`、`绿舌头`、`战术准备`、`迅捷`、`战斗专注`、`举盾`、`幽灵剑1`、`普通攻击`。
+- `快活的卤蛋` 在尖塔木屋取得 7/7 胜利并转正。开局宝物 `矮人手套`：使用宝石牌时造成 7 点效果伤害；途中天赋 `晶体冥想`：回合开始时，每装备 1 张宝石牌获得 5 层专注。随后补入 `重影宝石`、`法力宝石`、`智慧宝石`、`暴击宝石`、`超时空宝石`，把原本无联动的开局宝物变成稳定输出引擎。
+- 尖塔的快速成型链是：宝石牌提供法力、抽牌或移除联动，`晶体冥想` 按宝石数量提供专注，`矮人手套` 把每次宝石使用换成直接伤害，`迅捷攻击Ⅱ` 同时造成伤害并抽牌。`战斗专注` 强化到 9 层专注后，最终 `乐子巫` 在第 6 回合被击败。
+- 第 7 层正确顺序是先 `强化法阵`，再 `BOSS战补给` 恢复 100% 最大生命，最后打 Boss；`变化法阵` 会改动核心牌，默认应跳过。Boss 后的生命商店有 3 次免费奖励，应全部领取，出现 `商品已售馨` 后立即返回，不消耗刷新资源。
+- `拾取卡牌` 不一定表示战斗结束；`战术准备` 也会打开这类牌组选择页。确认当前高亮牌即可继续。真正的终局信号是 `冒险胜利`，随后选择 `马上离开（冒险者转正）`，最后在 `游戏胜利` 结算页点击 `返回旅馆`。
+
+### 2026-09-13 网上攻略校正与第二次实测
+- 第二次深渊仍为 `铁面奇莫` 旅行者。前辈宝物拿到 `炸弹老虎机`，但牌组没有 `超级贩卖机`，道具引擎无法成立；之后混入祈愿、毒、盾与多颗宝石，第 7 层首次倒下并消耗广告复活，到第 10 层主动放弃。结论：这类“能活但没有倍率斩杀”的混合牌组不应继续投入时间。
+- 玩家攻略给出的通用硬门槛是生命 250+、速度 45+，约 30 层前完成构筑再跳层。启动后的非临时牌最多 7 张；没有核心牌时放弃三选一换 10 金币，比拿过渡牌更稳定。
+- 旅行者公开攻略也明确承认最依赖运气，不适合刷收藏品。标准速刷轴是 `毒龙匕首` 开局过渡，`烈性毒药` 快速翻倍，再用 `安乐毒药` 或毒转祈愿后的 `救赎` 斩杀；`牛脾气` 或 `魔法面具` 负责重复移除牌，`回忆` / `献祭` 负责过牌。
+- 猎人是当前最适合自动驾驶的方案：`捕猎陷阱` 多于 `大力射击` 三倍，`猎人嗅觉` 1-3 张，配 `魔法面具`、`火龙蛋` 与 `快速施法` / `双枪` / `魔法熊手` 任一启动器。2026-08 玩家实测连续三局约 25 分钟到 120 层。
+- 法师同样适合速刷：火法三段 `寒冷 -> 转火 -> 火焰打击`，公开最快约 22 分钟；雷法依靠 `电虫药水` 过牌、`快速思考` 回蓝、`电解冰` 结算，电击可绕开亡灵契约的复活反伤，稳定性更高。
+- 战士隐刀流使用 `幽灵剑`、`换血` 和抽牌发动机，满层后 121-123 不必依赖药水；它比易伤流稳定，但前 30 层需要主动叠幽灵剑层数。
+- 深渊通用功能宝物优先 `实验眼睛`、`机械龙蛋`；`诅咒饭团`、`巨人泡泡糖` 等成长宝物只在约 30 层前有高收益。避免 `宇宙十字架`，否则可能被 123 层梦境零复制。
+- 实机确认前辈宝物是三选一：底部左键显示 `放弃` 而非 `返回`，旧解析因此没有主动选择，只会吃默认左一。现在会读取三列标题，旅行者只要任意一列出现 `毒龙匕首` 就优先点中。
+- 实机确认地图设置中的 `返回旅馆` 只会暂存当前冒险；再次进入时会出现 `恢复冒险`，随机结果不会刷新。完整重摇必须再到深渊关卡页点 `放弃冒险`、确认、结算返回，然后重新 `进入冒险`。
+- 2026-09 最新公开实战中，新手第三天用猎人陷阱流通关：前辈宝物 `远古魔法手套`，核心任务 `毒性思考` / `谢幕`，核心宝物 `魔法熊手`，再补 `魔法面具`、`火龙蛋`、`实验眼睛`；卡牌只围绕 `捕猎陷阱`、两张左右 `大力射击`、1-3 张 `猎人嗅觉`。其“抽到什么打什么，没结束就再循环”的操作模型尤其适合自动驾驶。
+- 旧旅行者毒攻略给出更明确的六牌永动骨架：`无限宝石`、`剧毒晶石`、`毒龙钻石`、`烈性毒药`、`涂毒小刀/毒药攻击`、`未来汽水/献祭`，用 `牛脾气` 重复移除牌；需要续航时以 `安乐毒药` 触发毒并回血。这个直接毒结算轴比“毒、祈愿、盾、杂宝石”混合路线快得多。
+- 本次按旧阈值误拿了 `救赎`。它需要毒转祈愿再结算，和六牌直毒不是同一条发动机；`救赎`、`慈悲`、`代号肉鸽`、`海是那个味`、`毒死` 已全部降到放弃奖励以下，遇到 `卡牌遗忘` 时先删 `救赎`。
+- 玩家科普认为 `花喇叭` 更利于启动，而 `毒龙匕首` 能解决旅行者前期伤害过低、容易暴毙的问题。实机用 `花喇叭` 的半成品连续在 10 至 13 层失败后，驱动执行了 20 次严格重随、检查约 60 个候选，仍未见 `毒龙匕首`，而其他旅行者职业宝物反复出现；因此当前账号/今日池把它视为暂不可用，再接受 `花喇叭` 兜底，但仍不放宽七牌核心和放弃杂牌规则。
+- 2026-09-13 的最新社区汇总仍推荐旅行者毒无限，但当前成品更新为七张：`涂毒小刀`、`烈性毒药`、`安乐毒药`、`献祭`、`剧毒晶石`、`黑神话`、`无限宝石`。`黑神话` 是 `[唯一]` 宝石，效果为使用卡牌恢复生命时，每恢复 5 点便减少敌方 1/2/3 点生命；它把 `安乐毒药` 的回血变成第二条爆发轴。天赋以 `牛脾气` 保留移除牌，`植物精华` 防止毒衰退，`毒性思考` 每出一牌获得涂毒。
+- 实机发现旅行者奖励规则仍把 `许愿`、`瞬发宝石`、`智慧宝石` 当成高分通用牌，导致第一层三选一误拿 `许愿`，与直毒七牌目标冲突。深渊旅行者现改成严格白名单：只收直毒倍率、毒结算、回血转伤与必要过牌；`引雷针/退让/许愿` 这类组合一律放弃换 10 金币，误拿牌在 `卡牌遗忘` 优先删除。
+- 2026-09-14 实机累计重随 33 次，其中 14 个面板完整识别出 42 个候选，覆盖 `花喇叭`、`巨人之花`、`能量棒`、`安全出口`、`贵族拖鞋`、`贵族眼睛`、`旅行者手册`、`炸弹老虎机`、`削皮刀` 九种宝物，仍未出现 `毒龙匕首`。这更像账号未解锁或当日池限制；达到 20 次重随后改为只接受 `花喇叭`，把时间留给真正的深渊成型与爬层。
+- 2026-09-14 实机再次核对说明：`花喇叭` 的效果是“战斗开始时获得 5 层祈愿”，它是纯祈愿启动器，不是毒启动器。第一局误按直毒选牌，虽拿到 `烈性毒药` 并用广告复活，仍在 11 层终止；这证明“启动宝物与终结链不同流派”比单纯缺一张牌更致命。
+- 社区旅行者科普的纯祈愿机制与实机一致：`花喇叭/旅行者手册` 先给基础祈愿，`天使` 负责倍率放大，`救赎` 负责造成伤害并回复，`奉献` 清除祈愿回血时可再触发 `黑神话` 爆发。要永动仍需 `无限宝石` 与 `献祭/回忆/未来汽水` 补齐抽牌、回费，`牛脾气` 使原本移除的 `天使` 可重复使用。
+- 2026-09 还有一条已通 124 层的自动愤怒链：`愤怒宝石 + 换血 + 魔法熊手 + 女鹅套娃 + 火龙蛋`，出任意牌触发换血，熊手生成愤怒，套娃抽牌，火龙蛋复制愤怒。它比半成品毒流强，但需要四件指定装备；当日固定的铁面旅行者未确认拥有这些组件，不应盲目切入。
+- 前辈宝物三选一的卡片有效点击区位于屏幕纵向约 37%；48% 已落入效果说明框，只会刷新说明而不会切换高亮。必须点中卡面并让青色选中框移动后再确认。
+- 2026-09-10 的新人攻略再次确认：除宇宙流和猎人外，多数循环以 7 张牌为目标；删牌来源包括魔术商店、水晶哥布林、水晶商店、水晶乞丐、矮人宝库和休息点随机事件。当前驱动应把这些房间视为构筑资源，而不是普通数值房。
+- 当前猎人攻略把 `瞄准` 作为 7 月瞬发调整后的速刷补件：启动连锁攻击时自动叠精准，减少破盾后的拖延。攻略明确不建议强攻宝石、虚无宝石及大量正面状态，因为结算动画会明显拖慢爬塔。
+- 当前宇宙面具路线只在已有红/橙面具时成立：面具会按抽牌堆牌数的两倍附加效果伤害；法师只留升满的元素连击或 `雷龙` 作为触发牌，删除其他法术/防御牌，再大量收未升级卡扩大抽牌堆。厚牌本身不是强度，面具才是把厚度变成伤害的核心。
+- 2026-09-08 新公开的萌新易伤无限流只要求一条清晰闭环：`宝石手套` 开局安装 `超时空宝石`，`迅捷` 2-3 张负责抽牌，`发现弱点` 2-3 张叠易伤，`弱点打击` 1 张结算；`未来汽水` 卡手补蓝，宝物 `拐棍糖` 同时回蓝、摸牌、回血，`幻龙蛋` 复制超越牌降低断环概率。先手通常可一回合结束，中断后可用 `诅咒骨肉`、`冲天辫`、`毒龙钻石` 补盾、回血和副伤害。
+- 2026-08-18 火法速刷教程给出了比旧四段链更低要求的三卡成品：开局 `火焰草莓`，30 层前删变至只留 `燃烧晶石`、`太阳盾`、`火焰打击`，按此顺序使用。冲 124 层需留 `驱散药水` 处理 121，122 用元素药水后接咖啡与暴击药水，123 用巨人药水配和平鸽；高爆发遇亡灵反伤时要用盾牌药水或其他保命手段兜底。
+- 本次尖塔广告复活后，广告落地页把前台切到 TapTap 快捷启动，旧驱动继续识别外部 OCR 并发生无效点击。实机确认游戏包名为 `cn.thearky.projectrl`；驱动现已在 OCR 前检查前台包名，外部应用只返回，桌面只重启游戏，避免广告恢复阶段盲点。
+
+资料来源：
+- https://www.taptap.cn/moment/647781659738901451
+- https://www.taptap.cn/moment/677808628765296529
+- https://www.taptap.cn/moment/678224131207990483
+- https://www.taptap.cn/moment/695947069378005537
+- https://www.taptap.cn/moment/695966992334586903
+- https://www.taptap.cn/moment/835853489010642466
+- https://www.taptap.cn/moment/837035442732795342
+- https://www.taptap.cn/moment/496778305815449471
+- https://www.taptap.cn/moment/659037598865425143
+- https://www.taptap.cn/moment/845069627074544456
+- https://www.taptap.cn/moment/847142663521042699
+- https://www.taptap.cn/moment/598546995572902745
+- https://www.taptap.cn/moment/845010696931379971
+- https://www.taptap.cn/moment/846837186329314611
+- https://www.taptap.cn/moment/846531225408507529
+- https://www.taptap.cn/moment/838718274760869059
+- https://www.taptap.cn/moment/842495837450798158
 
 ## Ranking
 
-### item
-
-| Rank | Name | Score | Seen | Sources | Cues | Description | Last Seen |
-| ---: | --- | ---: | ---: | --- | --- | --- | --- |
-| 1 | 迅捷攻击 | 4.00 | 16 | item inspection | stat increase | description not captured | 20260703T190815-0700-tower |
-| 2 | $010+4 | 2.00 | 4 | item inspection | increase cue | description not captured | 20260703T180429-0700-tower |
-| 3 | 50R5+1 | 2.00 | 1 | item inspection | increase cue | Abandon | 20260703T172108-0700-tower |
-| 4 | #5:2 | 0.00 | 1 | item inspection | observed detail | Abandon | 20260703T174702-0700-tower |
-| 5 | $m | 0.00 | 1 | item inspection | observed detail | Abandon; $m | 20260703T190815-0700-tower |
-| 6 | Back | 0.00 | 8 | item inspection | observed detail | description not captured | 20260703T180429-0700-tower |
-| 7 | 启动防守 | 0.00 | 2 | item inspection | observed detail | Abandon | 20260703T175834-0700-tower |
-| 8 | 融合 | 0.00 | 4 | item inspection | observed detail | description not captured | 20260703T181118-0700-tower |
-| 9 | 返回 | 0.00 | 8 | item inspection | observed detail | description not captured | 20260703T181118-0700-tower |
-
+No captured skill or item descriptions yet.
 
 ## Captured Descriptions
-
-### item
-
-#### 1. 迅捷攻击
-- Type: item
-- Rank score: 4.00
-- Seen count: 16
-- Sources: item inspection
-- First seen: 20260703T171728-0700-tower
-- Last seen: 20260703T190815-0700-tower
-- Cues: stat increase
-- Description: description not captured
-- Last screenshot: /Users/chunzhang/game_driver/skills/auto-play/games/tower/turns/20260703T190815-0700-tower/item_inspections/02-迅捷攻击.png
-
-#### 2. $010+4
-- Type: item
-- Rank score: 2.00
-- Seen count: 4
-- Sources: item inspection
-- First seen: 20260703T180306-0700-tower
-- Last seen: 20260703T180429-0700-tower
-- Cues: increase cue
-- Description: description not captured
-- Last screenshot: /Users/chunzhang/game_driver/skills/auto-play/games/tower/turns/20260703T180429-0700-tower/item_inspections/02-010-4.png
-
-#### 3. 50R5+1
-- Type: item
-- Rank score: 2.00
-- Seen count: 1
-- Sources: item inspection
-- First seen: 20260703T172108-0700-tower
-- Last seen: 20260703T172108-0700-tower
-- Cues: increase cue
-- Description: Abandon
-- Last screenshot: /Users/chunzhang/game_driver/skills/auto-play/games/tower/turns/20260703T172108-0700-tower/item_inspections/02-50r5-1.png
-
-#### 4. #5:2
-- Type: item
-- Rank score: 0.00
-- Seen count: 1
-- Sources: item inspection
-- First seen: 20260703T174702-0700-tower
-- Last seen: 20260703T174702-0700-tower
-- Cues: observed detail
-- Description: Abandon
-- Last screenshot: /Users/chunzhang/game_driver/skills/auto-play/games/tower/turns/20260703T174702-0700-tower/item_inspections/01-5-2.png
-
-#### 5. $m
-- Type: item
-- Rank score: 0.00
-- Seen count: 1
-- Sources: item inspection
-- First seen: 20260703T190815-0700-tower
-- Last seen: 20260703T190815-0700-tower
-- Cues: observed detail
-- Description: Abandon; $m
-- Last screenshot: /Users/chunzhang/game_driver/skills/auto-play/games/tower/turns/20260703T190815-0700-tower/item_inspections/01-m.png
-
-#### 6. Back
-- Type: item
-- Rank score: 0.00
-- Seen count: 8
-- Sources: item inspection
-- First seen: 20260703T171728-0700-tower
-- Last seen: 20260703T180429-0700-tower
-- Cues: observed detail
-- Description: description not captured
-- Last screenshot: /Users/chunzhang/game_driver/skills/auto-play/games/tower/turns/20260703T180429-0700-tower/item_inspections/01-back.png
-
-#### 7. 启动防守
-- Type: item
-- Rank score: 0.00
-- Seen count: 2
-- Sources: item inspection
-- First seen: 20260703T172108-0700-tower
-- Last seen: 20260703T175834-0700-tower
-- Cues: observed detail
-- Description: Abandon
-- Last screenshot: /Users/chunzhang/game_driver/skills/auto-play/games/tower/turns/20260703T175834-0700-tower/item_inspections/01-启动防守.png
-
-#### 8. 融合
-- Type: item
-- Rank score: 0.00
-- Seen count: 4
-- Sources: item inspection
-- First seen: 20260703T180756-0700-tower
-- Last seen: 20260703T181118-0700-tower
-- Cues: observed detail
-- Description: description not captured
-- Last screenshot: /Users/chunzhang/game_driver/skills/auto-play/games/tower/turns/20260703T181118-0700-tower/item_inspections/02-融合.png
-
-#### 9. 返回
-- Type: item
-- Rank score: 0.00
-- Seen count: 8
-- Sources: item inspection
-- First seen: 20260703T180756-0700-tower
-- Last seen: 20260703T181118-0700-tower
-- Cues: observed detail
-- Description: description not captured
-- Last screenshot: /Users/chunzhang/game_driver/skills/auto-play/games/tower/turns/20260703T181118-0700-tower/item_inspections/03-返回.png

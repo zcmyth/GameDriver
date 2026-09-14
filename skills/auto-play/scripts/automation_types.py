@@ -156,6 +156,7 @@ class GameAutomationConfig:
     no_change_skill_choice_rule: str = ''
     no_change_empty_screen_rule: str = ''
     target_level: int | None = None
+    prefer_watch_ads: bool = False
 
 
 @dataclass(frozen=True)

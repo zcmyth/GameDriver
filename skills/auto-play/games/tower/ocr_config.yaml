@@ -1,0 +1,12 @@
+ocr:
+  language: ch
+  recognition_model: PP-OCRv5_mobile_rec
+
+templates:
+  重试:
+    match_threshold: 0.82
+    search_roi:
+      - 0.50
+      - 0.45
+      - 0.76
+      - 0.58
