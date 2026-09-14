@@ -2,6 +2,22 @@
 
 ## Objective
 - Keep fighting and progress as far as possible through the tower.
+- 每日流程可用 `--tower-daily` 持久化执行：深渊楼梯尽量到 124 层，回旅馆有次数则招募，再用新招募角色打尖塔木屋。
+
+## 深渊速刷核心
+- 硬门槛：生命优先堆到 250+，速度堆到 45+；低于门槛不提前跳层。成长宝物优先在 30 层前拿，30 层左右完成牌组后再跳层。
+- 稳定无限流原则：启动后非临时牌不超过 7 张。三选一没有本职业核心牌时点 `放弃` 领取 10 金币，不为单卡强度污染牌库；`马上融合` 仍可拿。
+- 开局必须先识别职业并刷对 `前辈的宝物`。旅行者首选 `毒龙匕首` 走直毒；连续 20 次真正重随仍未出现时，才接受 `花喇叭` 并立即切成纯祈愿，不得继续按毒流选牌。猎人接受 `远古魔法手套` / `贵族手刀`；法师接受 `火焰草莓` / `电虫药水`；战士接受 `骑士狼牙棒` / `曜蓝水晶`。三选一要读取全部三列，目标在任意列都必须主动选中。没有目标时先任选一件完成领取，在地图设置中 `返回旅馆`，关卡页点 `放弃冒险` 并确认，再重新进入深渊，确保随机结果真正刷新。
+- 深渊当天展示的角色与职业固定；职业必须以实际起手牌识别，不能靠状态偏好在局内强切。职业偏好只负责跨重开筛选同一职业的前辈宝物，实战牌面一旦识别，应覆盖偏好。
+- 旅行者根据启动宝物二选一，禁止混流。拿到 `毒龙匕首` 走七牌直毒：`无限宝石`、`剧毒晶石`、`黑神话`、`烈性毒药`、`涂毒小刀/毒药攻击`、`献祭`、`安乐毒药`，优先 `植物精华`，然后才是 `牛脾气/毒性思考`。战斗顺序为装备宝石 -> 回费过牌 -> 叠毒 -> `烈性毒药` 翻倍 -> `安乐毒药` 触发、回血并触发 `黑神话`。
+- 拿到 `花喇叭` 或 `旅行者手册` 则走七牌纯祈愿：`无限宝石`、`天使`、`救赎`、`奉献`、`黑神话`、`献祭/未来汽水`、`回忆`。`花喇叭` 开战直接提供 5 层祈愿，先装备抽牌与回费宝石，再用 `天使` 指数放大，`救赎` 转为伤害与回复，`奉献` 的回复再触发 `黑神话` 补爆发。`牛脾气` 是首要天赋，用来保留原本会移除的 `天使`；`植物精华/毒性思考` 与本分支无关。每个功能槽只拿一张，升星优先 `天使`，然后 `救赎`。
+- 旅行者尚未成型时的房间优先级：`卡牌遗忘` > `训练师` > `宝石牌包` > `职业牌包` > 生存/商店房。直毒训练师找 `植物精华/牛脾气/毒性思考`；纯祈愿只把 `牛脾气` 当硬核心，`不朽之心`可用于续航。
+- 猎人速刷：`捕猎陷阱` 多多益善，`大力射击` 不超过陷阱的三分之一，`猎人嗅觉` 1-3 张；核心宝物 `魔法面具` + `火龙蛋` + `实验眼镜`，启动器从 `快速施法` / `双枪` / `魔法熊手` 三选一。7 月瞬发调整后用少量 `瞄准` 添加精准来加快破盾和斩杀；不要拿强攻宝石、虚无宝石或大量正面状态组件，它们会增加结算动画并拖慢速刷。2026-08 玩家实测连续三局约 25 分钟到 120 层，2026-09 又有新手第三天按这套通关的记录；职业可选时优先级高于旅行者。
+- 法师速刷：拿到 `火焰草莓` 时优先采用公开验证的三卡极简火法，只留 `燃烧晶石` + `太阳盾` + `火焰打击`，依次使用后直接结算；它比寒冷转火长链更容易成型，也减少自动驾驶操作。`电虫药水` 则继续走雷法：`冷风` + `电解冰` + `快速思考` + `闪电晶石` + `小雷虫`，对亡灵反伤更稳。
+- 战士速刷：低要求默认走 2026-09 新公开的易伤无限链，`宝石手套` 开局安装 `超时空宝石`，用 `迅捷` 2-3 张过牌、`发现弱点` 2-3 张叠易伤、`弱点打击` 1 张结算，卡手时用 `未来汽水` 回蓝；宝物 `拐棍糖` 同时回蓝、抽牌、回血，`幻龙蛋` 复制超越牌防止断环。刷到 `曜蓝水晶` 可加入 `弱点加倍`，刷到完整 `魔法熊手/快速施法 + 女鹅套娃` 引擎时才考虑旧隐刀 `幽灵剑 + 换血`。
+- 有红/橙面具时才切宇宙厚牌：法师保留并升满 `火焰连击/冰霜连击/闪电连击` 与 `雷龙` 中至少一条法术输出，其余法术牌和防御牌删除；随后大量拿牌但不升级，用面具按抽牌堆牌数造成两倍效果伤害。没有面具时禁止为了“宇宙”盲目撑厚。
+- 通用必拿宝物：`实验眼睛`、`机械龙蛋`；早期可拿 `诅咒饭团`、`巨人泡泡糖`。不要拿 `宇宙十字架`，避免 123 层梦境零复制后反制本方。
+- 121-123 层预留：`驱散药水` 1、`肉鸽药水` 1、`易伤药水` 1、`暴击药水` 1、元素药水 5+、`咖啡` 3；无攻击牌再留炸弹 3。123 层先用无用道具破三次模仿，再上肉鸽与负面印记。
 
 ## Preferred Buttons
 - Adventure
@@ -21,12 +37,16 @@
 - 龙族森林
 - 龙族森林 进入冒险
 - 深渊森林
+- 深渊楼梯
+- 进入下一层
 - 战斗
 - 开战
 - 挑战
 - 幼虫
 - 岩壳龙
 - 大龙
+- 造地龙
+- 进地龙
 - 侏儒怪
 - 爬塔
 - Fight
@@ -61,6 +81,7 @@
 - Paper Room
 - 卷轴房间
 - 强化法阵
+- BOSS战补给
 - Giant Fist
 - 巨人之拳
 - Offensive Treasure
@@ -81,6 +102,8 @@
 - 恢复冒险
 - Next
 - OK
+- 好的
+- 马上融合
 - Claim
 - Collect
 - Pick Up
@@ -103,6 +126,10 @@
 - 点击空白处关闭
 - Retry
 - Again
+- 观看
+- 看广告
+- 看广告复活
+- 重试
 - 拨弄他的吉他
 - 拨弄他的吉他。
 
@@ -116,8 +143,6 @@
 - Refuse
 - 拒绝
 - 稍后再说
-- 遗忘法阵
-- Forget Card
 - Tap
 - SHOP
 - Shop
@@ -129,13 +154,6 @@
 - 我再想想
 - 8$
 - P.
-- Recruit
-- Recruit Adventurer
-- 招募
-- 招募冒险者
-- Hire
-- Hire Adventurer
-- 雇佣
 - Open settings
 - Open run menu
 - M1/6
@@ -152,7 +170,27 @@
 - 6/6
 
 ## Ineffective Buttons
-None yet.
+- 即将发起战斗
+- 返回
+- 卡牌强化
+- 木屋主人的水晶
+- 水屋主人的水晶
+- 生命商店
+- 免费3次
+- 点击【刷新】补货！
+- 商品已售馨
+- 哥布林水晶
+- 胜利
+- 哥布林钱袋
+- 木屋主人的水
+- 钱袋
+- 本机
+- 冒险中进入下一层时，获得10%金币利息
+- 招募
+- 变化法阵
+- 旅行用品、
+- 卡牌遗忘
+- 设置
 
 ## Fallback Buttons
 - Next Room
@@ -177,8 +215,8 @@ None yet.
 
 ## Decision Rules
 - Prefer adventure, fight, battle, attack, challenge, start, continue, and retry actions.
-- For this run, choose the Adventure path, choose **Hard** / **困难** difficulty,
-  then choose **Dragon Forest** / **巨龙森林** / **龙之森林** before starting.
+- For the current daily route, choose **深渊楼梯** directly from the Adventure
+  map. Do not confuse its stage icon with the separate **困难模式** toggle.
 - On the stage loadout screen, click **开始冒险** / **Start Adventure** to begin
   the selected run.
 - If character selection appears, pick any available character and continue;
@@ -189,8 +227,8 @@ None yet.
 - Prefer resume adventure when a previous tower fight can be continued.
 - On a defeat screen (`游戏失败`), click **返回旅馆** / **Return to Inn** so the
   next run can start from the inn instead of tapping stat labels.
-- The user explicitly said not to click **招募**; from the inn, choose
-  **冒险** / fighting routes instead of recruiting or hiring.
+- Daily-task runs may recruit from the inn after the Abyss Stairs attempt. Never
+  sell or discard owned cards, treasures, equipment, collectibles, or characters.
 - Prefer strength-building actions before navigation arrows: weapons, treasure, chest rooms, backpack/utility rooms, scroll/card rooms, combat cards, merge/upgrade actions, and reward pickups can improve the character.
 - Use arrow/path controls only when there is no visible fight, reward, room choice, equipment, treasure, card, chest, backpack, merge, pickup, confirm-after-selection, or other strength-building action available.
 - When choosing between items/cards/treasures, tap each option first to reveal and OCR its description, remember the description, then select the best option and confirm it.
@@ -225,8 +263,9 @@ None yet.
   action.
 - In treasure selection, prefer offensive fight-scaling options such as Giant Fist.
 - In card learning, prefer combat focus or fight-scaling cards over cards that spend health.
-- On card-learning screens (`选一张卡牌学习`), never click **Abandon**; select
-  the best visible card first, then click **确定** / **Confirm**.
+- On card-learning screens (`选一张卡牌学习`), only take cards belonging to
+  the current profession's speedrun core. If none qualifies, click **放弃** to
+  receive 10 coins and keep the post-start deck at seven non-temporary cards or fewer.
 - On treasure selection screens, select the desired treasure card before pressing Confirm.
 - Prefer actions that continue combat over reward collection when both are available.
 - During combat, play visible attack, damage, shield, focus, or treasure-card
@@ -258,8 +297,8 @@ None yet.
 - On **Enhance Card** selected-card panels, click **强化** to apply the upgrade;
   do not click **返回** unless there is no visible enhance/merge/confirm action.
 - Close reward popups after collecting gear so the run can continue.
-- On a revive/ad prompt, choose **Cancel** instead of watching an ad, then use
-  the normal defeat recovery path.
+- Ads are allowed. On a revive/ad prompt, prefer **观看** / **看广告复活** when it
+  preserves the current run; after the ad, resume the interrupted adventure.
 - If multiple fight-like actions are plausible, try the highest-scored option first.
 - If an action does not change the screen after retries, try a different
   fight-like option on the next turn; only update Ineffective Buttons after
@@ -268,6 +307,8 @@ None yet.
   or **+5** as an action; those are descriptive values, not buttons.
 - Do not click floor/progress labels such as **M1/6** or **1/6**; they describe
   the current tower floor and do not move the run forward.
+- On the character-level-up popup, click **好的**. Never click stat transition
+  text such as `101 >> 102`; those rows only describe the upgrade.
 - When the last few turn screenshots remain nearly identical, temporarily deprioritize repeated actions and try a different visible target, tutorial-highlighted control, close/detail/back control, or vision-identified clickable before retrying.
 - When a room arrow fails to change the screen after retries, pick the brighter route or a concrete room icon before retrying that arrow.
 
@@ -297,8 +338,9 @@ None yet.
 - Choose **恢复冒险** / **Resume Adventure** instead of **放弃冒险** / **Abandon Adventure** because resuming keeps fighting.
 - Choose **返回旅馆** / **Return to Inn** after defeat because it recovers to a
   playable state where the next tower attempt can begin.
-- From the inn, choose **冒险** rather than **招募** because the user wants to go
-  fighting immediately.
+- For the daily sequence, finish the Abyss Stairs attempt first, recruit from
+  the inn when a daily attempt remains, then enter Spire Cabin with the newly
+  recruited adventurer.
 - Choose arrows only as fallback navigation when no better strength-building or event action is visible; improving the character is more valuable than blindly advancing.
 - Choose **普通小剑** / **Normal Sword** when room choices appear because it is the fight-like route.
 - On the branch map, the small up-arrow can highlight/shift focus without advancing; choose a concrete room icon instead.
@@ -404,11 +446,11 @@ None yet.
 - When the game offers multiple items/cards/treasures, inspect every option's description before choosing; do not press Confirm before the best item has been selected.
 - In adventure events, prefer active/exploratory choices over passive leave/skip choices when neither option clearly costs health or resources.
 - For `昏睡的吉他手`, prefer **拨弄他的吉他。** and avoid **他睡得好香，让他继续睡。** because the latter skips the encounter.
-- Prefer **强化法阵** over **遗忘法阵** because strengthening improves the run while forgetting likely removes or downgrades a card/skill.
+- 旅行者短牌组尚未成型时，优先 **遗忘法阵/卡牌遗忘** 清理已确认的杂牌。直毒局保留毒核心，删 `救赎/慈悲/虔诚`；纯祈愿局保留 `天使/救赎/奉献`，先删 `灵魂燃烧/慈悲/毒药攻击/涂毒小刀/绿舌头`。任何分支都不删抽牌、回费与当前终结牌。
 - Treat **Enhance Card** as a screen title, not a card choice; choose a visible card such as **战斗专注** instead.
-- Treat **Forget Card** as a screen title, not a card choice; avoid forgetting cards unless no progression alternative exists.
-- On the **Forget Card** screen, choose the return/back control instead of selecting a card to forget.
+- Treat **Forget Card/卡牌遗忘** as a screen title, then choose the highest-confidence known junk card and confirm **遗忘**; if every visible card is core or unreadable, return without deleting anything.
 - If an external game sidebar or sharing panel opens, close it before continuing the tower.
+- 每轮先检查 Android 前台包名。预期游戏包为 `cn.thearky.projectrl`；广告跳入 TapTap 或其他应用时只发送系统返回，不识别或点击外部内容；若落到系统桌面则只重新启动游戏包。TapTap 登录中间页只等待其自动回到游戏。
 - If **卡牌使用记录** opens during combat, click **返回** to close it; do not
   treat OCR artifacts like **P.** near the top bar as combat actions.
 
@@ -461,6 +503,47 @@ None yet.
 - 招募
 - 招募冒险者
 - 雇佣
+
+## Automation Prefer Watch Ads
+- true
+
+## Automation Passive Non-Action Labels
+- 记录
+- 设置
+- 任务
+- 融合
+- 全服最高层数
+- 当前所在层数
+- 获得的战利品
+- 冒险者携带的未激活宝物
+- 当前层数
+- 该层剩余冒险事件
+- 正在进入旅馆
+- 正在前往魔塔冒险
+
+## Automation Reward Overlay Labels
+- 恭喜获得
+
+## Automation Reward Close Labels
+- 点击空白处关闭
+
+## 每日冒险资源纪律
+- 绝不出售任何卡牌、宝物、装备、收藏品或其他物品；宁可跳过商店，也不要用出售换资源。
+- 不要清空商店。只拿能直接完成爆发循环、提高续航，或让当前核心联动升级的少量牌。
+- 不灭级宝物或物品最高优先；遇到时优先拿取，并在资源允许时优先激活或升级。
+- 能融合或升级当前核心牌、核心宝物时优先升级；不要为了“以后可能有用”扩充无联动卡牌。
+- 刷新是有限资源：单个商店默认最多刷新一次，金币或水晶紧张时不刷新；看见明确核心升级缺口时才刷新。
+- 每次战斗出牌后手牌会重排，必须重新截图识别；不要连续点击旧坐标。
+- 每日顺序由专门流程控制：先挑战深渊楼梯，再在旅馆有次数时招募，最后让刚招募的角色挑战尖塔木屋。通用按钮评分不得让招募抢在深渊楼梯之前。
+- 选择卡牌时优先形成一个短链：稳定触发/抽牌或回费、爆发终结、必要回血。没有直接协同时宁可放弃奖励，避免牌组越来越慢。
+- 地图上的“当前层数”和“剩余冒险事件”只是状态文字；必须选具体房间图标，不得点击计数文字。
+- 看到“正在进入旅馆”或“正在前往魔塔冒险”时只等待加载，不点击提示文字。
+- 尖塔房间处理完后，已访问的房间图标仍可能保留；优先点底部青色向下箭头离开，不重复访问同一房间。
+- 尖塔终层优先 `强化法阵`，再拿 `BOSS战补给` 的 100% 最大生命恢复，然后挑战 Boss；默认跳过会扰乱核心牌的 `变化法阵`。
+- 尖塔生命商店的免费奖励全部领取；显示 `商品已售馨` 后直接返回，不点击刷新提示，不消耗刷新资源。
+- 击败尖塔 Boss 后，一看到 `冒险胜利` 就进入出口，选择 `马上离开（冒险者转正）`，不继续清理可选房间；结算页点击 `返回旅馆`。
+- 尖塔短局可采用“宝石牌 + 晶体冥想 + 矮人手套 + 迅捷攻击”的低要求链：宝石供能并触发效果伤害，晶体冥想叠专注，迅捷攻击负责伤害与抽牌。优先强化抽牌和专注牌，确保循环与爆发同时增长。
+- 深渊 124 层前必须先满足首回合生存门槛。若开局只有慢速毒/祈愿成长，没有立即护盾、回血或快速结算，宁可放弃无关强卡，集中补齐防御触发与爆发出口。
 
 ## Automation Combat Double Tap Labels
 - normal attack

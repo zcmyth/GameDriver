@@ -142,10 +142,27 @@ class PaddleOCRAnalyzer(ImageAnalyzer):
         navigation_template_keywords: list[str] | None = None,
         navigation_template_glyphs: list[str] | None = None,
     ):
-        det_model_name = 'PP-OCRv5_mobile_det'
-        rec_model_name = 'en_PP-OCRv5_mobile_rec'
+        raw_config = template_configs if isinstance(template_configs, dict) else {}
+        raw_ocr_config = raw_config.get('ocr', {})
+        ocr_config = raw_ocr_config if isinstance(raw_ocr_config, dict) else {}
+        language = str(ocr_config.get('language') or ocr_config.get('lang') or 'en')
+        det_model_name = str(
+            ocr_config.get('detection_model')
+            or ocr_config.get('text_detection_model_name')
+            or 'PP-OCRv5_mobile_det'
+        )
+        default_rec_model = (
+            'PP-OCRv5_mobile_rec'
+            if language.lower() in {'ch', 'chinese', 'zh', 'zh-cn'}
+            else 'en_PP-OCRv5_mobile_rec'
+        )
+        rec_model_name = str(
+            ocr_config.get('recognition_model')
+            or ocr_config.get('text_recognition_model_name')
+            or default_rec_model
+        )
         ocr_kwargs = {
-            'lang': 'en',
+            'lang': language,
             'use_doc_orientation_classify': False,
             'use_doc_unwarping': False,
             'use_textline_orientation': False,
@@ -302,7 +319,13 @@ class PaddleOCRAnalyzer(ImageAnalyzer):
         return re.sub(r'\s+', ' ', str(value).strip().lower())
 
     def _normalized_template_configs(self, template_configs):
-        templates = template_configs.get('templates', template_configs)
+        templates = template_configs.get('templates')
+        if templates is None:
+            templates = {
+                key: value
+                for key, value in template_configs.items()
+                if key != 'ocr'
+            }
         if not isinstance(templates, dict):
             return {}
         normalized = {}
