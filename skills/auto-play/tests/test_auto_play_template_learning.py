@@ -1244,7 +1244,7 @@ def test_tower_combat_emergency_item_requires_low_hp_and_positive_count():
     assert not auto_play.tower_combat_emergency_item_candidates(image, config)
 
 
-def test_tower_combat_uses_giant_potion_at_healthy_hp(monkeypatch):
+def test_tower_combat_saves_giant_potion_at_healthy_hp(monkeypatch):
     auto_play = load_auto_play_module()
     config = automation_config(auto_play, 'tower')
     monkeypatch.setattr(
@@ -1262,10 +1262,8 @@ def test_tower_combat_uses_giant_potion_at_healthy_hp(monkeypatch):
     draw.rectangle((291, 740, 293, 747), fill='white')
     draw.rectangle((86, 356, 90, 362), fill=(203, 94, 47))
 
-    candidates = auto_play.tower_combat_emergency_item_candidates(image, config)
-
     assert not auto_play.tower_combat_hp_looks_critical(image)
-    assert candidates[0].label == '立即使用巨人药水'
+    assert not auto_play.tower_combat_emergency_item_candidates(image, config)
 
 
 def test_tower_combat_item_counter_recognizes_zero_ring():
@@ -8780,7 +8778,10 @@ def test_tower_low_hp_pouch_prefers_healing_consumable(tmp_path, monkeypatch):
     assert decision.recommended.label == '确定'
 
 
-def test_tower_pouch_prefers_giant_potion_before_healing(tmp_path, monkeypatch):
+def test_tower_pouch_prefers_real_healing_before_giant_potion(
+    tmp_path,
+    monkeypatch,
+):
     auto_play = load_auto_play_module()
     clicks: list[str] = []
     monkeypatch.setattr(
@@ -8823,7 +8824,7 @@ def test_tower_pouch_prefers_giant_potion_before_healing(tmp_path, monkeypatch):
         },
     )
 
-    assert clicks == ['巨人药水']
+    assert clicks == ['深澜龙血']
     assert decision is not None
     assert decision.recommended.label == '确定'
 
@@ -9919,19 +9920,23 @@ def test_tower_giant_warrior_shop_buys_synergy_not_unused_dragon_egg(
     dragon_egg = auto_play.tower_shop_purchase_profile('tower', '幻龙蛋')
     swift_potion = auto_play.tower_shop_purchase_profile('tower', '迅捷药水')
     fire_potion = auto_play.tower_shop_purchase_profile('tower', '火焰药水')
+    giant_potion = auto_play.tower_shop_purchase_profile('tower', '巨人药水')
+    healing_potion = auto_play.tower_shop_purchase_profile('tower', '恢复药水')
     lucky_coin = auto_play.tower_shop_purchase_profile('tower', '幸运币')
     ocr_lucky_coin = auto_play.tower_shop_purchase_profile('tower', '率运币')
 
     assert dwarf_gem == (42.0, 'treasure')
     assert giant_mask == (35.0, 'treasure')
     assert dragon_egg == (0.0, '')
-    assert swift_potion == (32.0, 'consumable')
+    assert swift_potion == (34.0, 'consumable')
     assert fire_potion == (0.0, '')
+    assert giant_potion == (22.0, 'consumable')
+    assert healing_potion == (40.0, 'consumable')
     assert lucky_coin == (43.0, 'consumable')
     assert ocr_lucky_coin == (43.0, 'consumable')
 
 
-def test_tower_plays_permanent_health_and_profit_consumables_first(monkeypatch):
+def test_tower_plays_profit_consumable_before_plain_attack(monkeypatch):
     auto_play = load_auto_play_module()
     monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '战士')
     monkeypatch.setattr(
@@ -9940,12 +9945,11 @@ def test_tower_plays_permanent_health_and_profit_consumables_first(monkeypatch):
         lambda _game: {'profession': '战士'},
     )
 
-    giant_potion = auto_play.tower_combat_sequence_bonus('tower', '巨人药水')
     lucky_coin = auto_play.tower_combat_sequence_bonus('tower', '幸运币')
     ocr_lucky_coin = auto_play.tower_combat_sequence_bonus('tower', '率运币')
     attack = auto_play.tower_combat_sequence_bonus('tower', '普通攻击')
 
-    assert giant_potion > lucky_coin > attack
+    assert lucky_coin > attack
     assert ocr_lucky_coin == lucky_coin
 
 
