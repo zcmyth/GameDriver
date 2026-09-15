@@ -3114,6 +3114,42 @@ def test_tower_exit_route_does_not_skip_card_forgetting_room():
     assert decision.recommended.label == '遗忘法阵'
 
 
+def test_tower_critical_health_prefers_rest_before_card_forgetting(monkeypatch):
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'stage': '深渊楼梯',
+            'battle': {'player_hp_critical': True},
+        },
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=x,
+            y=y,
+            confidence=0.98,
+            clickability=clickability,
+            source=source,
+        )
+        for label, x, y, clickability, source in (
+            ('上方道路', 0.49, 0.64, 7.0, 'vision'),
+            ('遗忘法阵', 0.70, 0.69, 1.6, 'ocr'),
+            ('休息点', 0.27, 0.69, 1.6, 'ocr'),
+        )
+    ]
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert scored[0].label == '休息点'
+
+
 def test_tower_mysterious_trade_exits_without_spending_fortune():
     auto_play = load_auto_play_module()
     config = automation_config(auto_play, 'tower')
@@ -9688,6 +9724,55 @@ def test_tower_manufacture_core_is_played_when_it_is_only_card(monkeypatch):
     )
 
     assert scored[0].label == 'Visible playable card: 制造核心'
+
+
+def test_tower_manufacture_core_is_played_when_only_duplicate_cores_remain(
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '战士')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'stage': '深渊楼梯',
+            'profession': '战士',
+            'predecessor_treasure': '巨人之拳',
+        },
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=f'Visible playable card: 制造核心 {index}',
+            x=x,
+            y=0.53,
+            confidence=0.96,
+            clickability=7.4,
+            source='vision',
+        )
+        for index, x in enumerate((0.20, 0.49), start=1)
+    ]
+    buttons.append(
+        auto_play.ButtonCandidate(
+            label='结束第3回合',
+            x=0.50,
+            y=0.92,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        )
+    )
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert '制造核心' in scored[0].label
+    assert scored[0].score > next(
+        button.score for button in scored if auto_play.is_end_turn_label(button.label)
+    )
 
 
 def test_tower_manufacture_core_ocr_fallback_is_played_when_it_is_only_card(

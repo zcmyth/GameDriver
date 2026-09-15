@@ -9752,6 +9752,14 @@ def score_buttons(
         non_end_buttons,
         automation_config,
     )
+    tower_only_manufacture_core_cards_visible = bool(
+        tower_playable_card_slot_count
+        and not any(
+            is_tower_playable_combat_card_candidate(button, automation_config)
+            and '制造核心' not in normalize_label(button.label)
+            for button in non_end_buttons
+        )
+    )
     playable_combat_card_visible = combat_card_count > 0
     direct_attack_combat_card_visible = end_visible and any(
         is_tower_playable_combat_card_candidate(button, automation_config)
@@ -10366,6 +10374,16 @@ def score_buttons(
                 score -= tower_shop_route_penalties.get(key, 0.0)
             if tower_map_context_visible:
                 score += tower_deep_map_room_bonus(button.label)
+                if (
+                    isinstance(tower_battle_state, dict)
+                    and tower_battle_state.get('player_hp_critical')
+                    and key == '休息点'
+                ):
+                    score += 12.0
+                    reason = (
+                        f'{reason} Recover before optional deck or economy '
+                        'rooms while current health is critical.'
+                    ).strip()
                 if is_tower_status_fraction_label(button.label):
                     score -= 8.0
                 near_completed_shop = any(
@@ -10443,11 +10461,11 @@ def score_buttons(
                 and is_defensive_or_setup_combat_card_label(button.label)
             ):
                 score -= 1.0
-            if tower_playable_card_slot_count == 1 and '制造核心' in key:
+            if tower_only_manufacture_core_cards_visible and '制造核心' in key:
                 score += 14.0
                 reason = (
-                    f'{reason} Use the all-mana core only after every other '
-                    'playable card has resolved.'
+                    f'{reason} Use remaining all-mana cores only after every '
+                    'other playable card has resolved.'
                 ).strip()
             if (
                 button.source == 'template'
