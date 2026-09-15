@@ -643,13 +643,11 @@ def tower_combat_sequence_bonus(game: str, label: str) -> float:
     profession = tower_run_profession(game)
     state = load_tower_run_state(game)
     predecessor = normalize_label(str(state.get('predecessor_treasure') or ''))
-    core_text = ' '.join(
-        normalize_label(str(card)) for card in state.get('core_cards') or []
+    battle = state.get('battle')
+    cold_applied = bool(
+        isinstance(battle, dict) and battle.get('cold_applied')
     )
-    if '电解冰' in key and not any(
-        source in core_text
-        for source in ('冷风', '寒流', '寒冰盾', '冰霜飞弹', '寒冷宝石')
-    ):
+    if '电解冰' in key and not cold_applied:
         return -6.0
     if profession == '旅行者':
         if tower_traveler_uses_prayer_build(game):
@@ -699,11 +697,16 @@ def tower_combat_sequence_bonus(game: str, label: str) -> float:
             )
         else:
             priorities = (
-                ('快速思考', 6.0),
-                ('冷风', 5.0),
-                ('寒流', 5.0),
-                ('过度解冻', 3.0),
-                ('电解冰', 2.0),
+                ('寒冷晶石', 8.0),
+                ('寒冷宝石', 8.0),
+                ('快速思考', 7.0),
+                ('冷风', 6.5),
+                ('寒流', 6.5),
+                ('寒冰盾', 6.0),
+                ('过度解冻', 4.0),
+                ('电解冰', 3.0),
+                ('小雷虫', 2.5),
+                ('雷龙', 1.0),
                 ('火焰打击', -2.0),
             )
     elif profession == '战士':
@@ -2404,6 +2407,48 @@ TOWER_PASSIVE_STATUS_PREFIXES = (
     '正在前往魔塔冒险',
 )
 
+TOWER_COMBAT_METADATA_LABELS = {
+    '攻击牌',
+    '防御牌',
+    '法术牌',
+    '技能牌',
+    '宝石牌',
+    '超越牌',
+    '状态牌',
+}
+TOWER_PLAYABLE_CARD_CLICKABILITY = 1.7
+
+
+def is_tower_combat_card_candidate(
+    button: ButtonCandidate,
+    automation_config: GameAutomationConfig | None,
+) -> bool:
+    if is_configured_combat_card_label(button.label, automation_config):
+        return True
+    return bool(
+        automation_config is not None
+        and normalize_label(automation_config.game) == 'tower'
+        and button.source == 'ocr'
+        and 0.55 <= button.y <= 0.84
+        and not is_configured_command_label(button.label, automation_config)
+        and normalize_label(button.label) not in TOWER_COMBAT_METADATA_LABELS
+    )
+
+
+def is_tower_playable_combat_card_candidate(
+    button: ButtonCandidate,
+    automation_config: GameAutomationConfig | None,
+) -> bool:
+    if not is_tower_combat_card_candidate(button, automation_config):
+        return False
+    if button.source != 'ocr':
+        return True
+    return (
+        button.y >= 0.45
+        and button.clickability >= TOWER_PLAYABLE_CARD_CLICKABILITY
+        and normalize_label(button.label) not in TOWER_COMBAT_METADATA_LABELS
+    )
+
 
 def is_tower_passive_status_label(
     automation_config: GameAutomationConfig,
@@ -2413,6 +2458,20 @@ def is_tower_passive_status_label(
         return False
     key = normalize_label(label)
     return any(key.startswith(prefix) for prefix in TOWER_PASSIVE_STATUS_PREFIXES)
+
+
+def is_tower_map_floor_status_button(
+    automation_config: GameAutomationConfig,
+    button: ButtonCandidate,
+) -> bool:
+    if normalize_label(automation_config.game) != 'tower':
+        return False
+    return bool(
+        button.source != 'template'
+        and re.fullmatch(r'\d{1,3}', normalize_label(button.label))
+        and 0.54 <= button.x <= 0.72
+        and 0.50 <= button.y <= 0.57
+    )
 
 
 def tower_loading_wait_candidates(
@@ -2747,7 +2806,9 @@ def configure_tower_daily_focus(game: str, focus: str) -> None:
         return
     state['focus'] = focus
     phase = normalize_label(str(state.get('phase') or ''))
-    if focus == 'spire' and phase not in {'go_to_spire', 'spire_running'}:
+    if focus == 'abyss' and phase not in {'abyss', 'abyss_retry'}:
+        state['phase'] = 'abyss_retry'
+    elif focus == 'spire' and phase not in {'go_to_spire', 'spire_running'}:
         state['phase'] = 'go_to_spire'
         state['character_selected'] = False
         state.pop('spire_victory', None)
@@ -2898,9 +2959,13 @@ def update_tower_daily_state(
             )
         elif phase == 'abyss' and action in {'返回旅馆', 'return to inn'}:
             run_state = load_tower_run_state(game)
-            if run_state.get('reroll_predecessor'):
+            abyss_focus = normalize_label(str(state.get('focus') or '')) == 'abyss'
+            if run_state.get('reroll_predecessor') or abyss_focus:
+                state['phase'] = 'abyss_retry'
                 state.setdefault('notes', []).append(
                     '前辈职业宝物不匹配，返回旅馆后继续重开深渊。'
+                    if run_state.get('reroll_predecessor')
+                    else '深渊专注模式：本局结束后立即重开深渊。'
                 )
             else:
                 state['phase'] = 'recruit'
@@ -2912,9 +2977,12 @@ def update_tower_daily_state(
             'return to inn',
         }:
             run_state = load_tower_run_state(game)
-            if run_state.get('reroll_predecessor'):
+            abyss_focus = normalize_label(str(state.get('focus') or '')) == 'abyss'
+            if run_state.get('reroll_predecessor') or abyss_focus:
                 state.setdefault('notes', []).append(
                     '前辈职业宝物不匹配，返回旅馆后继续重开深渊。'
+                    if run_state.get('reroll_predecessor')
+                    else '深渊专注模式：本局结束后立即重开深渊。'
                 )
             else:
                 state['phase'] = 'recruit_all'
@@ -3796,6 +3864,9 @@ TOWER_PROFESSION_CARD_HINTS = {
         '电解冰',
         '快速思考',
         '小雷虫',
+        '雷龙',
+        '雷电飞弹',
+        '能量飞弹',
         '火焰打击',
         '燃烧晶石',
         '闪电晶石',
@@ -3813,7 +3884,6 @@ TOWER_PROFESSION_CARD_HINTS = {
     '旅行者': (
         '涂毒小刀',
         '毒药攻击',
-        '绿舌头',
         '虔诚',
         '慈悲',
         '特殊信念',
@@ -3947,6 +4017,7 @@ def tower_predecessor_treasure_from_reward(
         button
         for button in buttons
         if button.source != 'template'
+        and 0.25 <= button.x <= 0.75
         and 0.46 <= button.y <= 0.57
         and normalize_label(button.label) not in ignored
         and len(button.label.strip()) <= 18
@@ -4122,10 +4193,13 @@ def tower_card_cull_bonus(game: str, label: str) -> float:
         '法师': (
             '快速思考',
             '小雷虫',
+            '寒冷晶石',
+            '寒冷宝石',
             '闪电晶石',
             '电解冰',
             '冷风',
             '寒流',
+            '雷龙',
             '恢复宝石',
             '路人甲',
             '能量盾',
@@ -4147,7 +4221,6 @@ def tower_card_cull_bonus(game: str, label: str) -> float:
             ('虚弱', 20.0),
             ('能量飞弹', 18.0),
             ('雷电飞弹', 17.0),
-            ('雷龙', 15.0),
         ),
     }
     for pattern, bonus in (
@@ -4310,6 +4383,8 @@ def update_tower_run_state(
         str(daily_state.get('phase') or '')
     ) in {'abyss', 'abyss_retry'}:
         daily_state.pop('abyss_profession', None)
+        daily_state.pop('accepted_predecessor_treasure', None)
+        daily_state.pop('accepted_predecessor_run_id', None)
         daily_state['updated_at'] = now
         write_tower_daily_state(game, daily_state)
     if state.get('stage') == '尖塔木屋' and daily_state.get(
@@ -4334,7 +4409,10 @@ def update_tower_run_state(
                 label for label in labels if normalize_label(label) not in ignored
             )
         )[:30]
-    profession = tower_profession_from_text(
+    predecessor_profession = tower_profession_from_text(
+        [str(state.get('predecessor_treasure') or '')]
+    )
+    profession = predecessor_profession or tower_profession_from_text(
         [
             *labels,
             *(state.get('initial_setup') or []),
@@ -4368,6 +4446,7 @@ def update_tower_run_state(
             state['reroll_predecessor'] = not is_target
             if is_target:
                 daily_state['accepted_predecessor_treasure'] = treasure
+                daily_state['accepted_predecessor_run_id'] = state.get('run_id')
             else:
                 daily_state['predecessor_rerolls'] = reroll_count + 1
                 daily_state['last_rejected_predecessor_treasure'] = treasure
@@ -4385,6 +4464,19 @@ def update_tower_run_state(
             ),
             None,
         )
+        if action_succeeded and effective_phase == 'combat':
+            battle = state.get('battle')
+            if isinstance(battle, dict):
+                cold_sources = (
+                    '冷风',
+                    '寒流',
+                    '寒冰盾',
+                    '冰霜飞弹',
+                )
+                if any(source in clicked_key for source in cold_sources):
+                    battle['cold_applied'] = True
+                elif '电解冰' in clicked_key and battle.get('cold_applied'):
+                    battle['cold_applied'] = False
         if action_succeeded and (
             tower_deep_map_room_bonus(clicked_label) != 0
             or (
@@ -4459,6 +4551,20 @@ def update_tower_run_state(
             '纯祈愿局到第6层仍无天使、救赎或无限宝石，'
             '按前期成型止损线重开。'
         )
+    accepted_treasure = normalize_label(
+        str(daily_state.get('accepted_predecessor_treasure') or '')
+    )
+    accepted_run_id = str(daily_state.get('accepted_predecessor_run_id') or '')
+    current_treasure = normalize_label(str(state.get('predecessor_treasure') or ''))
+    if (
+        int(state.get('floor') or 0) <= 1
+        and accepted_run_id
+        and accepted_run_id == str(state.get('run_id') or '')
+        and accepted_treasure
+        and accepted_treasure == current_treasure
+    ):
+        state['reroll_predecessor'] = False
+        state.pop('stop_loss_reason', None)
     state['updated_at'] = now
     path.write_text(
         yaml.safe_dump(
@@ -4514,7 +4620,10 @@ def tower_battle_requires_precise_read(game: str) -> bool:
     core_text = ' '.join(
         normalize_label(str(card)) for card in state.get('core_cards') or []
     )
-    return is_tower_timing_sensitive_finisher_label(core_text)
+    return (
+        is_tower_timing_sensitive_finisher_label(core_text)
+        or '电解冰' in core_text
+    )
 
 
 def start_tower_battle_state(
@@ -6501,14 +6610,18 @@ def tower_card_reward_priority_rules(
             )
         elif '电虫药水' in predecessor:
             focused = (
+                ('寒冷晶石', 39.0),
+                ('寒冷宝石', 39.0),
+                ('寒流', 38.5),
                 ('冷风', 38.0),
-                ('寒冰盾', 37.5),
+                ('雷龙', 37.5),
                 ('电解冰', 37.0),
-                ('能量飞电', 36.5),
                 ('快速思考', 36.0),
-                ('闪电晶石', 35.0),
-                ('小雷虫', 34.0),
-                ('回忆', 32.0),
+                ('小雷虫', 35.0),
+                ('能量飞电', 34.5),
+                ('回忆', 33.0),
+                ('寒冰盾', 32.5),
+                ('闪电晶石', 31.0),
                 ('过度解冻', 28.0),
                 ('百火', 26.0),
             )
@@ -6934,6 +7047,7 @@ def filter_configured_non_action_buttons(
         if normalize_label(button.label)
         not in automation_config.passive_non_action_labels
         and not is_tower_passive_status_label(automation_config, button.label)
+        and not is_tower_map_floor_status_button(automation_config, button)
         and not configured_top_left_battle_nameplate(automation_config, button)
     ]
     if filtered != buttons:
@@ -8639,15 +8753,15 @@ def score_buttons(
         and button.y >= 0.84
         for button in buttons
     )
+    end_visible = any(is_end_turn_label(button.label) for button in buttons)
     combat_card_count = sum(
         1
         for button in non_end_buttons
-        if is_configured_combat_card_label(button.label, automation_config)
+        if is_tower_playable_combat_card_candidate(button, automation_config)
     )
-    end_visible = any(is_end_turn_label(button.label) for button in buttons)
     playable_combat_card_visible = combat_card_count > 0
     direct_attack_combat_card_visible = end_visible and any(
-        is_configured_combat_card_label(button.label, automation_config)
+        is_tower_playable_combat_card_candidate(button, automation_config)
         and is_direct_attack_combat_card_label(button.label)
         for button in non_end_buttons
     )
@@ -9065,10 +9179,19 @@ def score_buttons(
             end_visible
             and button.source == 'ocr'
             and button.y < 0.45
-            and is_configured_combat_card_label(button.label, automation_config)
+            and not is_configured_command_label(button.label, automation_config)
+            and key not in CONFIRM_LABELS
         ):
             score -= 8.0
-            reason = f'{reason} Ignore upper-screen combat status text.'.strip()
+            reason = f'{reason} Ignore upper-screen combat text.'.strip()
+        if (
+            end_visible
+            and automation_config is not None
+            and normalize_label(automation_config.game) == 'tower'
+            and key in TOWER_COMBAT_METADATA_LABELS
+        ):
+            score -= 8.0
+            reason = f'{reason} Ignore the card-type metadata label.'.strip()
         if safe_confirm_visible:
             if button.source == 'template':
                 score -= 5.0
@@ -9197,8 +9320,14 @@ def score_buttons(
             and is_tower_room_vision_candidate(button)
         ):
             score -= 1.0
-        if is_configured_combat_card_label(button.label, automation_config):
+        if is_tower_combat_card_candidate(button, automation_config):
             score += 0.8
+            if end_visible and not is_tower_playable_combat_card_candidate(
+                button,
+                automation_config,
+            ):
+                score -= 8.0
+                reason = f'{reason} Ignore disabled combat card.'.strip()
             if (
                 automation_config is not None
                 and end_visible
@@ -9262,7 +9391,7 @@ def score_buttons(
             ):
                 score -= 0.85
         if is_end_turn_label(button.label) and playable_combat_card_visible:
-            score -= 0.75
+            score -= 1.5
         if is_end_turn_label(button.label) and not non_end_buttons:
             score = max(score, 1.05)
         scored.append(
@@ -9607,17 +9736,41 @@ def tower_trainer_task_bonus(
         return 10.0 if max(choice_bonuses, default=0.0) <= 0 else -10.0
     if button_key != '选择':
         return 0.0
+    choice_rows = sorted(
+        candidate.y
+        for candidate in buttons
+        if normalize_label(candidate.label) == '选择'
+    )
+    row_index = min(
+        range(len(choice_rows)),
+        key=lambda index: abs(choice_rows[index] - button.y),
+    )
+    row_lower = (
+        (choice_rows[row_index - 1] + button.y) / 2
+        if row_index > 0
+        else button.y - 0.07
+    )
+    row_upper = (
+        (button.y + choice_rows[row_index + 1]) / 2
+        if row_index + 1 < len(choice_rows)
+        else button.y + 0.07
+    )
     row_text = ' '.join(
         normalize_label(candidate.label)
         for candidate in buttons
         if candidate is not button
         and candidate.source != 'template'
         and candidate.x < 0.75
-        and abs(candidate.y - button.y) <= 0.065
+        and row_lower <= candidate.y < row_upper
     )
     condition_bonus = 0.0
-    if re.search(r'直接获得\d+张', row_text):
-        condition_bonus -= 12.0
+    new_card_condition = re.search(r'直接获得(\d+)张新卡牌', row_text)
+    if new_card_condition:
+        condition_bonus -= min(float(new_card_condition.group(1)) * 3.0, 15.0)
+    elif re.search(r'直接获得\d+张\d+级卡牌', row_text):
+        condition_bonus -= 2.0
+    elif re.search(r'直接获得\d+张', row_text):
+        condition_bonus -= 6.0
     if '战斗胜利3次' in row_text:
         condition_bonus += 10.0
     if '完成2层冒险' in row_text:
@@ -9663,10 +9816,26 @@ def tower_trainer_task_bonus(
         if '卖命挣钱' in row_text or '生死对决' in row_text:
             return condition_bonus + 10.0
     if profession == '法师':
+        state = load_tower_run_state(automation_config.game)
+        treasure_text = ' '.join(
+            normalize_label(str(value))
+            for value in [
+                state.get('predecessor_treasure') or '',
+                *(state.get('key_treasures') or []),
+            ]
+        )
+        electric_route = '电虫药水' in treasure_text
+        fire_route = '火焰草莓' in treasure_text
         if '独孤求败' in row_text:
             return condition_bonus + 22.0
         if '火纹' in row_text:
-            return condition_bonus + 18.0
+            if electric_route:
+                return condition_bonus - 18.0
+            return condition_bonus + (24.0 if fire_route else 18.0)
+        if '不朽之心' in row_text:
+            return condition_bonus + (26.0 if electric_route else 18.0)
+        if '骑士之力' in row_text or '生命上限' in row_text:
+            return condition_bonus + (18.0 if electric_route else 10.0)
         if '谢幕' in row_text:
             return condition_bonus + 10.0
     if profession == '战士' and '快速施法' in row_text:
@@ -10934,11 +11103,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         '--tower-daily-focus',
-        choices=('workflow', 'spire', 'recruit_spire'),
+        choices=('workflow', 'abyss', 'spire', 'recruit_spire'),
         default='workflow',
         help=(
-            '魔塔每日流程目标；spire 会直接挑战尖塔，recruit_spire '
-            '会先招募一次再用新人挑战；两者均在尖塔通关后结束。'
+            '魔塔每日流程目标；abyss 会持续重开深渊且不转去招募，'
+            'spire 会直接挑战尖塔，recruit_spire 会先招募一次再用新人挑战。'
         ),
     )
     parser.add_argument('--save-screen', type=Path, help='Optional screenshot path.')

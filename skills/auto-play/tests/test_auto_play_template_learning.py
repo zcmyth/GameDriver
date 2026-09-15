@@ -2664,6 +2664,47 @@ def test_tower_dynamic_floor_status_is_passive_text():
     assert auto_play.filter_configured_non_action_buttons(config, buttons) == []
 
 
+def test_tower_map_floor_number_cannot_beat_visible_room():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    floor_number = auto_play.ButtonCandidate(
+        label='2',
+        x=0.6347,
+        y=0.5331,
+        confidence=0.993,
+        clickability=1.948,
+        source='ocr',
+    )
+    room = auto_play.ButtonCandidate(
+        label='Visible combat room icon',
+        x=0.2542,
+        y=0.6631,
+        confidence=0.98,
+        clickability=7.0,
+        source='vision',
+    )
+
+    filtered = auto_play.filter_configured_non_action_buttons(
+        config,
+        [floor_number, room],
+    )
+    scored = auto_play.score_buttons(
+        filtered,
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+    decision = auto_play.decide_next_move(
+        scored,
+        min_action_score=0.5,
+        ambiguity_margin=0.25,
+        ask_on_ambiguous=False,
+        automation_config=config,
+    )
+
+    assert [button.label for button in filtered] == ['Visible combat room icon']
+    assert decision.recommended.label == 'Visible combat room icon'
+
+
 def test_tower_loading_text_becomes_wait_candidate():
     auto_play = load_auto_play_module()
     config = automation_config(auto_play, 'tower')
@@ -8593,6 +8634,88 @@ def test_tower_mage_plays_cold_source_before_electrolysis(monkeypatch):
     )
 
 
+def test_tower_mage_tracks_cold_before_allowing_electrolysis(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    state_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(
+        'run_id: deep-run\n'
+        'stage: 深渊楼梯\n'
+        'phase: combat\n'
+        'profession: 法师\n'
+        'battle:\n'
+        '  battle_id: deep-run-b001\n'
+    )
+    image = Image.new('RGB', (360, 800), color='black')
+
+    assert auto_play.tower_combat_sequence_bonus('tower', '电解冰') < 0
+
+    auto_play.update_tower_run_state(
+        'tower',
+        image,
+        [],
+        clicked_label='Visible playable card: 寒冰盾',
+        action_succeeded=True,
+    )
+
+    state = auto_play.load_tower_run_state('tower')
+    assert state['battle']['cold_applied'] is True
+    assert auto_play.tower_combat_sequence_bonus('tower', '电解冰') > 0
+
+    auto_play.update_tower_run_state(
+        'tower',
+        image,
+        [],
+        clicked_label='Visible playable card: 电解冰',
+        action_succeeded=True,
+    )
+
+    state = auto_play.load_tower_run_state('tower')
+    assert state['battle']['cold_applied'] is False
+
+
+def test_tower_electrolysis_build_requires_per_action_local_ocr(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    state_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(
+        'run_id: deep-run\n'
+        'stage: 深渊楼梯\n'
+        'phase: combat\n'
+        'profession: 法师\n'
+        'core_cards:\n'
+        '  - "Tower card choice: 电解冰"\n'
+    )
+
+    assert auto_play.tower_battle_requires_precise_read('tower') is True
+
+
+def test_tower_mage_plays_cold_shield_before_lightning_dragon(monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '法师')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'profession': '法师',
+            'predecessor_treasure': '电虫药水',
+            'core_cards': ['Tower card choice: 寒冰盾'],
+        },
+    )
+
+    assert auto_play.tower_combat_sequence_bonus('tower', '寒冰盾') > (
+        auto_play.tower_combat_sequence_bonus('tower', '雷龙')
+    )
+
+
 def test_tower_card_reward_prefers_short_cycle_draw_card():
     auto_play = load_auto_play_module()
     config = automation_config(auto_play, 'tower')
@@ -8706,6 +8829,82 @@ def test_tower_mage_reward_takes_energy_flying_lightning(monkeypatch):
 
     assert choice is not None
     assert choice.label == 'Tower card choice: 能量飞电'
+
+
+def test_tower_electric_potion_mage_takes_cold_current(monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'stage': '深渊楼梯',
+            'profession': '法师',
+            'phase': 'card_reward',
+            'predecessor_treasure': '电虫药水',
+        },
+    )
+    config = automation_config(auto_play, 'tower')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=x,
+            y=y,
+            confidence=0.98,
+            clickability=1.8,
+            source='ocr',
+        )
+        for label, x, y in (
+            ('选一张卡牌学习', 0.5, 0.31),
+            ('充能', 0.17, 0.48),
+            ('寒流', 0.5, 0.48),
+            ('雷电飞弹', 0.83, 0.48),
+            ('放弃', 0.29, 0.70),
+            ('确定', 0.73, 0.70),
+        )
+    ]
+
+    choice = auto_play.tower_card_reward_candidate(config, buttons)
+
+    assert choice is not None
+    assert choice.label == 'Tower card choice: 寒流'
+
+
+def test_tower_electric_potion_mage_prefers_current_core_recipe(monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'stage': '深渊楼梯',
+            'profession': '法师',
+            'phase': 'card_reward',
+            'predecessor_treasure': '电虫药水',
+        },
+    )
+    config = automation_config(auto_play, 'tower')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=x,
+            y=y,
+            confidence=0.98,
+            clickability=1.8,
+            source='ocr',
+        )
+        for label, x, y in (
+            ('选一张卡牌学习', 0.5, 0.31),
+            ('寒冷晶石', 0.17, 0.48),
+            ('雷龙', 0.5, 0.48),
+            ('寒冰盾', 0.83, 0.48),
+            ('放弃', 0.29, 0.70),
+            ('确定', 0.73, 0.70),
+        )
+    ]
+
+    choice = auto_play.tower_card_reward_candidate(config, buttons)
+
+    assert choice is not None
+    assert choice.label == 'Tower card choice: 寒冷晶石'
 
 
 def test_tower_mage_reward_takes_cold_shield_to_enable_electrolysis(monkeypatch):
@@ -9205,6 +9404,95 @@ def test_tower_combat_ignores_upper_screen_status_card_text():
     )
 
     assert scored[0].label == '结束第1回合'
+
+
+def test_tower_combat_ignores_card_type_metadata():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='防御牌',
+            x=0.92,
+            y=0.36,
+            confidence=0.99,
+            clickability=1.6,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='结束第1回合',
+            x=0.50,
+            y=0.92,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        ),
+    ]
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert scored[0].label == '结束第1回合'
+
+
+def test_tower_combat_ends_turn_when_only_disabled_cards_remain():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=x,
+            y=y,
+            confidence=confidence,
+            clickability=clickability,
+            source='ocr',
+        )
+        for label, x, y, confidence, clickability in (
+            ('虚弱', 0.49, 0.64, 0.99, 0.93),
+            ('闪电晶石', 0.20, 0.64, 0.97, 0.91),
+            ('每对敌方添加3层电击：额外添加1层电击', 0.49, 0.40, 0.98, 1.87),
+            ('结束第1回合', 0.50, 0.92, 0.99, 1.98),
+        )
+    ]
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={'preferred': ['虚弱'], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert scored[0].label == '结束第1回合'
+
+
+def test_tower_combat_uses_bright_ocr_card_when_vision_misses_its_border():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=x,
+            y=y,
+            confidence=confidence,
+            clickability=clickability,
+            source='ocr',
+        )
+        for label, x, y, confidence, clickability in (
+            ('闪电！', 0.20, 0.64, 0.94, 1.75),
+            ('绿舌头', 0.49, 0.64, 0.99, 1.68),
+            ('结束第3回合', 0.50, 0.92, 0.99, 1.98),
+        )
+    ]
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert scored[0].label == '闪电！'
+    assert scored[-1].label == '绿舌头'
 
 
 def test_tower_deep_map_prioritizes_cycle_building_rooms():
@@ -9892,6 +10180,43 @@ def test_tower_profession_is_inferred_from_predecessor_treasure_pool():
     assert profession == '法师'
 
 
+def test_tower_mage_profession_is_not_replaced_by_character_card(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    state_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(
+        'run_id: run-1\n'
+        'stage: 深渊楼梯\n'
+        'phase: combat\n'
+        'floor: 2\n'
+        'profession: 法师\n'
+        'predecessor_treasure: 电虫药水\n'
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='绿舌头',
+            x=0.2,
+            y=0.63,
+            confidence=0.99,
+            clickability=1.8,
+            source='ocr',
+        )
+    ]
+
+    auto_play.update_tower_run_state(
+        'tower',
+        Image.new('RGB', (360, 800), color='black'),
+        buttons,
+    )
+
+    state = auto_play.load_tower_run_state('tower')
+    assert state['profession'] == '法师'
+
+
 def test_tower_treasure_pool_overrides_stale_preferred_profession(
     tmp_path,
     monkeypatch,
@@ -10065,6 +10390,92 @@ def test_tower_target_traveler_predecessor_treasure_keeps_run(
     assert state['reroll_predecessor'] is False
 
 
+def test_tower_accepted_predecessor_clears_stale_same_run_reroll(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    state_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(
+        'run_id: mage-run\n'
+        'stage: 深渊楼梯\n'
+        'phase: climbing_map\n'
+        'floor: 1\n'
+        'profession: 法师\n'
+        'predecessor_treasure: 电虫药水\n'
+        'reroll_predecessor: true\n'
+        'key_treasures: [电虫药水]\n'
+    )
+    auto_play.write_tower_daily_state(
+        'tower',
+        {
+            'date': '2026-09-15',
+            'phase': 'abyss_retry',
+            'accepted_predecessor_treasure': '电虫药水',
+            'accepted_predecessor_run_id': 'mage-run',
+        },
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='当前所在层数',
+            x=0.5,
+            y=0.55,
+            confidence=0.99,
+            clickability=1.0,
+            source='ocr',
+        )
+    ]
+
+    auto_play.update_tower_run_state(
+        'tower',
+        Image.new('RGB', (360, 800), color='black'),
+        buttons,
+    )
+
+    state = auto_play.load_tower_run_state('tower')
+    assert state['reroll_predecessor'] is False
+
+
+def test_tower_prior_run_acceptance_does_not_clear_current_reroll(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    state_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(
+        'run_id: current-run\n'
+        'stage: 深渊楼梯\n'
+        'phase: climbing_map\n'
+        'floor: 1\n'
+        'profession: 法师\n'
+        'predecessor_treasure: 电虫药水\n'
+        'reroll_predecessor: true\n'
+        'key_treasures: [电虫药水]\n'
+    )
+    auto_play.write_tower_daily_state(
+        'tower',
+        {
+            'date': '2026-09-15',
+            'phase': 'abyss_retry',
+            'accepted_predecessor_treasure': '电虫药水',
+            'accepted_predecessor_run_id': 'prior-run',
+        },
+    )
+
+    auto_play.update_tower_run_state(
+        'tower',
+        Image.new('RGB', (360, 800), color='black'),
+        [],
+    )
+
+    state = auto_play.load_tower_run_state('tower')
+    assert state['reroll_predecessor'] is True
+
+
 def test_tower_traveler_keeps_rerolling_trumpet_after_bounded_rerolls(
     tmp_path,
     monkeypatch,
@@ -10201,6 +10612,67 @@ def test_tower_predecessor_reward_survives_confirmation_step(
     state = auto_play.load_tower_run_state('tower')
     assert state['predecessor_treasure'] == '花喇叭'
     assert state['reroll_predecessor'] is True
+    assert state['awaiting_predecessor_treasure'] is False
+
+
+def test_tower_predecessor_reward_ignores_background_sidebar_labels(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    state_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(
+        'run_id: mage-run\n'
+        'stage: 深渊楼梯\n'
+        'phase: climbing_map\n'
+        'floor: 1\n'
+        'profession: 法师\n'
+        'last_action: 确定\n'
+        'awaiting_predecessor_treasure: true\n'
+        'key_treasures: []\n'
+    )
+    auto_play.write_tower_daily_state(
+        'tower',
+        {'date': '2026-09-15', 'phase': 'abyss_retry'},
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='融合',
+            x=0.11,
+            y=0.515,
+            confidence=0.999,
+            clickability=0.3,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='电虫药水',
+            x=0.5,
+            y=0.514,
+            confidence=0.998,
+            clickability=1.8,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='恭喜获得',
+            x=0.5,
+            y=0.15,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        ),
+    ]
+
+    auto_play.update_tower_run_state(
+        'tower',
+        Image.new('RGB', (360, 800), color='black'),
+        buttons,
+    )
+
+    state = auto_play.load_tower_run_state('tower')
+    assert state['predecessor_treasure'] == '电虫药水'
+    assert state['reroll_predecessor'] is False
     assert state['awaiting_predecessor_treasure'] is False
 
 
@@ -10835,6 +11307,31 @@ def test_tower_daily_moves_from_abyss_to_recruit_after_return(
     assert state['notes'] == ['深渊挑战已结束，转入旅馆招募。']
 
 
+def test_tower_daily_abyss_focus_restarts_after_return(tmp_path, monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    auto_play.write_tower_daily_state(
+        'tower',
+        {
+            'date': '2026-09-15',
+            'phase': 'abyss',
+            'focus': 'abyss',
+            'notes': [],
+        },
+    )
+
+    auto_play.update_tower_daily_state(
+        'tower',
+        [],
+        clicked_label='返回旅馆',
+        action_succeeded=True,
+    )
+
+    state = auto_play.load_tower_daily_state('tower')
+    assert state['phase'] == 'abyss_retry'
+    assert state['notes'] == ['深渊专注模式：本局结束后立即重开深渊。']
+
+
 def test_tower_daily_predecessor_reroll_return_stays_in_abyss(
     tmp_path,
     monkeypatch,
@@ -11250,6 +11747,21 @@ def test_configure_tower_daily_focus_redirects_active_workflow(
     assert state['phase'] == 'go_to_spire'
     assert state['character_selected'] is False
     assert 'spire_victory' not in state
+
+
+def test_configure_tower_abyss_focus_redirects_recruitment(tmp_path, monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    auto_play.write_tower_daily_state(
+        'tower',
+        {'date': '2026-09-15', 'phase': 'recruit'},
+    )
+
+    auto_play.configure_tower_daily_focus('tower', 'abyss')
+
+    state = auto_play.load_tower_daily_state('tower')
+    assert state['focus'] == 'abyss'
+    assert state['phase'] == 'abyss_retry'
 
 
 def test_configure_tower_recruit_spire_focus_starts_with_one_recruit(
@@ -12946,6 +13458,8 @@ def test_tower_card_forgetting_grid_culls_mage_junk_and_protects_cycle(
     assert scored[0].label == '虚弱II'
     assert auto_play.tower_card_cull_bonus('tower', '快速思考II') == 0.0
     assert auto_play.tower_card_cull_bonus('tower', '小雷虫') == 0.0
+    assert auto_play.tower_card_cull_bonus('tower', '寒冷晶石') == 0.0
+    assert auto_play.tower_card_cull_bonus('tower', '雷龙') == 0.0
 
 
 def test_tower_stairs_choose_card_forgetting_route():
@@ -13250,6 +13764,67 @@ def test_tower_trainer_prefers_level_up_dodge_task(monkeypatch):
 
     assert scored[0].label == '选择'
     assert scored[0].y == 0.62
+
+
+def test_tower_electric_mage_trainer_prefers_immortal_heart(monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '法师')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {'predecessor_treasure': '电虫药水'},
+    )
+    config = automation_config(auto_play, 'tower')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='训练师任务',
+            x=0.5,
+            y=0.09,
+            confidence=1.0,
+            clickability=2.0,
+            source='ocr',
+        ),
+        *[
+            auto_play.ButtonCandidate(
+                label=label,
+                x=0.3,
+                y=y,
+                confidence=0.96,
+                clickability=1.6,
+                source='ocr',
+            )
+            for label, y in (
+                ('战斗胜利3次', 0.574),
+                ('火纹', 0.601),
+                ('冒险中，直接获得4张新卡牌', 0.679),
+                ('骑士之力', 0.704),
+                ('见习冒险者获得宝物时：生命上限+8', 0.733),
+                ('冒险中，直接获得1张3级卡牌', 0.781),
+                ('不朽之心', 0.808),
+                ('战斗中，每减少5点生命，获得1层再生', 0.836),
+            )
+        ],
+        *[
+            auto_play.ButtonCandidate(
+                label='选择',
+                x=0.82,
+                y=y,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            )
+            for y in (0.617, 0.72, 0.825)
+        ],
+    ]
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert scored[0].label == '选择'
+    assert scored[0].y == 0.825
 
 
 def test_tower_traveler_trainer_prefers_bull_temper(monkeypatch):
