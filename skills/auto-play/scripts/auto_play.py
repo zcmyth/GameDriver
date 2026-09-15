@@ -4507,6 +4507,8 @@ TOWER_TREASURE_OCR_CORRECTIONS = {
     '花叭喇': '花喇叭',
     '骑土手套': '骑士手套',
     '骑土狼牙棒': '骑士狼牙棒',
+    '荆赫花环': '荆棘花环',
+    '荆赫花环！': '荆棘花环',
 }
 
 TOWER_PREDECESSOR_REROLL_LIMIT = 20
@@ -7250,7 +7252,8 @@ def tower_treasure_choice_candidate(
         ('回复', 7.0),
         ('治疗', 7.0),
         ('宇宙十字架', -35.0),
-        ('爱心三明治', -20.0),
+        ('荆棘花环', -30.0),
+        ('爱心三明治', -35.0),
         ('重骑头盔', -25.0),
     )
     run_state = load_tower_run_state(automation_config.game)
@@ -7300,15 +7303,18 @@ def tower_treasure_choice_candidate(
     profession_priorities = {
         '旅行者': traveler_treasure_priorities,
         '猎人': (
+            ('日不落火把', 38.0),
             ('魔法面具', 42.0),
             ('火龙蛋', 40.0),
             ('魔法熊手', 34.0),
         ),
         '法师': (
+            ('日不落火把', -50.0),
             ('魔法面具', 42.0),
             ('海王鲨鱼', 34.0),
         ),
         '战士': (
+            ('日不落火把', 42.0),
             ('魔法熊手', 40.0),
             ('女鹅套娃', 38.0),
             ('魔塔石像', 34.0),

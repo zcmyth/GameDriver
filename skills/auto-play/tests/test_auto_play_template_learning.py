@@ -11898,6 +11898,42 @@ def test_tower_treasure_panel_prioritizes_immortal_rarity():
     assert choice.x == 0.8
 
 
+def test_tower_warrior_cursed_vault_sacrifices_unused_magic_power(monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '战士')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {'profession': '战士', 'predecessor_treasure': '巨人之拳'},
+    )
+    monkeypatch.setattr(auto_play, 'load_tower_daily_state', lambda _game: {})
+    config = automation_config(auto_play, 'tower')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=x,
+            y=y,
+            confidence=0.98,
+            clickability=1.8,
+            source='ocr',
+        )
+        for label, x, y in (
+            ('宝物选择', 0.5, 0.31),
+            ('爱心三明治', 0.2, 0.48),
+            ('荆赫花环！', 0.5, 0.48),
+            ('日不落火把V', 0.8, 0.48),
+            ('返回', 0.29, 0.70),
+            ('确定', 0.73, 0.70),
+        )
+    ]
+
+    choice = auto_play.tower_treasure_choice_candidate(config, buttons)
+
+    assert choice is not None
+    assert choice.x == 0.8
+    assert '日不落火把V' in choice.label
+
+
 def test_game_info_rewrite_preserves_manual_observations(tmp_path, monkeypatch):
     auto_play = load_auto_play_module()
     monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
