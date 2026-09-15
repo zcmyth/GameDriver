@@ -9679,6 +9679,49 @@ def test_tower_manufacture_core_is_played_when_it_is_only_card(monkeypatch):
     assert scored[0].label == 'Visible playable card: 制造核心'
 
 
+def test_tower_manufacture_core_ocr_fallback_is_played_when_it_is_only_card(
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '战士')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'stage': '深渊楼梯',
+            'profession': '战士',
+            'predecessor_treasure': '巨人之拳',
+        },
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='结束第2回合',
+            x=0.50,
+            y=0.92,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='制造核心训',
+            x=0.20,
+            y=0.635,
+            confidence=0.86,
+            clickability=1.65,
+            source='ocr',
+        ),
+    ]
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert scored[0].label == '制造核心训'
+
+
 def test_tower_weakness_strike_becomes_finisher_after_setup(monkeypatch):
     auto_play = load_auto_play_module()
     monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '战士')

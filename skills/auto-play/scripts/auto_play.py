@@ -2711,6 +2711,26 @@ def is_tower_playable_combat_card_candidate(
     )
 
 
+def tower_playable_combat_card_slot_count(
+    buttons: Iterable[ButtonCandidate],
+    automation_config: GameAutomationConfig | None,
+) -> int:
+    slots: list[tuple[float, float]] = []
+    for button in buttons:
+        if not is_tower_playable_combat_card_candidate(button, automation_config):
+            continue
+        # OCR reads the title near the bottom of a card; vision marks its center.
+        # Normalize both to the card center before merging duplicate detections.
+        slot_y = button.y - 0.105 if button.source == 'ocr' else button.y
+        if any(
+            abs(button.x - slot_x) <= 0.08 and abs(slot_y - existing_y) <= 0.08
+            for slot_x, existing_y in slots
+        ):
+            continue
+        slots.append((button.x, slot_y))
+    return len(slots)
+
+
 def is_tower_passive_status_label(
     automation_config: GameAutomationConfig,
     label: str,
@@ -9687,11 +9707,9 @@ def score_buttons(
         for button in non_end_buttons
         if is_tower_playable_combat_card_candidate(button, automation_config)
     )
-    tower_visible_playable_card_count = sum(
-        1
-        for button in non_end_buttons
-        if button.source == 'vision'
-        and normalize_label(button.label).startswith('visible playable card')
+    tower_playable_card_slot_count = tower_playable_combat_card_slot_count(
+        non_end_buttons,
+        automation_config,
     )
     playable_combat_card_visible = combat_card_count > 0
     direct_attack_combat_card_visible = end_visible and any(
@@ -10382,7 +10400,7 @@ def score_buttons(
                 and is_defensive_or_setup_combat_card_label(button.label)
             ):
                 score -= 1.0
-            if tower_visible_playable_card_count == 1 and '制造核心' in key:
+            if tower_playable_card_slot_count == 1 and '制造核心' in key:
                 score += 14.0
                 reason = (
                     f'{reason} Use the all-mana core only after every other '
