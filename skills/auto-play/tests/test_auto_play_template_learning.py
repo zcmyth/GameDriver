@@ -1244,6 +1244,17 @@ def test_tower_combat_emergency_item_requires_low_hp_and_positive_count():
     assert not auto_play.tower_combat_emergency_item_candidates(image, config)
 
 
+def test_tower_enemy_hp_cv_detects_sacred_finisher_range():
+    auto_play = load_auto_play_module()
+    low_hp = Image.new('RGB', (360, 800), color=(18, 21, 24))
+    healthy = low_hp.copy()
+    ImageDraw.Draw(low_hp).rectangle((219, 56, 224, 63), fill=(198, 86, 36))
+    ImageDraw.Draw(healthy).rectangle((219, 56, 250, 63), fill=(198, 86, 36))
+
+    assert auto_play.tower_enemy_hp_looks_sacred_finisher_ready(low_hp)
+    assert not auto_play.tower_enemy_hp_looks_sacred_finisher_ready(healthy)
+
+
 def test_tower_combat_saves_giant_potion_at_healthy_hp(monkeypatch):
     auto_play = load_auto_play_module()
     config = automation_config(auto_play, 'tower')
@@ -12544,6 +12555,93 @@ def test_tower_discard_all_finisher_requires_precise_reads(tmp_path, monkeypatch
     )
 
     assert auto_play.tower_battle_requires_precise_read('tower')
+
+
+def test_tower_sacred_finisher_uses_precise_reads_only_in_kill_range(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    state_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(
+        'run_id: run-1\n'
+        'core_cards:\n'
+        "  - 'Tower card choice: 神圣斩击'\n"
+        'battle:\n'
+        '  enemy_sacred_finisher_range: false\n'
+    )
+
+    assert not auto_play.tower_battle_requires_precise_read('tower')
+
+    state_path.write_text(
+        'run_id: run-1\n'
+        'core_cards:\n'
+        "  - 'Tower card choice: 神圣斩击'\n"
+        'battle:\n'
+        '  enemy_sacred_finisher_range: true\n'
+    )
+
+    assert auto_play.tower_battle_requires_precise_read('tower')
+
+
+def test_tower_waits_once_then_uses_sacred_finisher(monkeypatch):
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    state = {
+        'stage': '深渊楼梯',
+        'profession': '战士',
+        'core_cards': ['Tower card choice: 神圣斩击'],
+        'battle': {
+            'enemy_sacred_finisher_range': True,
+            'player_hp_critical': False,
+            'sacred_finisher_waits': 0,
+        },
+    }
+    monkeypatch.setattr(auto_play, 'load_tower_run_state', lambda _game: state)
+    monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '战士')
+    end = auto_play.ButtonCandidate(
+        label='结束第3回合',
+        x=0.5,
+        y=0.92,
+        confidence=0.99,
+        clickability=4.0,
+        source='vision',
+    )
+    attack = auto_play.ButtonCandidate(
+        label='Visible playable card: 普通攻击',
+        x=0.2,
+        y=0.53,
+        confidence=0.96,
+        clickability=7.4,
+        source='vision',
+    )
+
+    waiting = auto_play.score_buttons(
+        [attack, end],
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert waiting[0].label == '结束第3回合'
+
+    sacred = auto_play.ButtonCandidate(
+        label='Visible playable card: 神圣斩击',
+        x=0.5,
+        y=0.53,
+        confidence=0.96,
+        clickability=7.4,
+        source='vision',
+    )
+    state['battle']['sacred_finisher_waits'] = 1
+    finishing = auto_play.score_buttons(
+        [attack, sacred, end],
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert finishing[0].label == 'Visible playable card: 神圣斩击'
 
 
 def test_tower_combat_delays_discard_all_finisher_until_other_cards_are_played():

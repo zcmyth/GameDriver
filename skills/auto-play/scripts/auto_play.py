@@ -2161,6 +2161,28 @@ def tower_combat_hp_looks_critical(image: Image.Image) -> bool:
     return float(np.mean(warm_fill)) < 0.25
 
 
+def tower_enemy_hp_looks_sacred_finisher_ready(image: Image.Image) -> bool:
+    """Detect roughly the last 10% of the enemy HP bar without OCR."""
+    rgb = np.asarray(image.convert('RGB').resize((360, 800)))
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
+    health_bar = hsv[56:64, 219:301]
+    if health_bar.size == 0:
+        return False
+    orange_fill = (
+        (health_bar[:, :, 0] >= 3)
+        & (health_bar[:, :, 0] <= 25)
+        & (health_bar[:, :, 1] > 80)
+        & (health_bar[:, :, 2] > 70)
+    )
+    filled_columns = np.count_nonzero(orange_fill, axis=0) >= 3
+    contiguous_fill = 0
+    for filled in filled_columns:
+        if not filled:
+            break
+        contiguous_fill += 1
+    return contiguous_fill <= 8
+
+
 def tower_combat_item_pouch_has_consumable(image: Image.Image) -> bool:
     """Distinguish the pouch's zero counter from a positive item count."""
     rgb = np.asarray(image.convert('RGB').resize((360, 800)))
@@ -4972,6 +4994,12 @@ def update_tower_run_state(
     )
     if phase == 'combat':
         state['awaiting_route_after_reward'] = False
+        battle = state.get('battle')
+        if isinstance(battle, dict):
+            battle['enemy_sacred_finisher_range'] = (
+                tower_enemy_hp_looks_sacred_finisher_ready(image)
+            )
+            battle['player_hp_critical'] = tower_combat_hp_looks_critical(image)
     if phase == 'initial_setup':
         ignored = start_labels | CONFIRM_LABELS | CANCEL_LABELS
         state['initial_setup'] = list(
@@ -5078,6 +5106,12 @@ def update_tower_run_state(
         if action_succeeded and effective_phase == 'combat':
             battle = state.get('battle')
             if isinstance(battle, dict):
+                if clicked_key and is_end_turn_label(clicked_key) and battle.get(
+                    'enemy_sacred_finisher_range'
+                ):
+                    battle['sacred_finisher_waits'] = int(
+                        battle.get('sacred_finisher_waits') or 0
+                    ) + 1
                 cold_sources = (
                     '冷风',
                     '寒流',
@@ -5323,10 +5357,15 @@ def tower_battle_requires_precise_read(game: str) -> bool:
     core_text = ' '.join(
         normalize_label(str(card)) for card in state.get('core_cards') or []
     )
+    battle = state.get('battle') or {}
     return (
         is_tower_timing_sensitive_finisher_label(core_text)
         or '电解冰' in core_text
         or '快速思考' in core_text
+        or (
+            '神圣斩击' in core_text
+            and bool(battle.get('enemy_sacred_finisher_range'))
+        )
     )
 
 
@@ -9530,6 +9569,26 @@ def score_buttons(
     )
     ad_revive_context = is_ad_revive_context(buttons)
     tower_button_keys = {normalize_label(button.label) for button in buttons}
+    tower_battle_state = tower_run_state.get('battle') or {}
+    tower_sacred_finisher_ready = bool(
+        isinstance(tower_battle_state, dict)
+        and tower_battle_state.get('enemy_sacred_finisher_range')
+        and not tower_battle_state.get('player_hp_critical')
+        and any(
+            '神圣斩击' in normalize_label(str(card))
+            for card in tower_run_state.get('core_cards') or []
+        )
+    )
+    tower_sacred_finisher_can_wait = bool(
+        tower_sacred_finisher_ready
+        and int(tower_battle_state.get('sacred_finisher_waits') or 0) < 1
+    )
+    tower_playable_sacred_finisher_visible = any(
+        button.source == 'vision'
+        and normalize_label(button.label).startswith('visible playable card')
+        and '神圣斩击' in normalize_label(button.label)
+        for button in buttons
+    )
     tower_predecessor_context_visible = bool(
         tower_run_state.get('awaiting_predecessor_treasure')
     ) or any(
@@ -10166,6 +10225,28 @@ def score_buttons(
                 and combat_card_count < 3
             ):
                 score -= 2.75
+        if tower_sacred_finisher_ready and end_visible:
+            if (
+                tower_playable_sacred_finisher_visible
+                and '神圣斩击' in key
+            ):
+                score += 30.0
+                reason = f'{reason} Use 神圣斩击 in its kill range.'.strip()
+            elif (
+                not tower_playable_sacred_finisher_visible
+                and tower_sacred_finisher_can_wait
+                and is_end_turn_label(button.label)
+            ):
+                score += 20.0
+                reason = (
+                    f'{reason} Enemy is in 神圣斩击 range; wait one turn '
+                    'for mana or draw.'
+                ).strip()
+            elif (
+                tower_playable_sacred_finisher_visible
+                or tower_sacred_finisher_can_wait
+            ) and is_tower_combat_card_candidate(button, automation_config):
+                score -= 12.0
         if key in HARD_AVOID_LABELS:
             score -= 3.0
         if key in ineffective and not is_configured_combat_card_label(
