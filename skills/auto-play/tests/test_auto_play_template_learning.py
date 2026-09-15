@@ -15085,6 +15085,57 @@ def test_tower_map_avoids_arrow_attached_to_completed_shop(monkeypatch):
     assert 'attached to a completed Tower shop' in left.reason
 
 
+def test_tower_prebattle_does_not_treat_enemy_name_as_map_room():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='战斗',
+            x=0.715,
+            y=0.948,
+            confidence=0.99,
+            clickability=5.0,
+            source='vision',
+        ),
+        auto_play.ButtonCandidate(
+            label='护盾·金币哥布林',
+            x=0.50,
+            y=0.214,
+            confidence=0.97,
+            clickability=1.8,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='即将发起战斗',
+            x=0.49,
+            y=0.10,
+            confidence=0.99,
+            clickability=1.8,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='下方道路',
+            x=0.44,
+            y=0.91,
+            confidence=0.90,
+            clickability=0.8,
+            source='template',
+        ),
+    ]
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert scored[0].label == '战斗'
+    enemy = next(
+        button for button in scored if button.label == '护盾·金币哥布林'
+    )
+    assert enemy.score < scored[0].score
+
+
 def test_tower_prefers_mystery_shop_when_only_shop_routes_remain():
     auto_play = load_auto_play_module()
     config = automation_config(auto_play, 'tower')

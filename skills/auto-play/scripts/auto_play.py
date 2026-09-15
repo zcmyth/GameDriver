@@ -9730,7 +9730,10 @@ def score_buttons(
             for key in tower_button_keys
         )
     )
-    tower_map_context_visible = not end_visible and (
+    tower_prebattle_visible = any(
+        '即将发起战斗' in key for key in tower_button_keys
+    )
+    tower_map_context_visible = not end_visible and not tower_prebattle_visible and (
         navigation_arrow_visible
         or bool(tower_button_keys & {'当前所在层数', '全服最高层数'})
         or any(key.startswith('当前层数') for key in tower_button_keys)
