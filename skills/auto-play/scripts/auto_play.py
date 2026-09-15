@@ -4665,7 +4665,7 @@ def tower_deep_map_room_bonus(label: str) -> float:
         '卡牌遗忘': 8.0,
         '遗忘法阵': 8.0,
         '休息点': 5.0,
-        '金币哥布林': 5.5,
+        '金币哥布': 5.5,
         '水晶哥布': 5.5,
         '宝石牌包': 6.0,
         '职业牌包': 5.0,
@@ -4844,7 +4844,12 @@ def tower_shop_purchase_bonus(game: str, label: str) -> float:
     return tower_shop_purchase_profile(game, label)[0]
 
 
-def tower_card_cull_bonus(game: str, label: str) -> float:
+def tower_card_cull_bonus(
+    game: str,
+    label: str,
+    *,
+    visible_labels: Iterable[str] = (),
+) -> float:
     state = load_tower_run_state(game)
     if normalize_label(str(state.get('stage') or '')) != '深渊楼梯':
         return 0.0
@@ -4877,6 +4882,15 @@ def tower_card_cull_bonus(game: str, label: str) -> float:
             ('杂物', 10.0),
         )
     profession = tower_run_profession(game)
+    if (
+        profession == '战士'
+        and '举盾' in key
+        and any(
+            '防具加固' in normalize_label(visible_label)
+            for visible_label in visible_labels
+        )
+    ):
+        return 0.0
     profession_protected = {
         '战士': (
             '弱点打击',
@@ -9778,6 +9792,9 @@ def score_buttons(
     )
     ad_revive_context = is_ad_revive_context(buttons)
     tower_button_keys = {normalize_label(button.label) for button in buttons}
+    tower_visible_labels = tuple(
+        button.label for button in buttons if button.source != 'template'
+    )
     tower_battle_state = tower_run_state.get('battle') or {}
     tower_sacred_finisher_ready = bool(
         isinstance(tower_battle_state, dict)
@@ -9900,7 +9917,11 @@ def score_buttons(
         and
         tower_card_change_visible
         and any(
-            tower_card_cull_bonus(automation_config.game, candidate.label) > 0
+            tower_card_cull_bonus(
+                automation_config.game,
+                candidate.label,
+                visible_labels=tower_visible_labels,
+            ) > 0
             for candidate in buttons
         )
     )
@@ -10165,6 +10186,7 @@ def score_buttons(
             tower_cull_bonus = tower_card_cull_bonus(
                 automation_config.game,
                 button.label,
+                visible_labels=tower_visible_labels,
             )
             if tower_card_change_visible:
                 if tower_cull_bonus > 0 and not tower_recent_change_selected:
@@ -10240,6 +10262,7 @@ def score_buttons(
             tower_cull_bonus = tower_card_cull_bonus(
                 automation_config.game,
                 button.label,
+                visible_labels=tower_visible_labels,
             )
             if tower_cull_bonus > 0 and not tower_recent_cull_selected:
                 score += 22.0 + tower_cull_bonus

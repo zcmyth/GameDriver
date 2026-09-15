@@ -10929,8 +10929,13 @@ def test_tower_healthy_route_values_crystal_shop_over_plain_rest():
     ) > auto_play.tower_deep_map_room_bonus('休息点')
 
 
-def test_tower_route_enters_crystal_shop_before_plain_rest():
+def test_tower_route_enters_crystal_shop_before_plain_rest(monkeypatch):
     auto_play = load_auto_play_module()
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {'stage': '深渊楼梯', 'phase': 'climbing_map'},
+    )
     config = automation_config(auto_play, 'tower')
     buttons = [
         auto_play.ButtonCandidate(
@@ -11592,6 +11597,7 @@ def test_tower_deep_map_prioritizes_cycle_building_rooms():
         '训练师'
     ) > auto_play.tower_deep_map_room_bonus('金币商店')
     assert auto_play.tower_deep_map_room_bonus('护盾·金币哥布林') == 5.5
+    assert auto_play.tower_deep_map_room_bonus('金币哥布精') == 5.5
     assert auto_play.tower_deep_map_room_bonus('护盾·水晶哥布材') == 5.5
     assert auto_play.tower_deep_map_room_bonus('金币商店') >= 5.0
     assert auto_play.tower_deep_map_room_bonus('休息点') >= 5.0
@@ -15944,6 +15950,47 @@ def test_tower_card_forgetting_culls_warrior_starters_and_protects_weakness_cycl
     assert auto_play.tower_card_cull_bonus('tower', '弱点打击！') == 0.0
     assert auto_play.tower_card_cull_bonus('tower', '迅捷！') == 0.0
     assert auto_play.tower_card_cull_bonus('tower', '攻击宝石') == 0.0
+
+
+def test_tower_card_forgetting_keeps_shield_needed_by_multiplier(monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {'stage': '深渊楼梯', 'profession': '战士'},
+    )
+    config = automation_config(auto_play, 'tower')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=x,
+            y=y,
+            confidence=0.98,
+            clickability=2.0,
+            source='ocr',
+        )
+        for label, x, y in (
+            ('卡牌遗忘', 0.5, 0.12),
+            ('普通攻击', 0.21, 0.27),
+            ('举盾', 0.79, 0.27),
+            ('防具加固！', 0.50, 0.42),
+            ('返回', 0.5, 0.92),
+        )
+    ]
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+        recent_actions=['遗忘法阵'],
+    )
+
+    assert scored[0].label == '普通攻击'
+    assert auto_play.tower_card_cull_bonus(
+        'tower',
+        '举盾',
+        visible_labels=('普通攻击', '举盾', '防具加固！'),
+    ) == 0.0
 
 
 def test_tower_stairs_choose_card_forgetting_route():
