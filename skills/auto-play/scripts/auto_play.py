@@ -663,6 +663,10 @@ def is_tower_timing_sensitive_finisher_label(value: str) -> bool:
 
 def tower_combat_sequence_bonus(game: str, label: str) -> float:
     key = normalize_label(label)
+    if '巨人药水' in key:
+        return 30.0
+    if '幸运币' in key or '运币' in key:
+        return 25.0
     if '巨人协议' in key:
         return 15.0
     profession = tower_run_profession(game)
@@ -2200,9 +2204,28 @@ def tower_combat_emergency_item_candidates(
         return []
     if not tower_combat_screen_visible(image):
         return []
-    if not tower_combat_hp_looks_critical(image):
-        return []
     if not tower_combat_item_pouch_has_consumable(image):
+        return []
+    state = load_tower_run_state(automation_config.game)
+    purchases = {
+        normalize_label(str(item)) for item in state.get('shop_purchases') or []
+    }
+    used = {
+        normalize_label(str(item)) for item in state.get('used_consumables') or []
+    }
+    if '巨人药水' in purchases and '巨人药水' not in used:
+        return [
+            ButtonCandidate(
+                label='立即使用巨人药水',
+                x=0.768,
+                y=0.938,
+                confidence=0.99,
+                clickability=35.0,
+                source='vision',
+                reason='巨人药水提供永久600生命上限；购入后立即打开道具口袋使用。',
+            )
+        ]
+    if not tower_combat_hp_looks_critical(image):
         return []
     return [
         ButtonCandidate(
@@ -3699,6 +3722,14 @@ def tower_daily_policy_candidates(
                     and '次' in normalize_label(button.label)
                 )
             ]
+            failed_refresh = normalize_label(
+                str(run_state.get('last_failed_action') or '')
+            )
+            refresh_buttons = [
+                button
+                for button in refresh_buttons
+                if normalize_label(button.label) != failed_refresh
+            ]
             if refresh_count < refresh_limit and refresh_buttons:
                 refresh = max(
                     refresh_buttons,
@@ -4663,6 +4694,9 @@ def tower_shop_purchase_profile(game: str, label: str) -> tuple[float, str]:
         if normalize_label(pattern) in key:
             return bonus, 'treasure'
 
+    if '幸运币' in key or '运币' in key:
+        return 43.0, 'consumable'
+
     if '药水' in key:
         consumable_priorities = [
             ('巨人药水', 40.0),
@@ -5039,6 +5073,10 @@ def update_tower_run_state(
         )
         state['last_action'] = clicked_label
         clicked_key = normalize_label(clicked_label)
+        if action_succeeded:
+            state.pop('last_failed_action', None)
+        else:
+            state['last_failed_action'] = clicked_label
         refresh_history = dict(state.get('shop_refresh_history') or {})
         active_refresh_key = str(state.get('active_shop_key') or '').strip()
         if not active_refresh_key:
@@ -5171,6 +5209,15 @@ def update_tower_run_state(
                     if previous_action not in treasures:
                         treasures.append(previous_action)
                     state['key_treasures'] = treasures
+        if (
+            action_succeeded
+            and clicked_key in CONFIRM_LABELS
+            and normalize_label(previous_action) == '立即使用巨人药水'
+        ):
+            used_consumables = list(state.get('used_consumables') or [])
+            if '巨人药水' not in used_consumables:
+                used_consumables.append('巨人药水')
+            state['used_consumables'] = used_consumables
         if action_succeeded and clicked_key in {
             '复活（广告）',
             '看广告复活',
@@ -6035,6 +6082,16 @@ def should_remember_ineffective_button(
     if is_end_turn_label(button.label):
         return False
     key = normalize_label(button.label)
+    if (
+        automation_config is not None
+        and normalize_label(automation_config.game) == 'tower'
+        and (
+            tower_shop_purchase_bonus(automation_config.game, button.label) > 0
+            or key.startswith('刷新')
+            or (key.startswith('免费') and '次' in key)
+        )
+    ):
+        return False
     preferred = {
         normalize_label(item)
         for item in extract_list_section(strategy_text, 'Preferred Buttons', [])
@@ -10777,6 +10834,7 @@ def inspect_item_choices(
     if not confirm_buttons:
         return [], None
     if any(normalize_label(button.label) == '道具口袋' for button in buttons):
+        permanent_growth_patterns = ('巨人药水',)
         healing_patterns = (
             '深澜龙血',
             '深渊龙血',
@@ -10791,6 +10849,15 @@ def inspect_item_choices(
             if button.source != 'template' and 0.54 <= button.y <= 0.78
         ]
         target = next(
+            (
+                button
+                for pattern in permanent_growth_patterns
+                for button in item_buttons
+                if pattern in normalize_label(button.label)
+            ),
+            None,
+        )
+        target = target or next(
             (
                 button
                 for pattern in healing_patterns

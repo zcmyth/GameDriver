@@ -1244,6 +1244,30 @@ def test_tower_combat_emergency_item_requires_low_hp_and_positive_count():
     assert not auto_play.tower_combat_emergency_item_candidates(image, config)
 
 
+def test_tower_combat_uses_giant_potion_at_healthy_hp(monkeypatch):
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'shop_purchases': ['巨人药水'],
+            'used_consumables': [],
+        },
+    )
+    image = Image.new('RGB', (360, 800), color=(18, 21, 24))
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((22, 426, 118, 556), radius=7, fill=(154, 81, 49))
+    draw.rectangle((100, 735, 260, 782), fill=(221, 176, 40))
+    draw.rectangle((291, 740, 293, 747), fill='white')
+    draw.rectangle((86, 356, 90, 362), fill=(203, 94, 47))
+
+    candidates = auto_play.tower_combat_emergency_item_candidates(image, config)
+
+    assert not auto_play.tower_combat_hp_looks_critical(image)
+    assert candidates[0].label == '立即使用巨人药水'
+
+
 def test_tower_combat_item_counter_recognizes_zero_ring():
     auto_play = load_auto_play_module()
     image = Image.new('RGB', (360, 800), color=(18, 21, 24))
@@ -8756,6 +8780,54 @@ def test_tower_low_hp_pouch_prefers_healing_consumable(tmp_path, monkeypatch):
     assert decision.recommended.label == '确定'
 
 
+def test_tower_pouch_prefers_giant_potion_before_healing(tmp_path, monkeypatch):
+    auto_play = load_auto_play_module()
+    clicks: list[str] = []
+    monkeypatch.setattr(
+        auto_play,
+        'click_button',
+        lambda _args, button: clicks.append(button.label),
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=x,
+            y=y,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+            score=2.0,
+        )
+        for label, x, y in (
+            ('道具口袋', 0.5, 0.48),
+            ('深澜龙血', 0.2, 0.64),
+            ('巨人药水', 0.5, 0.64),
+            ('返回', 0.28, 0.94),
+            ('确定', 0.72, 0.94),
+        )
+    ]
+    args = SimpleNamespace(
+        image=None,
+        click_recommended=True,
+        game='tower',
+        item_inspection_interval=0.0,
+    )
+
+    _inspections, decision = auto_play.inspect_item_choices(
+        args,
+        buttons=buttons,
+        memory={'fallback': [], 'avoid': [], 'ineffective': []},
+        artifact_paths={
+            'item_inspections': tmp_path / 'item_inspections.yaml',
+            'item_inspection_dir': tmp_path / 'item_inspections',
+        },
+    )
+
+    assert clicks == ['巨人药水']
+    assert decision is not None
+    assert decision.recommended.label == '确定'
+
+
 def test_replace_adventure_confirmation_is_not_item_inspected(
     tmp_path,
     monkeypatch,
@@ -9847,12 +9919,34 @@ def test_tower_giant_warrior_shop_buys_synergy_not_unused_dragon_egg(
     dragon_egg = auto_play.tower_shop_purchase_profile('tower', '幻龙蛋')
     swift_potion = auto_play.tower_shop_purchase_profile('tower', '迅捷药水')
     fire_potion = auto_play.tower_shop_purchase_profile('tower', '火焰药水')
+    lucky_coin = auto_play.tower_shop_purchase_profile('tower', '幸运币')
+    ocr_lucky_coin = auto_play.tower_shop_purchase_profile('tower', '率运币')
 
     assert dwarf_gem == (42.0, 'treasure')
     assert giant_mask == (35.0, 'treasure')
     assert dragon_egg == (0.0, '')
     assert swift_potion == (32.0, 'consumable')
     assert fire_potion == (0.0, '')
+    assert lucky_coin == (43.0, 'consumable')
+    assert ocr_lucky_coin == (43.0, 'consumable')
+
+
+def test_tower_plays_permanent_health_and_profit_consumables_first(monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '战士')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {'profession': '战士'},
+    )
+
+    giant_potion = auto_play.tower_combat_sequence_bonus('tower', '巨人药水')
+    lucky_coin = auto_play.tower_combat_sequence_bonus('tower', '幸运币')
+    ocr_lucky_coin = auto_play.tower_combat_sequence_bonus('tower', '率运币')
+    attack = auto_play.tower_combat_sequence_bonus('tower', '普通攻击')
+
+    assert giant_potion > lucky_coin > attack
+    assert ocr_lucky_coin == lucky_coin
 
 
 def test_tower_shop_refreshes_twice_then_returns(tmp_path, monkeypatch):
@@ -9911,6 +10005,93 @@ def test_tower_shop_refreshes_twice_then_returns(tmp_path, monkeypatch):
 
     assert finished is not None
     assert finished[0].label == '返回'
+
+
+def test_tower_shop_returns_after_paid_refresh_cannot_progress(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    state_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(
+        'run_id: giant-run\n'
+        'stage: 深渊楼梯\n'
+        'phase: reward_detail\n'
+        'floor: 8\n'
+        'profession: 战士\n'
+        'active_shop: 神秘商店\n'
+        'last_room_action: 神秘商店\n'
+        'last_action: 刷新●20\n'
+        'last_failed_action: 刷新●20\n'
+        'shop_refresh_count: 1\n'
+        'policy:\n'
+        '  shop_refresh_limit: 2\n'
+    )
+    auto_play.write_tower_daily_state(
+        'tower',
+        {'date': '2026-09-15', 'phase': 'abyss'},
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=x,
+            y=y,
+            confidence=0.99,
+            clickability=1.8,
+            source='ocr',
+        )
+        for label, x, y in (
+            ('神秘商店', 0.5, 0.34),
+            ('刷新●20', 0.14, 0.30),
+            ('返回', 0.27, 0.88),
+        )
+    ]
+
+    selected = auto_play.tower_daily_policy_candidates('tower', buttons)
+
+    assert selected is not None
+    assert selected[0].label == '返回'
+
+
+def test_tower_does_not_globally_mark_shop_choices_or_refresh_ineffective(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    state_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text('stage: 深渊楼梯\nshop_purchases: []\n')
+    config = automation_config(auto_play, 'tower')
+    verification = auto_play.StateVerification(
+        status='unchanged',
+        reason='no progress',
+        attempts=3,
+        threshold=0.995,
+        similarities=[0.999, 0.999, 0.999],
+        progress_threshold=0.985,
+        progress_similarities=[0.999, 0.999, 0.999],
+        progress_region='full',
+        strategy_updated=False,
+    )
+
+    for label in ('巨人药水', '刷新●20', '免费1次'):
+        button = auto_play.ButtonCandidate(
+            label=label,
+            x=0.2,
+            y=0.5,
+            confidence=0.99,
+            clickability=1.8,
+            source='ocr',
+        )
+        assert not auto_play.should_remember_ineffective_button(
+            button,
+            verification,
+            '',
+            config,
+        )
 
 
 def test_tower_shop_confirms_selected_core_before_refresh(tmp_path, monkeypatch):

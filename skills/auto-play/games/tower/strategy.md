@@ -553,6 +553,7 @@
 - 刷新是有限资源：单个商店最多刷新 1-2 次，先用免费刷新；只寻找赚钱、加血、回血、抽牌、回蓝与当前构筑联动件，两次仍没有就离开。
 - 每次战斗出牌后手牌会重排，必须重新截图识别；不要连续点击旧坐标。
 - 战斗生命低于约 30% 且道具口袋不为空时，先开道具口袋；优先使用回血消耗品，若没有回血则用抽牌消耗品争取当回合斩杀。有 `实验眼镜` 时，`深澜龙血` 的 10% 最大生命回复会结算两次。
+- 买到 `巨人药水` 后不等待残血：下一场战斗立即打开道具口袋并使用，尽早兑现永久 600 生命上限；其优先级高于普通回血消耗品。
 - 每日顺序由专门流程控制：先挑战深渊楼梯，再在旅馆有次数时招募，最后让刚招募的角色挑战尖塔木屋。通用按钮评分不得让招募抢在深渊楼梯之前。
 - 选择卡牌时优先形成一个短链：稳定触发/抽牌或回费、爆发终结、必要回血。没有直接协同时宁可放弃奖励，避免牌组越来越慢。
 - 地图上的“当前层数”和“剩余冒险事件”只是状态文字；必须选具体房间图标，不得点击计数文字。
@@ -602,6 +603,9 @@
 - 盲击
 - 登龙斩
 - 推击
+- 巨人药水
+- 幸运币
+- 率运币
 
 ## Automation Current Room Labels
 - 幼虫
@@ -651,7 +655,11 @@
 - **神圣斩击I/II**: use as a finisher when possible. A floor-6 kill with
   **神圣斩击** was followed by max HP increasing before the level-up screen.
 - **巨人药水**: shop card, cost 0, consumable; description said it increases max
-  HP by `600`. Use immediately if drawn in a boss or dangerous long fight.
+  HP by `600`. Buy whenever affordable and use it immediately in the next fight;
+  permanent max-HP growth is more valuable the earlier it starts protecting the run.
+- **幸运币**: shop card, price 1, cost 0, innate and consumable; gains 10 gold
+  and draws 1 card. It is a mandatory buy when affordable because it nets 9 gold,
+  removes itself, and advances the hand without slowing the long-term cycle.
 - **净化药水**: shop card, cost 0, consumable; clears all own mark effects without
   triggering marks. Save/use it when the enemy applies dangerous debuffs.
 - **深澜龙血**: consumable; restores 10% max HP. With **实验眼镜**, the
