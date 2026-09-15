@@ -623,7 +623,13 @@ def is_configured_combat_card_label(
     if automation_config is None:
         return False
     card_key = re.sub(r'[!！?？.,，。:：;；\[\]【】()（）]+$', '', key)
-    return card_key in automation_config.combat_card_double_tap_labels
+    if card_key in automation_config.combat_card_double_tap_labels:
+        return True
+    return any(
+        card_key.startswith(known_card)
+        and len(card_key) == len(known_card) + 1
+        for known_card in automation_config.combat_card_double_tap_labels
+    )
 
 
 def is_direct_attack_combat_card_label(value: str) -> bool:
@@ -3596,6 +3602,34 @@ def tower_daily_policy_candidates(
                     reason=(
                         '说话的楼梯固定提供深澜龙血；优先拿走保命消耗品，'
                         '并压过透过弹窗误识别的旧房间模板。'
+                    ),
+                )
+            ]
+        talking_stairs_room = next(
+            (
+                button
+                for button in buttons
+                if normalize_label(button.label) == '说话的楼梯'
+                and button.y >= 0.55
+            ),
+            None,
+        )
+        map_hud_visible = bool(
+            labels
+            & {
+                '当前所在层数',
+                '全服最高层数',
+                '冒险者携带的未激活宝物',
+            }
+        )
+        if talking_stairs_room is not None and map_hud_visible:
+            return [
+                replace(
+                    talking_stairs_room,
+                    clickability=max(talking_stairs_room.clickability, 25.0),
+                    reason=(
+                        '地图上的说话的楼梯是未完成房间；进入后领取'
+                        '深澜龙血并继续爬层。'
                     ),
                 )
             ]

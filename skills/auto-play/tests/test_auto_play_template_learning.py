@@ -2299,6 +2299,17 @@ def test_combat_cards_are_double_clicked():
         ),
         config,
     )
+    for label in ('巨人协议！', '未来汽水', '岿然不动', '制造核心川'):
+        assert auto_play.should_double_click_button(
+            auto_play.ButtonCandidate(
+                label=label,
+                x=0.5,
+                y=0.5,
+                confidence=1.0,
+                clickability=1.0,
+            ),
+            config,
+        )
     assert not auto_play.should_double_click_button(
         auto_play.ButtonCandidate(
             label='进入冒险',
@@ -16902,4 +16913,54 @@ def test_tower_daily_policy_takes_talking_stairs_dragon_blood_before_stale_room(
 
     assert selected is not None
     assert selected[0].label == '告别楼梯，拿走深渊龙血'
+    assert selected[0].clickability == 25.0
+
+
+def test_tower_daily_policy_enters_talking_stairs_from_map(monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_daily_state',
+        lambda _game: {'phase': 'abyss'},
+    )
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'stage': '深渊楼梯',
+            'phase': 'climbing_map',
+            'floor': 12,
+        },
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='当前所在层数',
+            x=0.62,
+            y=0.52,
+            confidence=0.99,
+            clickability=1.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='神秘商店',
+            x=0.27,
+            y=0.69,
+            confidence=0.98,
+            clickability=1.65,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='说话的楼梯',
+            x=0.73,
+            y=0.69,
+            confidence=0.99,
+            clickability=1.62,
+            source='ocr',
+        ),
+    ]
+
+    selected = auto_play.tower_daily_policy_candidates('tower', buttons)
+
+    assert selected is not None
+    assert selected[0].label == '说话的楼梯'
     assert selected[0].clickability == 25.0
