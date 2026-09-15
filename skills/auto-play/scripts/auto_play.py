@@ -9687,6 +9687,12 @@ def score_buttons(
         for button in non_end_buttons
         if is_tower_playable_combat_card_candidate(button, automation_config)
     )
+    tower_visible_playable_card_count = sum(
+        1
+        for button in non_end_buttons
+        if button.source == 'vision'
+        and normalize_label(button.label).startswith('visible playable card')
+    )
     playable_combat_card_visible = combat_card_count > 0
     direct_attack_combat_card_visible = end_visible and any(
         is_tower_playable_combat_card_candidate(button, automation_config)
@@ -10376,7 +10382,7 @@ def score_buttons(
                 and is_defensive_or_setup_combat_card_label(button.label)
             ):
                 score -= 1.0
-            if combat_card_count == 1 and '制造核心' in key:
+            if tower_visible_playable_card_count == 1 and '制造核心' in key:
                 score += 14.0
                 reason = (
                     f'{reason} Use the all-mana core only after every other '

@@ -9660,6 +9660,14 @@ def test_tower_manufacture_core_is_played_when_it_is_only_card(monkeypatch):
             clickability=2.0,
             source='ocr',
         ),
+        auto_play.ButtonCandidate(
+            label='制造核心',
+            x=0.20,
+            y=0.64,
+            confidence=0.99,
+            clickability=1.7,
+            source='ocr',
+        ),
     ]
 
     scored = auto_play.score_buttons(
