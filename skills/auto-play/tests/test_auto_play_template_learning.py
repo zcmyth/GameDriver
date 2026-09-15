@@ -9726,6 +9726,57 @@ def test_tower_manufacture_core_is_played_when_it_is_only_card(monkeypatch):
     assert scored[0].label == 'Visible playable card: 制造核心'
 
 
+def test_tower_builds_shield_before_doubling_it(monkeypatch):
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '战士')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'stage': '深渊楼梯',
+            'profession': '战士',
+            'predecessor_treasure': '巨人之拳',
+        },
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=x,
+            y=0.53,
+            confidence=0.96,
+            clickability=7.4,
+            source='vision',
+        )
+        for label, x in (
+            ('Visible playable card: 防具加固！', 0.20),
+            ('Visible playable card: 举盾', 0.49),
+            ('Visible playable card: 制造核心', 0.78),
+        )
+    ]
+    buttons.append(
+        auto_play.ButtonCandidate(
+            label='结束第1回合',
+            x=0.50,
+            y=0.92,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        )
+    )
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert scored[0].label == 'Visible playable card: 举盾'
+    multiplier = next(button for button in scored if '防具加固' in button.label)
+    core = next(button for button in scored if '制造核心' in button.label)
+    assert scored[0].score > multiplier.score > core.score
+
+
 def test_tower_manufacture_core_is_played_when_only_duplicate_cores_remain(
     monkeypatch,
 ):

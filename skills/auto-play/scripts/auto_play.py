@@ -9760,6 +9760,16 @@ def score_buttons(
             for button in non_end_buttons
         )
     )
+    tower_basic_shield_visible = any(
+        is_tower_playable_combat_card_candidate(button, automation_config)
+        and '举盾' in normalize_label(button.label)
+        for button in non_end_buttons
+    )
+    tower_shield_multiplier_visible = any(
+        is_tower_playable_combat_card_candidate(button, automation_config)
+        and '防具加固' in normalize_label(button.label)
+        for button in non_end_buttons
+    )
     playable_combat_card_visible = combat_card_count > 0
     direct_attack_combat_card_visible = end_visible and any(
         is_tower_playable_combat_card_candidate(button, automation_config)
@@ -10467,6 +10477,14 @@ def score_buttons(
                     f'{reason} Use remaining all-mana cores only after every '
                     'other playable card has resolved.'
                 ).strip()
+            if tower_basic_shield_visible and tower_shield_multiplier_visible:
+                if '举盾' in key:
+                    score += 8.0
+                    reason = (
+                        f'{reason} Build shield before doubling it.'
+                    ).strip()
+                elif '防具加固' in key:
+                    score -= 8.0
             if (
                 button.source == 'template'
                 and navigation_arrow_visible
