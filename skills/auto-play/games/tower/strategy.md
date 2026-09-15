@@ -470,6 +470,7 @@
 - Treat **Forget Card/卡牌遗忘** as a screen title, then choose the highest-confidence known junk card and confirm **遗忘**; if every visible card is core or unreadable, return without deleting anything.
 - If an external game sidebar or sharing panel opens, close it before continuing the tower.
 - 每轮先检查 Android 前台包名。预期游戏包为 `cn.thearky.projectrl`；广告跳入 TapTap 或其他应用时只发送系统返回，不识别或点击外部内容；若落到系统桌面则只重新启动游戏包。TapTap 登录中间页只等待其自动回到游戏。
+- 检测到“服务器正在维护中，是否查看更新详情？”时只等待维护，不点击“确定”、不反复登录或重启。2026-09-16 实机确认本次停服窗口为北京时间 07:00-10:00；维护期间 TapTap 会先返回登录成功，但游戏不会进入存档。
 - If **卡牌使用记录** opens during combat, click **返回** to close it; do not
   treat OCR artifacts like **P.** near the top bar as combat actions.
 
@@ -539,6 +540,8 @@
 - 该层剩余冒险事件
 - 正在进入旅馆
 - 正在前往魔塔冒险
+- 服务器正在维护中
+- 是否查看更新详情
 
 ## Automation Reward Overlay Labels
 - 恭喜获得
@@ -558,6 +561,7 @@
 - 选择卡牌时优先形成一个短链：稳定触发/抽牌或回费、爆发终结、必要回血。没有直接协同时宁可放弃奖励，避免牌组越来越慢。
 - 地图上的“当前层数”和“剩余冒险事件”只是状态文字；必须选具体房间图标，不得点击计数文字。
 - 看到“正在进入旅馆”或“正在前往魔塔冒险”时只等待加载，不点击提示文字。
+- 看到服务器维护提示时保持当前局面并停止重试；维护结束后再从现有深渊存档续跑。
 - 尖塔房间处理完后，已访问的房间图标仍可能保留；优先点底部青色向下箭头离开，不重复访问同一房间。
 - 尖塔终层优先 `强化法阵`，再拿 `BOSS战补给` 的 100% 最大生命恢复，然后挑战 Boss；默认跳过会扰乱核心牌的 `变化法阵`。
 - 尖塔生命商店的免费奖励全部领取；显示 `商品已售馨` 后直接返回，不点击刷新提示，不消耗刷新资源。

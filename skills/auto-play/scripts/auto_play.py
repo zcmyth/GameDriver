@@ -2673,6 +2673,8 @@ TOWER_PASSIVE_STATUS_PREFIXES = (
     '正在加载',
     '正在进入旅馆',
     '正在前往魔塔冒险',
+    '服务器正在维护中',
+    '是否查看更新详情',
 )
 
 TOWER_COMBAT_METADATA_LABELS = {
@@ -2768,6 +2770,31 @@ def tower_loading_wait_candidates(
 ) -> list[ButtonCandidate]:
     if normalize_label(automation_config.game) != 'tower':
         return []
+    maintenance = next(
+        (
+            button
+            for button in buttons
+            if normalize_label(button.label).startswith(
+                ('服务器正在维护中', '是否查看更新详情')
+            )
+        ),
+        None,
+    )
+    if maintenance is not None:
+        return [
+            ButtonCandidate(
+                label='等待服务器维护',
+                x=0.5,
+                y=0.5,
+                confidence=0.99,
+                clickability=30.0,
+                source='wait',
+                reason=(
+                    f'检测到停服提示“{maintenance.label}”；保留当前存档并等待，'
+                    '不点击更新详情或反复登录。'
+                ),
+            )
+        ]
     loading = next(
         (
             button

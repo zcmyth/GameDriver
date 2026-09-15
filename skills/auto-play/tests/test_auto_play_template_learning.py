@@ -3349,6 +3349,48 @@ def test_tower_startup_loading_text_becomes_wait_candidate():
     assert wait[0].source == 'wait'
 
 
+def test_tower_maintenance_prompt_becomes_wait_candidate(monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_daily_state',
+        lambda _game: {'phase': 'abyss'},
+    )
+    config = auto_play.load_automation_config('tower')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='服务器正在维护中，是否查看更新详情？',
+            x=0.5,
+            y=0.47,
+            confidence=0.99,
+            clickability=1.0,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='确定',
+            x=0.5,
+            y=0.61,
+            confidence=0.99,
+            clickability=8.0,
+            source='ocr',
+        ),
+    ]
+
+    filtered = auto_play.filter_configured_non_action_buttons(config, buttons)
+    wait = auto_play.tower_loading_wait_candidates(config, buttons)
+    selected = auto_play.tower_daily_policy_candidates(
+        'tower',
+        [*filtered, *wait],
+    )
+
+    assert [button.label for button in filtered] == ['确定']
+    assert len(wait) == 1
+    assert wait[0].label == '等待服务器维护'
+    assert wait[0].source == 'wait'
+    assert selected is not None
+    assert selected[0].label == '等待服务器维护'
+
+
 def test_tower_reward_overlay_gets_visual_close_candidate():
     auto_play = load_auto_play_module()
     config = automation_config(auto_play, 'tower')
