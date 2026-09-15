@@ -3330,6 +3330,25 @@ def test_tower_loading_text_becomes_wait_candidate():
     assert wait[0].label == '等待页面加载'
 
 
+def test_tower_startup_loading_text_becomes_wait_candidate():
+    auto_play = load_auto_play_module()
+    config = auto_play.load_automation_config('tower')
+    loading = auto_play.ButtonCandidate(
+        label='正在加载...',
+        x=0.5,
+        y=0.76,
+        confidence=0.98,
+        clickability=1.0,
+        source='ocr',
+    )
+
+    assert auto_play.filter_configured_non_action_buttons(config, [loading]) == []
+    wait = auto_play.tower_loading_wait_candidates(config, [loading])
+
+    assert len(wait) == 1
+    assert wait[0].source == 'wait'
+
+
 def test_tower_reward_overlay_gets_visual_close_candidate():
     auto_play = load_auto_play_module()
     config = automation_config(auto_play, 'tower')
@@ -7679,6 +7698,36 @@ def test_blank_loading_screen_ignores_bottom_gesture_bar():
     assert auto_play.is_mostly_blank_screen(image)
 
 
+def test_dimmed_tower_loading_spinner_uses_wait_candidate():
+    auto_play = load_auto_play_module()
+    image = Image.new('RGB', (360, 800), (18, 8, 8))
+    draw = ImageDraw.Draw(image)
+    for x, y in (
+        (180, 392),
+        (193, 396),
+        (202, 408),
+        (202, 424),
+        (193, 436),
+        (180, 440),
+        (167, 436),
+        (158, 424),
+        (158, 408),
+        (167, 396),
+    ):
+        draw.ellipse((x - 3, y - 3, x + 3, y + 3), fill=(85, 195, 205))
+
+    assert auto_play.is_loading_spinner_screen(image)
+
+
+def test_dark_tower_screen_without_center_spinner_is_not_loading():
+    auto_play = load_auto_play_module()
+    image = Image.new('RGB', (360, 800), (18, 8, 8))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((12, 370, 120, 378), fill=(85, 195, 205))
+
+    assert not auto_play.is_loading_spinner_screen(image)
+
+
 def test_repeated_blank_wait_escalates_to_back_candidate():
     auto_play = load_auto_play_module()
 
@@ -7690,6 +7739,42 @@ def test_repeated_blank_wait_escalates_to_back_candidate():
         ]
     )
     assert auto_play.android_back_candidate('stuck').source == 'back'
+
+
+def test_loading_wait_history_resets_after_a_different_action():
+    auto_play = load_auto_play_module()
+
+    assert not auto_play.repeated_blank_wait_detected(
+        [
+            'Wait for loading screen',
+            'Wait for loading screen',
+            'Wait for loading screen',
+            'Android Back',
+        ]
+    )
+
+
+def test_wait_candidate_bypasses_low_action_score():
+    auto_play = load_auto_play_module()
+    wait = auto_play.ButtonCandidate(
+        label='Wait for loading screen',
+        x=0.5,
+        y=0.5,
+        confidence=1.0,
+        clickability=3.0,
+        source='wait',
+        score=-5.8,
+    )
+
+    decision = auto_play.decide_next_move(
+        [wait],
+        min_action_score=0.95,
+        ambiguity_margin=0.2,
+        ask_on_ambiguous=False,
+    )
+
+    assert decision.status == 'ready'
+    assert decision.recommended is wait
 
 
 def test_back_candidate_uses_android_mcp_back_tool(monkeypatch):

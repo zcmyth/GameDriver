@@ -2670,6 +2670,7 @@ def tower_map_exit_candidates(
 TOWER_PASSIVE_STATUS_PREFIXES = (
     '当前层数',
     '该层剩余冒险事件',
+    '正在加载',
     '正在进入旅馆',
     '正在前往魔塔冒险',
 )
@@ -2772,7 +2773,7 @@ def tower_loading_wait_candidates(
             button
             for button in buttons
             if normalize_label(button.label).startswith(
-                ('正在进入旅馆', '正在前往魔塔冒险')
+                ('正在加载', '正在进入旅馆', '正在前往魔塔冒险')
             )
         ),
         None,
@@ -6305,7 +6306,7 @@ def should_remember_ineffective_button(
     }
     if verification.status != 'unchanged' or verification.attempts < 3:
         return False
-    if button.source in {'vision', 'swipe', 'state'}:
+    if button.source in {'back', 'launch_app', 'state', 'swipe', 'vision'}:
         return False
     if looks_like_noise_label(button.label, automation_config):
         return False
@@ -10696,6 +10697,15 @@ def decide_next_move(
             choices=[],
         )
 
+    waiting = next((button for button in buttons if button.source == 'wait'), None)
+    if waiting is not None:
+        return Decision(
+            status='ready',
+            reason='A local loading state is visible; wait without using LLM vision.',
+            recommended=waiting,
+            choices=[waiting],
+        )
+
     tower_next_floor = [
         button
         for button in buttons
@@ -11479,6 +11489,32 @@ def is_mostly_blank_screen(image: Image.Image) -> bool:
     return mean <= 0.025 and stddev <= 0.025
 
 
+def is_loading_spinner_screen(image: Image.Image) -> bool:
+    rgb = np.asarray(image.convert('RGB'))
+    height, width = rgb.shape[:2]
+    if height < 10 or width < 10 or float(rgb.mean()) > 24.0:
+        return False
+
+    left, right = int(width * 0.37), int(width * 0.63)
+    top, bottom = int(height * 0.46), int(height * 0.58)
+    roi = rgb[top:bottom, left:right]
+    if roi.size == 0:
+        return False
+    cyan = (
+        (roi[:, :, 1] > 90)
+        & (roi[:, :, 2] > 100)
+        & (roi[:, :, 1] > roi[:, :, 0] * 1.5)
+        & (roi[:, :, 2] > roi[:, :, 0] * 1.5)
+    )
+    cyan_y, cyan_x = np.where(cyan)
+    if cyan_x.size < 60:
+        return False
+    return bool(
+        np.ptp(cyan_x) >= width * 0.05
+        and np.ptp(cyan_y) >= height * 0.04
+    )
+
+
 def progress_region_for_button(
     image: Image.Image,
     button: ButtonCandidate,
@@ -11551,9 +11587,11 @@ def repeated_blank_wait_detected(
     min_repeats: int = 3,
 ) -> bool:
     wait_label = normalize_label(wait_for_loading_candidate().label)
-    wait_count = sum(
-        1 for label in recent_actions if normalize_label(label) == wait_label
-    )
+    wait_count = 0
+    for label in reversed(recent_actions):
+        if normalize_label(label) != wait_label:
+            break
+        wait_count += 1
     return wait_count >= min_repeats
 
 
@@ -12818,7 +12856,7 @@ def run_turn(args: argparse.Namespace) -> TurnResult:
         ]
     elif android_system_screen_visible(candidate_buttons):
         candidate_buttons = [wait_for_android_unlock_candidate()]
-    elif is_mostly_blank_screen(image):
+    elif is_mostly_blank_screen(image) or is_loading_spinner_screen(image):
         if repeated_blank_wait_detected(recent_actions):
             candidate_buttons = [
                 android_back_candidate(
