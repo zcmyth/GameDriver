@@ -2739,6 +2739,23 @@ def ensure_tower_daily_state(game: str) -> dict[str, Any]:
     return state
 
 
+def configure_tower_daily_focus(game: str, focus: str) -> None:
+    if normalize_label(game) != 'tower' or focus == 'workflow':
+        return
+    state = load_tower_daily_state(game)
+    if not state:
+        return
+    state['focus'] = focus
+    if focus == 'spire' and normalize_label(str(state.get('phase') or '')) not in {
+        'go_to_spire',
+        'spire_running',
+    }:
+        state['phase'] = 'go_to_spire'
+        state['character_selected'] = False
+        state.pop('spire_victory', None)
+    write_tower_daily_state(game, state)
+
+
 def tower_recruit_identity(
     buttons: list[ButtonCandidate],
 ) -> tuple[str, int | None]:
@@ -2794,6 +2811,14 @@ def update_tower_daily_state(
     now = datetime.now().astimezone().isoformat(timespec='seconds')
 
     free_recruits_remaining = tower_free_recruits_remaining(normalized)
+    spire_floor_visible = any(
+        re.search(r'当前层数\s*\d+\s*/\s*\d+', label)
+        for label in normalized
+    )
+    if phase == 'go_to_spire' and spire_floor_visible:
+        state['phase'] = 'spire_running'
+        state['character_selected'] = True
+        phase = 'spire_running'
 
     ordinary_recruits_exhausted = any(
         re.fullmatch(r'0\s*/\s*\d+', label) for label in normalized
@@ -2876,13 +2901,33 @@ def update_tower_daily_state(
         elif phase == 'go_to_spire' and action in {'开始冒险', 'start adventure'}:
             state['phase'] = 'spire_running'
         elif phase == 'spire_running' and action in {
+            '冒险胜利',
+            '马上离开（冒险者转正）',
+            '马上离开(冒险者转正)',
+        }:
+            state['spire_victory'] = True
+        elif phase == 'spire_running' and action in {
             '返回旅馆',
             'return to inn',
         }:
-            state['phase'] = 'abyss_retry'
-            state.setdefault('notes', []).append(
-                '尖塔木屋已结束，优先再次挑战深渊楼梯。'
-            )
+            if normalize_label(str(state.get('focus') or '')) == 'spire':
+                if state.get('spire_victory'):
+                    state['phase'] = 'complete'
+                    state['completed_at'] = now
+                    state.setdefault('notes', []).append(
+                        '尖塔木屋已通关，尖塔专注流程完成。'
+                    )
+                else:
+                    state['phase'] = 'go_to_spire'
+                    state['character_selected'] = False
+                    state.setdefault('notes', []).append(
+                        '尖塔木屋挑战未通关，按尖塔专注模式重试。'
+                    )
+            else:
+                state['phase'] = 'abyss_retry'
+                state.setdefault('notes', []).append(
+                    '尖塔木屋已结束，优先再次挑战深渊楼梯。'
+                )
     state['updated_at'] = now
     write_tower_daily_state(game, state)
 
@@ -3012,7 +3057,7 @@ def tower_daily_policy_candidates(
         for label in labels
     ) or any(is_tower_room_vision_candidate(button) for button in buttons)
     stale_daily_phase_during_abyss = (
-        phase not in {'abyss', 'abyss_retry'}
+        phase not in {'abyss', 'abyss_retry', 'go_to_spire'}
         and normalize_label(str(run_state.get('stage') or '')) == '深渊楼梯'
         and normalize_label(str(run_state.get('phase') or ''))
         in active_abyss_phases
@@ -3484,6 +3529,68 @@ def tower_daily_policy_candidates(
         return None
 
     if phase == 'go_to_spire':
+        run_stage = normalize_label(str(run_state.get('stage') or ''))
+        run_phase = normalize_label(str(run_state.get('phase') or ''))
+        wrong_deep_visible = run_stage == '深渊楼梯' or any(
+            '深渊楼梯' in label
+            or ('每日无尽' in label and '楼梯' in label)
+            for label in labels
+        )
+        if wrong_deep_visible:
+            selected = choose(
+                {'我再想想'},
+                '目标已切换为尖塔；先关闭当前深渊房间的奖励提示。',
+            )
+            if selected is not None:
+                return selected
+            if any('确认放弃冒险' in label for label in labels) or any(
+                '确认放弃战斗' in label for label in labels
+            ):
+                selected = choose(
+                    {'好的', '确定', 'ok', 'confirm'},
+                    '目标已切换为尖塔；确认结束误入的深渊冒险。',
+                )
+                if selected is not None:
+                    return selected
+            for keys, reason in (
+                (
+                    {'放弃冒险', 'abandon adventure'},
+                    '目标已切换为尖塔；彻底放弃可恢复的深渊冒险。',
+                ),
+                (
+                    {'放弃战斗', 'abandon battle'},
+                    '目标已切换为尖塔；结束误入的深渊战斗。',
+                ),
+                (
+                    {'返回旅馆', 'return to inn'},
+                    '目标已切换为尖塔；从深渊设置返回旅馆。',
+                ),
+            ):
+                selected = choose(keys, reason)
+                if selected is not None:
+                    return selected
+            if run_phase not in {'', 'complete', 'defeated'}:
+                selected = choose(
+                    {'设置', 'settings'},
+                    '目标已切换为尖塔；打开设置退出当前深渊。',
+                )
+                if selected is not None:
+                    return selected
+                if run_phase in {'combat', 'climbing_map', 'prebattle'}:
+                    return [
+                        ButtonCandidate(
+                            label='设置',
+                            x=0.94,
+                            y=0.475,
+                            confidence=0.99,
+                            clickability=20.0,
+                            source='state',
+                            reason=(
+                                '目标已切换为尖塔；使用已知的右上角设置'
+                                '位置退出当前深渊。'
+                            ),
+                        )
+                    ]
         target_name = normalize_label(str(state.get('recruited_character_name') or ''))
         target_power = state.get('recruited_character_power')
         selected_character = bool(state.get('character_selected'))
@@ -3603,6 +3710,8 @@ def tower_observation_phase(
     if '恭喜获得' in labels:
         return 'reward_detail'
     if '当前所在层数' in labels:
+        return 'climbing_map'
+    if any(re.search(r'当前层数\s*\d+\s*/\s*\d+', label) for label in labels):
         return 'climbing_map'
     if labels & {'返回旅馆', 'return to inn'}:
         return 'defeated'
@@ -4095,6 +4204,27 @@ def update_tower_run_state(
         key = normalize_label(label)
         spire_floor = re.search(r'当前层数\s*(\d+)\s*/\s*(\d+)', key)
         if spire_floor:
+            if (
+                normalize_label(previous_stage) != '尖塔木屋'
+                or state.get('floor_goal') is None
+            ):
+                for stale_key in (
+                    'last_room_action',
+                    'last_room_position',
+                    'awaiting_route_after_reward',
+                    'post_revive_route_guard',
+                    'reroll_predecessor',
+                    'awaiting_predecessor_treasure',
+                    'predecessor_treasure',
+                    'stop_loss_reason',
+                ):
+                    state.pop(stale_key, None)
+                state['run_id'] = datetime.now().astimezone().strftime(
+                    '%Y%m%dT%H%M%S%z'
+                )
+                state['started_at'] = now
+                state['core_cards'] = []
+                state['key_treasures'] = []
             state['stage'] = '尖塔木屋'
             state['floor'] = int(spire_floor.group(1))
             state['floor_goal'] = int(spire_floor.group(2))
@@ -10736,6 +10866,15 @@ def parse_args() -> argparse.Namespace:
             '新招募角色尖塔木屋。'
         ),
     )
+    parser.add_argument(
+        '--tower-daily-focus',
+        choices=('workflow', 'spire'),
+        default='workflow',
+        help=(
+            '魔塔每日流程目标；spire 会在尖塔失败后继续重试，'
+            '并在尖塔通关后结束。'
+        ),
+    )
     parser.add_argument('--save-screen', type=Path, help='Optional screenshot path.')
     parser.add_argument(
         '--save-overlay', type=Path, help='Optional annotated image path.'
@@ -11103,12 +11242,21 @@ def run_turn(args: argparse.Namespace) -> TurnResult:
         candidate_buttons,
     )
     if getattr(args, 'tower_daily', False):
-        update_tower_daily_state(args.game, candidate_buttons)
+        update_tower_daily_state(
+            args.game,
+            merge_buttons([*candidate_buttons, *detected_buttons]),
+        )
         run_state = load_tower_run_state(args.game)
+        daily_state = load_tower_daily_state(args.game)
+        daily_phase = normalize_label(str(daily_state.get('phase') or ''))
+        run_stage = normalize_label(str(run_state.get('stage') or ''))
+        run_phase = normalize_label(str(run_state.get('phase') or ''))
         if (
-            run_state.get('reroll_predecessor')
-            and normalize_label(str(run_state.get('phase') or ''))
-            in {'combat', 'climbing_map', 'prebattle'}
+            (
+                run_state.get('reroll_predecessor')
+                or (daily_phase == 'go_to_spire' and run_stage == '深渊楼梯')
+            )
+            and run_phase in {'combat', 'climbing_map', 'prebattle'}
         ):
             candidate_buttons = [
                 *candidate_buttons,
@@ -11217,9 +11365,14 @@ def run_turn(args: argparse.Namespace) -> TurnResult:
         recent_actions=recent_actions,
     )
     if normalize_label(str(daily_state.get('phase') or '')) == 'complete':
+        daily_focus = normalize_label(str(daily_state.get('focus') or ''))
         decision = Decision(
             status='complete',
-            reason='今日深渊、招募和新角色尖塔木屋流程已完成。',
+            reason=(
+                '尖塔木屋已通关，尖塔专注流程完成。'
+                if daily_focus == 'spire'
+                else '今日深渊、招募和新角色尖塔木屋流程已完成。'
+            ),
             recommended=None,
             choices=[],
         )
@@ -11386,6 +11539,7 @@ def run_main(args: argparse.Namespace) -> int:
         append_learned_choice(args.game, args.remember_choice, args.choice_reason)
     if getattr(args, 'tower_daily', False):
         ensure_tower_daily_state(args.game)
+        configure_tower_daily_focus(args.game, args.tower_daily_focus)
 
     turn = 0
     unchanged_restarts = 0

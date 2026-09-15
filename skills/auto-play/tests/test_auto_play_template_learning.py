@@ -2407,8 +2407,9 @@ def test_top_playfield_probe_beats_minimap_arrow_during_navigation_loop():
     assert decision.recommended.label == 'Top path up'
 
 
-def test_tower_map_room_detector_prefers_concrete_room_over_arrows():
+def test_tower_map_room_detector_prefers_concrete_room_over_arrows(monkeypatch):
     auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'load_tower_run_state', lambda _game: {})
     config = automation_config(auto_play, 'tower')
     image = Image.new('RGB', (360, 800), color=(28, 32, 34))
     draw = ImageDraw.Draw(image)
@@ -10692,8 +10693,52 @@ def test_tower_fractional_floor_hud_self_heals_stale_run_state(
 
     state = auto_play.load_tower_run_state('tower')
     assert state['stage'] == '尖塔木屋'
+    assert state['phase'] == 'climbing_map'
     assert state['floor'] == 2
     assert state['floor_goal'] == 7
+
+
+def test_tower_first_spire_floor_clears_previous_run_navigation(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    state_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(
+        'run_id: deep-run\n'
+        'stage: 尖塔木屋\n'
+        'phase: initial_setup\n'
+        'floor: 1\n'
+        'last_room_action: 前辈的宝物\n'
+        'last_room_position: [0.27, 0.69]\n'
+        'awaiting_route_after_reward: true\n'
+        'reroll_predecessor: true\n'
+    )
+    image = Image.new('RGB', (360, 800), color='black')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='当前层数1/7',
+            x=0.53,
+            y=0.53,
+            confidence=1.0,
+            clickability=1.0,
+            source='ocr',
+        )
+    ]
+
+    auto_play.update_tower_run_state('tower', image, buttons)
+
+    state = auto_play.load_tower_run_state('tower')
+    assert state['run_id'] != 'deep-run'
+    assert state['phase'] == 'climbing_map'
+    assert state['floor'] == 1
+    assert state['floor_goal'] == 7
+    assert 'last_room_action' not in state
+    assert 'last_room_position' not in state
+    assert 'awaiting_route_after_reward' not in state
+    assert 'reroll_predecessor' not in state
 
 
 def test_tower_abyss_map_floor_digit_self_heals_stale_run_state(
@@ -11125,6 +11170,88 @@ def test_tower_daily_prioritizes_abyss_after_spire(tmp_path, monkeypatch):
     assert state['notes'] == ['尖塔木屋已结束，优先再次挑战深渊楼梯。']
 
 
+def test_tower_daily_spire_focus_retries_spire_after_defeat(tmp_path, monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    auto_play.write_tower_daily_state(
+        'tower',
+        {
+            'date': '2026-09-13',
+            'phase': 'spire_running',
+            'focus': 'spire',
+            'notes': [],
+        },
+    )
+
+    auto_play.update_tower_daily_state(
+        'tower',
+        [],
+        clicked_label='返回旅馆',
+        action_succeeded=True,
+    )
+
+    state = auto_play.load_tower_daily_state('tower')
+    assert state['phase'] == 'go_to_spire'
+    assert state['character_selected'] is False
+    assert state['notes'] == ['尖塔木屋挑战未通关，按尖塔专注模式重试。']
+
+
+def test_tower_daily_spire_focus_completes_after_victory(tmp_path, monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    auto_play.write_tower_daily_state(
+        'tower',
+        {
+            'date': '2026-09-13',
+            'phase': 'spire_running',
+            'focus': 'spire',
+            'notes': [],
+        },
+    )
+
+    auto_play.update_tower_daily_state(
+        'tower',
+        [],
+        clicked_label='冒险胜利',
+        action_succeeded=True,
+    )
+    auto_play.update_tower_daily_state(
+        'tower',
+        [],
+        clicked_label='返回旅馆',
+        action_succeeded=True,
+    )
+
+    state = auto_play.load_tower_daily_state('tower')
+    assert state['phase'] == 'complete'
+    assert state['completed_at']
+    assert state['notes'] == ['尖塔木屋已通关，尖塔专注流程完成。']
+
+
+def test_configure_tower_daily_focus_redirects_active_workflow(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    auto_play.write_tower_daily_state(
+        'tower',
+        {
+            'date': '2026-09-13',
+            'phase': 'abyss_retry',
+            'spire_victory': True,
+        },
+    )
+
+    auto_play.configure_tower_daily_focus('tower', 'spire')
+
+    state = auto_play.load_tower_daily_state('tower')
+    assert state['focus'] == 'spire'
+    assert state['phase'] == 'go_to_spire'
+    assert state['character_selected'] is False
+    assert 'spire_victory' not in state
+
+
 def test_tower_daily_uses_remaining_recruits_after_second_abyss(
     tmp_path,
     monkeypatch,
@@ -11314,6 +11441,213 @@ def test_tower_daily_spire_loadout_scrolls_then_selects_new_recruit(
     assert selection[0].label == '选择新招募角色：快活的卤蛋'
     assert selection[0].x == target.x
     assert selection[0].y == target.y
+
+
+def test_tower_daily_opens_settings_when_spire_target_is_in_deep_abyss(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    auto_play.write_tower_daily_state(
+        'tower',
+        {'date': '2026-09-14', 'phase': 'go_to_spire'},
+    )
+    run_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    run_path.write_text(
+        'run_id: run-1\nstage: 深渊楼梯\nphase: climbing_map\n'
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=x,
+            y=y,
+            confidence=0.99,
+            clickability=1.8,
+            source='ocr',
+        )
+        for label, x, y in (
+            ('前辈的宝物', 0.27, 0.41),
+            ('职业牌包', 0.69, 0.65),
+            ('当前所在层数', 0.63, 0.51),
+            ('设置', 0.94, 0.05),
+        )
+    ]
+
+    selection = auto_play.tower_daily_policy_candidates('tower', buttons)
+
+    assert selection is not None
+    assert selection[0].label == '设置'
+    assert '退出当前深渊' in selection[0].reason
+
+
+def test_tower_daily_synthesizes_settings_when_icon_has_no_text(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    auto_play.write_tower_daily_state(
+        'tower',
+        {'date': '2026-09-14', 'phase': 'go_to_spire'},
+    )
+    run_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    run_path.write_text(
+        'run_id: run-1\nstage: 深渊楼梯\nphase: climbing_map\n'
+    )
+    room = auto_play.ButtonCandidate(
+        label='职业牌包',
+        x=0.69,
+        y=0.65,
+        confidence=0.99,
+        clickability=1.8,
+        source='ocr',
+    )
+
+    selection = auto_play.tower_daily_policy_candidates('tower', [room])
+
+    assert selection is not None
+    assert selection[0].label == '设置'
+    assert selection[0].source == 'state'
+    assert selection[0].x == 0.94
+    assert selection[0].y == 0.475
+
+
+def test_tower_daily_closes_deep_abyss_room_before_opening_settings(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    auto_play.write_tower_daily_state(
+        'tower',
+        {'date': '2026-09-14', 'phase': 'go_to_spire'},
+    )
+    run_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    run_path.write_text(
+        'run_id: run-1\nstage: 深渊楼梯\nphase: climbing_map\n'
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=0.5,
+            y=y,
+            confidence=0.99,
+            clickability=1.8,
+            source='ocr',
+        )
+        for label, y in (
+            ('拿走前辈的宝物', 0.61),
+            ('我再想想', 0.69),
+        )
+    ]
+
+    selection = auto_play.tower_daily_policy_candidates('tower', buttons)
+
+    assert selection is not None
+    assert selection[0].label == '我再想想'
+
+
+def test_tower_daily_returns_to_inn_when_leaving_wrong_deep_abyss(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    auto_play.write_tower_daily_state(
+        'tower',
+        {'date': '2026-09-14', 'phase': 'go_to_spire'},
+    )
+    run_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    run_path.write_text('run_id: run-1\nstage: 深渊楼梯\nphase: combat\n')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=0.5,
+            y=y,
+            confidence=0.99,
+            clickability=1.8,
+            source='ocr',
+        )
+        for label, y in (
+            ('继续冒险', 0.48),
+            ('返回旅馆', 0.59),
+        )
+    ]
+
+    selection = auto_play.tower_daily_policy_candidates('tower', buttons)
+
+    assert selection is not None
+    assert selection[0].label == '返回旅馆'
+
+
+def test_tower_daily_abandons_wrong_deep_abyss_after_returning_to_inn(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    auto_play.write_tower_daily_state(
+        'tower',
+        {'date': '2026-09-14', 'phase': 'go_to_spire'},
+    )
+    run_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    run_path.write_text('run_id: run-1\nstage: 深渊楼梯\nphase: complete\n')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=0.5,
+            y=y,
+            confidence=0.99,
+            clickability=1.8,
+            source='ocr',
+        )
+        for label, y in (
+            ('恢复冒险', 0.54),
+            ('放弃冒险', 0.62),
+        )
+    ]
+
+    selection = auto_play.tower_daily_policy_candidates('tower', buttons)
+
+    assert selection is not None
+    assert selection[0].label == '放弃冒险'
+
+
+def test_tower_daily_abandons_visible_deep_resume_after_selecting_spire(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    auto_play.write_tower_daily_state(
+        'tower',
+        {'date': '2026-09-14', 'phase': 'go_to_spire'},
+    )
+    run_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    run_path.write_text(
+        'run_id: run-1\nstage: 尖塔木屋\nphase: complete\n'
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=0.5,
+            y=y,
+            confidence=0.99,
+            clickability=1.8,
+            source='ocr',
+        )
+        for label, y in (
+            ('每日无尽 深澜楼梯(1)', 0.44),
+            ('恢复冒险', 0.54),
+            ('放弃冒险', 0.62),
+        )
+    ]
+
+    selection = auto_play.tower_daily_policy_candidates('tower', buttons)
+
+    assert selection is not None
+    assert selection[0].label == '放弃冒险'
 
 
 def test_tower_daily_opens_settings_to_reroll_wrong_predecessor(
@@ -11686,6 +12020,38 @@ def test_tower_daily_spire_enters_victory_exit(tmp_path, monkeypatch):
 
     assert selection is not None
     assert selection[0].label == '冒险胜利'
+
+
+def test_tower_daily_self_heals_to_running_on_spire_floor_hud(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    auto_play.write_tower_daily_state(
+        'tower',
+        {
+            'date': '2026-09-14',
+            'phase': 'go_to_spire',
+            'character_selected': False,
+        },
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='当前层数1/7',
+            x=0.5,
+            y=0.53,
+            confidence=0.99,
+            clickability=1.8,
+            source='ocr',
+        )
+    ]
+
+    auto_play.update_tower_daily_state('tower', buttons)
+
+    state = auto_play.load_tower_daily_state('tower')
+    assert state['phase'] == 'spire_running'
+    assert state['character_selected'] is True
 
 
 def test_tower_daily_spire_leaves_immediately_after_victory(
