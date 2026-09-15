@@ -9581,6 +9581,96 @@ def test_tower_warrior_orders_setup_before_attacks_and_mana_sink(monkeypatch):
     assert attack_gem > weakness > guard > attack > mana_sink
 
 
+def test_tower_giant_warrior_uses_attack_before_manufacture_core(monkeypatch):
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '战士')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'stage': '深渊楼梯',
+            'profession': '战士',
+            'predecessor_treasure': '巨人之拳',
+        },
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=x,
+            y=0.53,
+            confidence=0.96,
+            clickability=7.4,
+            source='vision',
+        )
+        for label, x in (
+            ('Visible playable card: 制造核心', 0.20),
+            ('Visible playable card: 全力一击', 0.49),
+        )
+    ]
+    buttons.append(
+        auto_play.ButtonCandidate(
+            label='结束第1回合',
+            x=0.50,
+            y=0.92,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        )
+    )
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert scored[0].label == 'Visible playable card: 全力一击'
+    core = next(button for button in scored if '制造核心' in button.label)
+    assert core.score < scored[0].score
+
+
+def test_tower_manufacture_core_is_played_when_it_is_only_card(monkeypatch):
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '战士')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'stage': '深渊楼梯',
+            'profession': '战士',
+            'predecessor_treasure': '巨人之拳',
+        },
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='Visible playable card: 制造核心',
+            x=0.20,
+            y=0.53,
+            confidence=0.96,
+            clickability=7.4,
+            source='vision',
+        ),
+        auto_play.ButtonCandidate(
+            label='结束第1回合',
+            x=0.50,
+            y=0.92,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        ),
+    ]
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert scored[0].label == 'Visible playable card: 制造核心'
+
+
 def test_tower_weakness_strike_becomes_finisher_after_setup(monkeypatch):
     auto_play = load_auto_play_module()
     monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '战士')

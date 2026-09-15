@@ -667,6 +667,8 @@ def tower_combat_sequence_bonus(game: str, label: str) -> float:
         return 25.0
     if '巨人协议' in key:
         return 15.0
+    if '制造核心' in key:
+        return -12.0
     profession = tower_run_profession(game)
     state = load_tower_run_state(game)
     predecessor = normalize_label(str(state.get('predecessor_treasure') or ''))
@@ -774,7 +776,6 @@ def tower_combat_sequence_bonus(game: str, label: str) -> float:
                 ('弱点加倍', 3.0),
                 ('幽灵剑', 2.0),
                 ('弱点打击', 4.0 if weakness_applied else -2.0),
-                ('制造核心', -12.0),
             )
     else:
         priorities = ()
@@ -10375,7 +10376,7 @@ def score_buttons(
                 and is_defensive_or_setup_combat_card_label(button.label)
             ):
                 score -= 1.0
-            if combat_card_count <= 2 and '制造核心' in key:
+            if combat_card_count == 1 and '制造核心' in key:
                 score += 14.0
                 reason = (
                     f'{reason} Use the all-mana core only after every other '
