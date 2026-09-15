@@ -9249,6 +9249,28 @@ def test_tower_giant_warrior_sets_up_attack_gem_and_bear_hand_first(
     assert not auto_play.is_direct_attack_combat_card_label('攻击宝石')
 
 
+def test_tower_warrior_plays_engine_and_draw_cards_before_plain_attacks(
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '战士')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'profession': '战士',
+            'predecessor_treasure': '骑士狼牙棒',
+        },
+    )
+
+    attack_gem = auto_play.tower_combat_sequence_bonus('tower', '攻击宝石！')
+    swift_attack = auto_play.tower_combat_sequence_bonus('tower', '迅捷攻击！')
+    guarded_draw = auto_play.tower_combat_sequence_bonus('tower', '守势')
+    plain_attack = auto_play.tower_combat_sequence_bonus('tower', '普通攻击')
+
+    assert attack_gem > swift_attack > guarded_draw > plain_attack
+
+
 def test_tower_mage_does_not_play_electrolysis_without_cold_source(monkeypatch):
     auto_play = load_auto_play_module()
     monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '法师')

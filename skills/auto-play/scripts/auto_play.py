@@ -753,6 +753,11 @@ def tower_combat_sequence_bonus(game: str, label: str) -> float:
             )
         else:
             priorities = (
+                ('愤怒宝石', 11.0),
+                ('攻击宝石', 10.0),
+                ('迅捷攻击', 9.0),
+                ('迅捷', 8.0),
+                ('守势', 7.0),
                 ('换血', 6.0),
                 ('发现弱点', 5.0),
                 ('弱点加倍', 3.0),
