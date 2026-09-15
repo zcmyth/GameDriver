@@ -2746,14 +2746,41 @@ def configure_tower_daily_focus(game: str, focus: str) -> None:
     if not state:
         return
     state['focus'] = focus
-    if focus == 'spire' and normalize_label(str(state.get('phase') or '')) not in {
-        'go_to_spire',
-        'spire_running',
-    }:
+    phase = normalize_label(str(state.get('phase') or ''))
+    if focus == 'spire' and phase not in {'go_to_spire', 'spire_running'}:
         state['phase'] = 'go_to_spire'
         state['character_selected'] = False
         state.pop('spire_victory', None)
+    elif focus == 'recruit_spire' and phase not in {
+        'recruit',
+        'recruit_result',
+        'go_to_spire',
+        'spire_running',
+    }:
+        state['phase'] = 'recruit'
+        state['recruited_character_name'] = ''
+        state['recruited_character_power'] = None
+        state['character_selected'] = False
+        state['selection_swipes'] = 0
+        state.pop('spire_victory', None)
+        state.pop('spire_attempts_exhausted', None)
+        state.pop('recruitment_blocked_by_capacity', None)
     write_tower_daily_state(game, state)
+
+
+def tower_daily_completion_reason(state: dict[str, Any]) -> str:
+    focus = normalize_label(str(state.get('focus') or ''))
+    if focus == 'recruit_spire':
+        if state.get('spire_victory'):
+            return '招募一次并通关尖塔木屋，流程完成。'
+        if state.get('recruitment_blocked_by_capacity'):
+            return '见习冒险者容量已满；未解雇角色，招募尖塔流程停止。'
+        if state.get('spire_attempts_exhausted'):
+            return '已招募并挑战尖塔；今日次数已用完，未购买次数。'
+        return '招募一次并挑战尖塔木屋，流程已结束。'
+    if focus == 'spire':
+        return '尖塔木屋已通关，尖塔专注流程完成。'
+    return '今日深渊、招募和新角色尖塔木屋流程已完成。'
 
 
 def tower_recruit_identity(
@@ -2847,8 +2874,23 @@ def update_tower_daily_state(
 
     if clicked_label and action_succeeded:
         state['last_action'] = clicked_label
-        if phase in {'recruit', 'recruit_all'} and action == '取消招募容量弹窗':
-            state['phase'] = 'abyss_retry'
+        if (
+            phase in {'go_to_spire', 'spire_running'}
+            and action == '关闭尖塔次数提示'
+        ):
+            state['phase'] = 'complete'
+            state['completed_at'] = now
+            state['spire_attempts_exhausted'] = True
+            state.setdefault('notes', []).append(
+                '尖塔木屋今日次数已用完；返回冒险页并停止，未购买次数。'
+            )
+        elif phase in {'recruit', 'recruit_all'} and action == '取消招募容量弹窗':
+            recruit_spire_focus = (
+                normalize_label(str(state.get('focus') or '')) == 'recruit_spire'
+            )
+            state['phase'] = 'complete' if recruit_spire_focus else 'abyss_retry'
+            if recruit_spire_focus:
+                state['completed_at'] = now
             state['recruitment_blocked_by_capacity'] = True
             state.setdefault('notes', []).append(
                 '见习冒险者容量已满；为遵守绝不解雇/出售，'
@@ -2910,7 +2952,10 @@ def update_tower_daily_state(
             '返回旅馆',
             'return to inn',
         }:
-            if normalize_label(str(state.get('focus') or '')) == 'spire':
+            if normalize_label(str(state.get('focus') or '')) in {
+                'spire',
+                'recruit_spire',
+            }:
                 if state.get('spire_victory'):
                     state['phase'] = 'complete'
                     state['completed_at'] = now
@@ -3084,6 +3129,22 @@ def tower_daily_policy_candidates(
                 button,
                 clickability=max(button.clickability, 20.0),
                 reason=reason,
+            )
+        ]
+
+    if phase in {'go_to_spire', 'spire_running'} and '今日次数已用完' in labels:
+        return [
+            ButtonCandidate(
+                label='关闭尖塔次数提示',
+                x=0.10,
+                y=0.965,
+                confidence=0.99,
+                clickability=20.0,
+                source='state',
+                reason=(
+                    '尖塔今日次数已用完；点击左下角返回冒险页并停止，'
+                    '禁止点击刷新倒计时或购买次数。'
+                ),
             )
         ]
 
@@ -8544,6 +8605,8 @@ def score_buttons(
             or (
                 len(tower_last_room_position) == 2
                 and is_tower_room_vision_candidate(button)
+                and normalize_label(button.label)
+                != 'visible next-floor stair room'
                 and (
                     abs(button.x - float(tower_last_room_position[0]))
                     + abs(button.y - float(tower_last_room_position[1]))
@@ -8853,6 +8916,9 @@ def score_buttons(
                 score -= 2.0
             if (
                 len(tower_last_room_position) == 2
+                and normalize_label(button.label)
+                != 'visible next-floor stair room'
+                and not is_tower_next_floor_action(button.label)
                 and (
                     abs(button.x - float(tower_last_room_position[0]))
                     + abs(button.y - float(tower_last_room_position[1]))
@@ -10868,11 +10934,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         '--tower-daily-focus',
-        choices=('workflow', 'spire'),
+        choices=('workflow', 'spire', 'recruit_spire'),
         default='workflow',
         help=(
-            '魔塔每日流程目标；spire 会在尖塔失败后继续重试，'
-            '并在尖塔通关后结束。'
+            '魔塔每日流程目标；spire 会直接挑战尖塔，recruit_spire '
+            '会先招募一次再用新人挑战；两者均在尖塔通关后结束。'
         ),
     )
     parser.add_argument('--save-screen', type=Path, help='Optional screenshot path.')
@@ -11365,14 +11431,9 @@ def run_turn(args: argparse.Namespace) -> TurnResult:
         recent_actions=recent_actions,
     )
     if normalize_label(str(daily_state.get('phase') or '')) == 'complete':
-        daily_focus = normalize_label(str(daily_state.get('focus') or ''))
         decision = Decision(
             status='complete',
-            reason=(
-                '尖塔木屋已通关，尖塔专注流程完成。'
-                if daily_focus == 'spire'
-                else '今日深渊、招募和新角色尖塔木屋流程已完成。'
-            ),
+            reason=tower_daily_completion_reason(daily_state),
             recommended=None,
             choices=[],
         )

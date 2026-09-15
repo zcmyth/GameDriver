@@ -11252,6 +11252,127 @@ def test_configure_tower_daily_focus_redirects_active_workflow(
     assert 'spire_victory' not in state
 
 
+def test_configure_tower_recruit_spire_focus_starts_with_one_recruit(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    auto_play.write_tower_daily_state(
+        'tower',
+        {
+            'date': '2026-09-14',
+            'phase': 'complete',
+            'recruited_character_name': '旧角色',
+            'recruited_character_power': 1234,
+            'character_selected': True,
+            'selection_swipes': 4,
+            'spire_victory': True,
+            'recruitment_blocked_by_capacity': True,
+        },
+    )
+
+    auto_play.configure_tower_daily_focus('tower', 'recruit_spire')
+
+    state = auto_play.load_tower_daily_state('tower')
+    assert state['focus'] == 'recruit_spire'
+    assert state['phase'] == 'recruit'
+    assert state['recruited_character_name'] == ''
+    assert state['recruited_character_power'] is None
+    assert state['character_selected'] is False
+    assert state['selection_swipes'] == 0
+    assert 'spire_victory' not in state
+    assert 'recruitment_blocked_by_capacity' not in state
+
+
+def test_tower_recruit_spire_focus_stops_when_capacity_is_full(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    auto_play.write_tower_daily_state(
+        'tower',
+        {
+            'date': '2026-09-14',
+            'phase': 'recruit',
+            'focus': 'recruit_spire',
+            'notes': [],
+        },
+    )
+
+    auto_play.update_tower_daily_state(
+        'tower',
+        [],
+        clicked_label='取消招募容量弹窗',
+        action_succeeded=True,
+    )
+
+    state = auto_play.load_tower_daily_state('tower')
+    assert state['phase'] == 'complete'
+    assert state['completed_at']
+    assert state['recruitment_blocked_by_capacity'] is True
+
+
+def test_tower_recruit_spire_focus_stops_when_daily_spire_attempts_are_used(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    auto_play.write_tower_daily_state(
+        'tower',
+        {
+            'date': '2026-09-14',
+            'phase': 'go_to_spire',
+            'focus': 'recruit_spire',
+            'notes': [],
+        },
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='今日次数已用完',
+            x=0.5,
+            y=0.49,
+            confidence=0.99,
+            clickability=1.5,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='12:27:28后刷新',
+            x=0.5,
+            y=0.55,
+            confidence=0.98,
+            clickability=1.8,
+            source='ocr',
+        ),
+    ]
+
+    selection = auto_play.tower_daily_policy_candidates('tower', buttons)
+
+    assert selection is not None
+    assert selection[0].label == '关闭尖塔次数提示'
+    assert selection[0].x == 0.10
+    assert selection[0].y == 0.965
+
+    auto_play.update_tower_daily_state(
+        'tower',
+        buttons,
+        clicked_label=selection[0].label,
+        action_succeeded=True,
+    )
+
+    state = auto_play.load_tower_daily_state('tower')
+    assert state['phase'] == 'complete'
+    assert state['completed_at']
+    assert state['spire_attempts_exhausted'] is True
+    assert '未购买次数' in state['notes'][-1]
+    assert (
+        auto_play.tower_daily_completion_reason(state)
+        == '已招募并挑战尖塔；今日次数已用完，未购买次数。'
+    )
+
+
 def test_tower_daily_uses_remaining_recruits_after_second_abyss(
     tmp_path,
     monkeypatch,
@@ -11382,6 +11503,62 @@ def test_tower_generic_loop_leaves_completed_reward_room_by_position(
 
     assert scored[0].x == 0.74
     assert 'Enter a new Tower room after reward' in scored[0].reason
+
+
+def test_tower_next_floor_ignores_reused_previous_room_position(monkeypatch):
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'awaiting_route_after_reward': False,
+            'last_room_action': '宝石牌包',
+            'last_room_position': [0.70, 0.69],
+        },
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='Visible next-floor stair room',
+            x=0.70,
+            y=0.68,
+            confidence=0.98,
+            clickability=9.0,
+            source='vision',
+        ),
+        auto_play.ButtonCandidate(
+            label='进入下一层',
+            x=0.70,
+            y=0.69,
+            confidence=0.97,
+            clickability=1.5,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='右侧道路',
+            x=0.93,
+            y=0.75,
+            confidence=0.96,
+            clickability=0.9,
+            source='template',
+        ),
+    ]
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+    decision = auto_play.decide_next_move(
+        scored,
+        min_action_score=1.0,
+        ambiguity_margin=0.2,
+        ask_on_ambiguous=False,
+        automation_config=config,
+    )
+
+    assert decision.recommended is not None
+    assert decision.recommended.label == 'Visible next-floor stair room'
 
 
 def test_tower_daily_spire_loadout_scrolls_then_selects_new_recruit(
