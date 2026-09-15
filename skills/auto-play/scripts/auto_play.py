@@ -4634,7 +4634,7 @@ def tower_deep_map_room_bonus(label: str) -> float:
         '宝石牌包': 6.0,
         '职业牌包': 5.0,
         '金币商店': 5.5,
-        '魔术商店': 2.25,
+        '魔术商店': 5.5,
         '水晶商店': 5.5,
         '神秘商店': 0.5,
         '神桃商店': 0.5,
@@ -10040,7 +10040,8 @@ def score_buttons(
                 )
                 and not is_configured_command_label(button.label, automation_config)
             ):
-                score -= 2.0
+                score -= 8.0
+                reason = f'{reason} Leave recently completed Tower room.'.strip()
             if (
                 len(tower_last_room_position) == 2
                 and normalize_label(button.label)
@@ -10320,7 +10321,8 @@ def score_buttons(
                 '神桃商店': 0.5,
                 '变化法阵': 1.0,
             }
-            score -= tower_shop_route_penalties.get(key, 0.0)
+            if not tower_map_context_visible:
+                score -= tower_shop_route_penalties.get(key, 0.0)
             if tower_map_context_visible:
                 score += tower_deep_map_room_bonus(button.label)
                 if is_tower_status_fraction_label(button.label):

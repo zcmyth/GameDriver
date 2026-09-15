@@ -10741,6 +10741,51 @@ def test_tower_healthy_route_values_crystal_shop_over_plain_rest():
     ) > auto_play.tower_deep_map_room_bonus('休息点')
 
 
+def test_tower_route_enters_crystal_shop_before_plain_rest():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=x,
+            y=0.69,
+            confidence=confidence,
+            clickability=clickability,
+            source='ocr',
+        )
+        for label, x, confidence, clickability in (
+            ('休息点', 0.27, 0.98, 1.54),
+            ('水晶商店', 0.71, 0.998, 1.65),
+        )
+    ]
+    buttons.append(
+        auto_play.ButtonCandidate(
+            label='右侧道路',
+            x=0.91,
+            y=0.75,
+            confidence=0.99,
+            clickability=7.0,
+            source='vision',
+        )
+    )
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+    decision = auto_play.decide_next_move(
+        scored,
+        min_action_score=0.0,
+        ambiguity_margin=0.5,
+        ask_on_ambiguous=False,
+        automation_config=config,
+    )
+
+    assert decision.recommended is not None
+    assert decision.recommended.label == '水晶商店'
+
+
 def test_tower_trainer_prefers_gold_interest_over_saying_goodbye(
     tmp_path,
     monkeypatch,
