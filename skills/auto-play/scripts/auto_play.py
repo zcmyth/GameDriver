@@ -754,17 +754,26 @@ def tower_combat_sequence_bonus(game: str, label: str) -> float:
                 ('换血', 2.0),
             )
         else:
+            battle = state.get('battle') or {}
+            floor = int(state.get('floor') or 0)
+            guard_bonus = (
+                11.0
+                if bool(battle.get('player_hp_critical'))
+                or (floor > 0 and floor % 10 == 0)
+                else 7.0
+            )
             priorities = (
-                ('愤怒宝石', 11.0),
-                ('攻击宝石', 10.0),
+                ('愤怒宝石', 14.0),
+                ('攻击宝石', 13.0),
+                ('发现弱点', 12.0),
+                ('守势', guard_bonus),
                 ('迅捷攻击', 9.0),
                 ('迅捷', 8.0),
-                ('守势', 7.0),
                 ('换血', 6.0),
-                ('发现弱点', 5.0),
                 ('弱点加倍', 3.0),
                 ('幽灵剑', 2.0),
                 ('弱点打击', -2.0),
+                ('制造核心', -12.0),
             )
     else:
         priorities = ()
@@ -5389,12 +5398,24 @@ def tower_battle_requires_precise_read(game: str) -> bool:
         normalize_label(str(card)) for card in state.get('core_cards') or []
     )
     battle = state.get('battle') or {}
+    known_card_text = ' '.join(
+        (
+            core_text,
+            *(
+                normalize_label(str(card))
+                for card in battle.get('initial_hand') or []
+            ),
+        )
+    )
+    floor = int(state.get('floor') or 0)
     return (
-        is_tower_timing_sensitive_finisher_label(core_text)
-        or '电解冰' in core_text
-        or '快速思考' in core_text
+        is_tower_timing_sensitive_finisher_label(known_card_text)
+        or '电解冰' in known_card_text
+        or '快速思考' in known_card_text
+        or '制造核心' in known_card_text
+        or (floor > 0 and floor % 10 == 0)
         or (
-            '神圣斩击' in core_text
+            '神圣斩击' in known_card_text
             and bool(battle.get('enemy_sacred_finisher_range'))
         )
     )

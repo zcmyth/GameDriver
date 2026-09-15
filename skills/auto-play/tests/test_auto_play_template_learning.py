@@ -9501,6 +9501,51 @@ def test_tower_quick_thinking_build_requires_per_action_local_ocr(
     assert auto_play.tower_battle_requires_precise_read('tower') is True
 
 
+def test_tower_manufacture_core_and_boss_floor_require_precise_reads(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    state_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(
+        'run_id: robot-run\n'
+        'floor: 7\n'
+        'battle:\n'
+        '  initial_hand:\n'
+        '    - 制造核心Ⅲ\n'
+    )
+
+    assert auto_play.tower_battle_requires_precise_read('tower') is True
+
+    state_path.write_text('run_id: boss-run\nfloor: 20\n')
+
+    assert auto_play.tower_battle_requires_precise_read('tower') is True
+
+
+def test_tower_warrior_orders_setup_before_attacks_and_mana_sink(monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '战士')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'profession': '战士',
+            'predecessor_treasure': '骑士狼牙棒',
+            'floor': 20,
+        },
+    )
+
+    attack_gem = auto_play.tower_combat_sequence_bonus('tower', '攻击宝石')
+    weakness = auto_play.tower_combat_sequence_bonus('tower', '发现弱点')
+    guard = auto_play.tower_combat_sequence_bonus('tower', '守势')
+    attack = auto_play.tower_combat_sequence_bonus('tower', '迅捷攻击')
+    mana_sink = auto_play.tower_combat_sequence_bonus('tower', '制造核心')
+
+    assert attack_gem > weakness > guard > attack > mana_sink
+
+
 def test_tower_mage_plays_quick_thinking_before_setup_cards(monkeypatch):
     auto_play = load_auto_play_module()
     monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '法师')
