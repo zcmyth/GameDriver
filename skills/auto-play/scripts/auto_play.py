@@ -638,9 +638,19 @@ def is_tower_timing_sensitive_finisher_label(value: str) -> bool:
 
 def tower_combat_sequence_bonus(game: str, label: str) -> float:
     key = normalize_label(label)
+    if '巨人协议' in key:
+        return 15.0
     profession = tower_run_profession(game)
     state = load_tower_run_state(game)
     predecessor = normalize_label(str(state.get('predecessor_treasure') or ''))
+    core_text = ' '.join(
+        normalize_label(str(card)) for card in state.get('core_cards') or []
+    )
+    if '电解冰' in key and not any(
+        source in core_text
+        for source in ('冷风', '寒流', '寒冰盾', '冰霜飞弹', '寒冷宝石')
+    ):
+        return -6.0
     if profession == '旅行者':
         if tower_traveler_uses_prayer_build(game):
             priorities = (
@@ -2446,6 +2456,7 @@ def configured_image_candidates(
         *tower_card_fusion_candidates(automation_config, buttons),
         *tower_prebattle_start_candidates(automation_config, image, buttons),
         *tower_reward_overlay_close_candidates(automation_config, image),
+        *tower_stair_choice_visual_candidates(automation_config, image, buttons),
         *tower_unreadable_card_reward_skip_candidates(
             automation_config,
             image,
@@ -2514,6 +2525,78 @@ def tower_reward_overlay_close_candidates(
             source='vision',
             reason='奖励详情页底部文字过暗；点击固定空白区域关闭。',
         )
+    ]
+
+
+def tower_stair_choice_visual_candidates(
+    automation_config: GameAutomationConfig,
+    image: Image.Image,
+    _buttons: list[ButtonCandidate],
+) -> list[ButtonCandidate]:
+    """Recover the fixed stair modal when OCR misses its outlined text."""
+    if normalize_label(automation_config.game) != 'tower':
+        return []
+
+    rgb = np.asarray(image.convert('RGB').resize((360, 800)))
+    cancel = rgb[540:610, 40:160]
+    confirm = rgb[540:610, 205:325]
+    footer = rgb[610:790, 10:350]
+    cyan_fraction = np.mean(
+        (cancel[:, :, 1] > cancel[:, :, 0] + 10)
+        & (cancel[:, :, 2] > cancel[:, :, 0] + 10)
+        & (cancel[:, :, 1] > 70)
+    )
+    yellow_fraction = np.mean(
+        (confirm[:, :, 0] > 130)
+        & (confirm[:, :, 1] > 95)
+        & (confirm[:, :, 2] < 100)
+    )
+    if not (
+        cyan_fraction > 0.12
+        and yellow_fraction > 0.035
+        and footer.mean() < 35
+    ):
+        return []
+
+    return [
+        ButtonCandidate(
+            label='选择一个楼梯',
+            x=0.5,
+            y=0.26,
+            confidence=0.96,
+            clickability=2.0,
+            source='vision',
+            reason='检测到深渊楼梯双路线弹窗。',
+        ),
+        ButtonCandidate(
+            label='左侧楼梯',
+            x=0.25,
+            y=0.40,
+            confidence=0.95,
+            clickability=6.0,
+            source='vision',
+            reason='OCR 漏字时恢复左侧楼梯选择区域。',
+            score=1.0,
+        ),
+        ButtonCandidate(
+            label='右侧楼梯',
+            x=0.75,
+            y=0.40,
+            confidence=0.96,
+            clickability=6.0,
+            source='vision',
+            reason='OCR 漏字时默认选择右侧路线并交由确认步骤提交。',
+            score=2.0,
+        ),
+        ButtonCandidate(
+            label='确定',
+            x=0.73,
+            y=0.71,
+            confidence=0.97,
+            clickability=7.0,
+            source='vision',
+            reason='深渊楼梯弹窗的固定确认按钮。',
+        ),
     ]
 
 
@@ -2901,6 +2984,52 @@ def tower_daily_policy_candidates(
     if phase == 'complete':
         return []
 
+    run_state = load_tower_run_state(game)
+    active_abyss_phases = {
+        'initial_setup',
+        'climbing_map',
+        'route_choice',
+        'prebattle',
+        'combat',
+        'card_reward',
+    }
+    visible_abyss_ui = bool(
+        labels
+        & {
+            '选择一个楼梯',
+            '左侧楼梯',
+            '右侧楼梯',
+            '进入下一层',
+            '当前所在层数',
+            '战斗',
+            '结束回合',
+            '选一张卡牌学习',
+        }
+    ) or any(
+        label.startswith('visible playable card')
+        or label.startswith('结束第')
+        or label.startswith('当前层数')
+        for label in labels
+    ) or any(is_tower_room_vision_candidate(button) for button in buttons)
+    stale_daily_phase_during_abyss = (
+        phase not in {'abyss', 'abyss_retry'}
+        and normalize_label(str(run_state.get('stage') or '')) == '深渊楼梯'
+        and normalize_label(str(run_state.get('phase') or ''))
+        in active_abyss_phases
+        and visible_abyss_ui
+    )
+    if stale_daily_phase_during_abyss and not any(
+        run_state.get(flag)
+        for flag in (
+            'awaiting_route_after_reward',
+            'post_revive_route_guard',
+            'reroll_predecessor',
+        )
+    ):
+        return None
+    if stale_daily_phase_during_abyss:
+        phase = 'abyss_retry'
+
     def choose(keys: set[str], reason: str) -> list[ButtonCandidate] | None:
         button = tower_daily_matching_button(buttons, keys)
         if button is None:
@@ -2937,7 +3066,6 @@ def tower_daily_policy_candidates(
         return []
 
     if phase in {'abyss', 'abyss_retry'}:
-        run_state = load_tower_run_state(game)
         card_fusion = next(
             (
                 button
@@ -3527,9 +3655,62 @@ TOWER_PROFESSION_CARD_HINTS = {
     ),
 }
 
+TOWER_PROFESSION_TREASURE_HINTS = {
+    '战士': (
+        '胜利短剑',
+        '骑士之誓',
+        '骑士手套',
+        '骑士专注',
+        '燃烧辣椒',
+        '巨人之拳',
+        '曜蓝水晶',
+        '骑士之翼',
+        '矮人手套',
+        '骑士狼牙棒',
+    ),
+    '猎人': (
+        '迷彩外套',
+        '弹药背包',
+        '诅咒魔法石',
+        '螺丝刀',
+        '骑士之刃',
+        '猎人赏金',
+        '瞄准镜',
+        '子弹勋章',
+        '贵族手刀',
+        '远古魔法手套',
+    ),
+    '旅行者': (
+        '贵族拖鞋',
+        '花喇叭',
+        '花叭喇',
+        '旅行者手册',
+        '能量棒',
+        '削皮刀',
+        '贵族眼睛',
+        '巨人之花',
+        '安全出口',
+        '毒龙匕首',
+        '炸弹Tiger机',
+        '炸弹老虎机',
+    ),
+    '法师': (
+        '魔法龙蛋',
+        '草龙蛋',
+        '海马铃铛',
+        '电虫药水',
+        '火焰草莓',
+        '能量苹果',
+        '能量火腿',
+        '能量手套',
+        '过期卷轴',
+        '法术绒帽',
+    ),
+}
+
 TOWER_PREDECESSOR_TREASURE_TARGETS = {
     '战士': ('骑士狼牙棒', '曜蓝水晶'),
-    '法师': ('火焰草莓', '电虫药水'),
+    '法师': ('电虫药水', '火焰草莓'),
     '猎人': ('远古魔法手套', '贵族手刀'),
     '旅行者': ('毒龙匕首',),
 }
@@ -3549,7 +3730,12 @@ def tower_profession_from_text(values: Iterable[str]) -> str | None:
     text = ' '.join(normalize_label(str(value)) for value in values)
     scores = {
         profession: sum(
-            1 for hint in hints if normalize_label(hint) in text
+            1
+            for hint in (
+                *hints,
+                *TOWER_PROFESSION_TREASURE_HINTS.get(profession, ()),
+            )
+            if normalize_label(hint) in text
         )
         for profession, hints in TOWER_PROFESSION_CARD_HINTS.items()
     }
@@ -3761,6 +3947,25 @@ def tower_card_cull_bonus(game: str, label: str) -> float:
             ('杂念', 11.0),
             ('杂物', 10.0),
         )
+    profession = tower_run_profession(game)
+    profession_protected = {
+        '法师': (
+            '快速思考',
+            '小雷虫',
+            '闪电晶石',
+            '电解冰',
+            '冷风',
+            '寒流',
+            '恢复宝石',
+            '路人甲',
+            '能量盾',
+        ),
+    }
+    if any(
+        normalize_label(pattern) in key
+        for pattern in profession_protected.get(str(profession or ''), ())
+    ):
+        return 0.0
     profession_priorities = {
         '旅行者': (
             ('许愿', 20.0),
@@ -3768,8 +3973,13 @@ def tower_card_cull_bonus(game: str, label: str) -> float:
             ('海是那个味', 8.0),
             ('毒死', 7.0),
         ),
+        '法师': (
+            ('虚弱', 20.0),
+            ('能量飞弹', 18.0),
+            ('雷电飞弹', 17.0),
+            ('雷龙', 15.0),
+        ),
     }
-    profession = tower_run_profession(game)
     for pattern, bonus in (
         *common_priorities,
         *profession_priorities.get(str(profession or ''), ()),
@@ -3890,6 +4100,20 @@ def update_tower_run_state(
             state['floor_goal'] = int(spire_floor.group(2))
         if any(name in key for name in ('铁面奇莫', '女巫', '小黑龙', '黑八戒')):
             state['character'] = label
+    if {'当前所在层数', '全服最高层数'} <= {
+        normalize_label(label) for label in labels
+    }:
+        visible_abyss_floors = [
+            int(normalize_label(button.label))
+            for button in buttons
+            if button.source != 'template'
+            and re.fullmatch(r'\d{1,3}', normalize_label(button.label))
+            and 0.54 <= button.x <= 0.72
+            and 0.52 <= button.y <= 0.56
+        ]
+        if visible_abyss_floors:
+            state['stage'] = '深渊楼梯'
+            state['floor'] = visible_abyss_floors[0]
     daily_state = load_tower_daily_state(game)
     if starting_new_run and normalize_label(
         str(daily_state.get('phase') or '')
@@ -4013,7 +4237,7 @@ def update_tower_run_state(
                 'visible combat room icon',
                 'visible room icon',
             }
-            or tower_action_advances_floor(clicked_label, effective_phase)
+            or tower_action_advances_floor(clicked_label, phase)
         ):
             state['awaiting_route_after_reward'] = False
             state['post_revive_route_guard'] = False
@@ -4034,10 +4258,7 @@ def update_tower_run_state(
             'return to inn',
         }:
             state['phase'] = 'complete'
-        if action_succeeded and tower_action_advances_floor(
-            clicked_label,
-            effective_phase,
-        ):
+        if action_succeeded and tower_action_advances_floor(clicked_label, phase):
             state['floor'] = int(state.get('floor') or 0) + 1
             state.pop('last_room_action', None)
             state.pop('last_room_position', None)
@@ -5187,13 +5408,24 @@ def analyze_buttons(
     buttons = []
     for item in locations:
         label = str(item.get('text', '')).strip()
-        if not label or looks_like_noise_label(label, automation_config):
+        x = float(item.get('x', 0.0))
+        y = float(item.get('y', 0.0))
+        tower_map_floor_digit = bool(
+            normalize_label(game) == 'tower'
+            and re.fullmatch(r'\d{1,3}', normalize_label(label))
+            and 0.54 <= x <= 0.72
+            and 0.52 <= y <= 0.56
+        )
+        if not label or (
+            looks_like_noise_label(label, automation_config)
+            and not tower_map_floor_digit
+        ):
             continue
         buttons.append(
             ButtonCandidate(
                 label=label,
-                x=float(item.get('x', 0.0)),
-                y=float(item.get('y', 0.0)),
+                x=x,
+                y=y,
                 confidence=float(item.get('confidence', 0.0)),
                 clickability=float(item.get('clickability', 0.0)),
                 source=str(item.get('source') or 'ocr'),
@@ -5836,16 +6068,22 @@ def tower_treasure_choice_candidate(
         and normalize_label(str(daily_state.get('phase') or ''))
         in {'abyss', 'abyss_retry'}
     )
-    predecessor_priorities = (
-        tuple(
-            (target, 80.0)
-            for target in tower_predecessor_treasure_targets(
-                automation_config.game,
-                profession,
-            )
+    predecessor_targets = (
+        tower_predecessor_treasure_targets(
+            automation_config.game,
+            profession,
         )
         if predecessor_panel
         else ()
+    )
+    if predecessor_panel and not predecessor_targets:
+        predecessor_targets = TOWER_PREDECESSOR_TREASURE_TARGETS.get(
+            str(profession or ''),
+            (),
+        )
+    predecessor_priorities = tuple(
+        (target, 88.0 - (index * 4.0))
+        for index, target in enumerate(predecessor_targets)
     )
     traveler_treasure_priorities = (
         (
@@ -6073,7 +6311,9 @@ def tower_card_reward_priority_rules(
         elif '电虫药水' in predecessor:
             focused = (
                 ('冷风', 38.0),
+                ('寒冰盾', 37.5),
                 ('电解冰', 37.0),
+                ('能量飞电', 36.5),
                 ('快速思考', 36.0),
                 ('闪电晶石', 35.0),
                 ('小雷虫', 34.0),
@@ -6084,8 +6324,10 @@ def tower_card_reward_priority_rules(
         else:
             focused = (
                 ('冷风', 38.0),
+                ('寒冰盾', 37.5),
                 ('寒流', 37.0),
                 ('电解冰', 36.0),
+                ('能量飞电', 35.5),
                 ('快速思考', 35.0),
                 ('火焰打击', 34.0),
                 ('燃烧晶石', 33.0),
@@ -6184,6 +6426,15 @@ def tower_card_reward_candidate(
         automation_config.game,
         profession,
     )
+    if profession:
+        priorities = (
+            *priorities,
+            ('无限宝石', 23.0),
+            ('瞬发宝石', 22.0),
+            ('超越宝石', 21.0),
+            ('超时空宝石', 20.0),
+            ('恢复宝石', 19.0),
+        )
     ignored = {
         '选一张卡牌学习',
         '技能牌',
@@ -8133,22 +8384,52 @@ def score_buttons(
         normalize_label(label) for label in (recent_actions or []) if label
     }
     latest_action_key = normalize_label((recent_actions or [''])[-1])
+    tower_last_named_room_key = ''
+    tower_last_room_position: list[Any] = []
+    tower_awaiting_route_after_reward = False
+    if (
+        automation_config is not None
+        and normalize_label(automation_config.game) == 'tower'
+    ):
+        tower_run_state = load_tower_run_state(automation_config.game)
+        last_room_action = normalize_label(
+            str(tower_run_state.get('last_room_action') or '')
+        )
+        if tower_deep_map_room_bonus(last_room_action) != 0:
+            tower_last_named_room_key = last_room_action
+        tower_last_room_position = tower_run_state.get('last_room_position') or []
+        tower_awaiting_route_after_reward = bool(
+            tower_run_state.get('awaiting_route_after_reward')
+        )
     selected_tower_shop_item_bonus = (
         tower_shop_purchase_bonus(automation_config.game, latest_action_key)
         if automation_config is not None
         and normalize_label(automation_config.game) == 'tower'
         else 0.0
     )
+    tower_completed_room_visible = any(
+        (
+            normalize_label(button.label) in recent_action_keys
+            or normalize_label(button.label) == tower_last_named_room_key
+            or (
+                len(tower_last_room_position) == 2
+                and is_tower_room_vision_candidate(button)
+                and (
+                    abs(button.x - float(tower_last_room_position[0]))
+                    + abs(button.y - float(tower_last_room_position[1]))
+                )
+                < 0.10
+            )
+        )
+        and button.source != 'template'
+        and not is_configured_command_label(button.label, automation_config)
+        for button in buttons
+    )
     tower_recent_room_visible = (
         automation_config is not None
         and normalize_label(automation_config.game) == 'tower'
-        and navigation_arrow_visible
-        and any(
-            normalize_label(button.label) in recent_action_keys
-            and button.source != 'template'
-            and not is_configured_command_label(button.label, automation_config)
-            for button in buttons
-        )
+        and (navigation_arrow_visible or tower_awaiting_route_after_reward)
+        and tower_completed_room_visible
     )
     center_navigation_visible = any(
         button.source != 'ocr'
@@ -8224,9 +8505,22 @@ def score_buttons(
         )
     )
     tower_card_change_visible = '卡牌变化' in tower_button_keys
-    tower_card_forgetting_visible = bool(
-        tower_button_keys & {'卡牌遗忘', '遗忘法阵', '遗忘卡牌'}
-    ) and '遗忘' in tower_button_keys
+    tower_recent_cull_selected = bool(
+        automation_config is not None
+        and normalize_label(automation_config.game) == 'tower'
+        and any(
+            tower_card_cull_bonus(automation_config.game, label) > 0
+            for label in (recent_actions or [])[-2:]
+        )
+    )
+    tower_card_forgetting_visible = (
+        bool(tower_button_keys & {'卡牌遗忘', '遗忘法阵', '遗忘卡牌'})
+        and bool(tower_button_keys & PLAIN_BACK_LABELS)
+    ) or (
+        '遗忘' in tower_button_keys
+        and tower_recent_cull_selected
+        and bool(tower_button_keys & PLAIN_BACK_LABELS)
+    )
     tower_magic_shop_visible = (
         '魔术商店' in tower_button_keys and '变化法阵' in tower_button_keys
     )
@@ -8258,14 +8552,6 @@ def score_buttons(
     tower_recent_change_completed = any(
         normalize_label(label) in {'变化', '确定', 'confirm'}
         for label in (recent_actions or [])[-3:]
-    )
-    tower_recent_cull_selected = bool(
-        automation_config is not None
-        and normalize_label(automation_config.game) == 'tower'
-        and any(
-            tower_card_cull_bonus(automation_config.game, label) > 0
-            for label in (recent_actions or [])[-2:]
-        )
     )
     tower_talking_stairs_visible = (
         automation_config is not None
@@ -8428,10 +8714,29 @@ def score_buttons(
                 score += 2.0
                 reason = f'{reason} Leave recently completed Tower room.'.strip()
             elif (
-                key in recent_action_keys
+                (
+                    key in recent_action_keys
+                    or key == tower_last_named_room_key
+                )
                 and not is_configured_command_label(button.label, automation_config)
             ):
                 score -= 2.0
+            if (
+                len(tower_last_room_position) == 2
+                and (
+                    abs(button.x - float(tower_last_room_position[0]))
+                    + abs(button.y - float(tower_last_room_position[1]))
+                )
+                < 0.10
+            ):
+                score -= 8.0
+            elif (
+                tower_awaiting_route_after_reward
+                and not navigation_arrow_visible
+                and is_tower_room_vision_candidate(button)
+            ):
+                score += 3.0
+                reason = f'{reason} Enter a new Tower room after reward.'.strip()
         if key in preferred and not (is_defeat_recovery and not defeat_context):
             score += 1.0
         if (

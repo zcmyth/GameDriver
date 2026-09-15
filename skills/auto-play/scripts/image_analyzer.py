@@ -516,15 +516,18 @@ class PaddleOCRAnalyzer(ImageAnalyzer):
             for bbox, text, confidence in zip(bboxes, texts, confidences):
                 if confidence <= confidence_threshold:
                     continue
-
-                if self._looks_like_noise_text(text):
-                    continue
-
-                # Calculate center from bounding box
-                # bbox format: [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
                 x_coords, y_coords = zip(*bbox)
                 center_x = float(sum(x_coords) / len(x_coords))
                 center_y = float(sum(y_coords) / len(y_coords))
+                normalized_x = center_x / width
+                normalized_y = center_y / height
+                tower_map_floor_digit = bool(
+                    re.fullmatch(r'\d{1,3}', text.strip())
+                    and 0.54 <= normalized_x <= 0.72
+                    and 0.52 <= normalized_y <= 0.56
+                )
+                if self._looks_like_noise_text(text) and not tower_map_floor_digit:
+                    continue
 
                 crop = self._bbox_slice(img_array, x_coords, y_coords)
                 clickability = self._visual_clickability_score(crop)
@@ -543,8 +546,8 @@ class PaddleOCRAnalyzer(ImageAnalyzer):
                 results.append(
                     {
                         'text': text,
-                        'x': center_x / width,
-                        'y': center_y / height,
+                        'x': normalized_x,
+                        'y': normalized_y,
                         'bbox': {
                             'x1': float(min(x_coords)) / width,
                             'y1': float(min(y_coords)) / height,
