@@ -9454,6 +9454,7 @@ def score_buttons(
     tower_last_named_room_key = ''
     tower_last_room_position: list[Any] = []
     tower_awaiting_route_after_reward = False
+    tower_run_state: dict[str, Any] = {}
     if (
         automation_config is not None
         and normalize_label(automation_config.game) == 'tower'
@@ -9529,6 +9530,14 @@ def score_buttons(
     )
     ad_revive_context = is_ad_revive_context(buttons)
     tower_button_keys = {normalize_label(button.label) for button in buttons}
+    tower_predecessor_context_visible = bool(
+        tower_run_state.get('awaiting_predecessor_treasure')
+    ) or any(
+        button.source != 'template'
+        and '前辈' in normalize_label(button.label)
+        and '宝物' in normalize_label(button.label)
+        for button in buttons
+    )
     tower_discard_finisher_may_be_unnamed = bool(
         automation_config is not None
         and tower_run_has_discard_all_finisher(automation_config.game)
@@ -9640,6 +9649,11 @@ def score_buttons(
         and normalize_label(automation_config.game) == 'tower'
         and '神秘交易' in tower_button_keys
         and any('财运' in key for key in tower_button_keys)
+    )
+    tower_life_beggar_visible = (
+        automation_config is not None
+        and normalize_label(automation_config.game) == 'tower'
+        and any(key in {'生命乞丐', '生命之丐'} for key in tower_button_keys)
     )
     tower_sold_out_shop_visible = (
         automation_config is not None
@@ -9774,6 +9788,17 @@ def score_buttons(
                 score += 12.0
             elif '财运' in key or button.source == 'template':
                 score -= 8.0
+        if tower_life_beggar_visible:
+            if key == '离开':
+                score += 12.0
+            elif '生命' in key or button.source == 'template':
+                score -= 8.0
+        if (
+            key == '拿走前辈的宝物'
+            and button.source == 'template'
+            and not tower_predecessor_context_visible
+        ):
+            score -= 20.0
         if tower_sold_out_shop_visible:
             if key in PLAIN_BACK_LABELS:
                 score += 10.0

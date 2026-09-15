@@ -3121,6 +3121,36 @@ def test_tower_mysterious_trade_exits_without_spending_fortune():
     assert scored[0].label == '我再想想'
 
 
+def test_tower_life_beggar_leaves_without_spending_health():
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=0.5,
+            y=y,
+            confidence=0.98,
+            clickability=1.8,
+            source=source,
+        )
+        for label, y, source in (
+            ('生命乞丐', 0.35, 'ocr'),
+            ('分它15点生命，拿走卡牌', 0.62, 'ocr'),
+            ('离开', 0.69, 'ocr'),
+            ('拿走前辈的宝物', 0.66, 'template'),
+        )
+    ]
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert scored[0].label == '离开'
+    assert scored[-1].label == '拿走前辈的宝物'
+
+
 def test_tower_map_room_detector_uses_pure_cv_when_ocr_is_empty():
     auto_play = load_auto_play_module()
     config = automation_config(auto_play, 'tower')
