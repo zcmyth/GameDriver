@@ -9524,6 +9524,41 @@ def test_tower_manufacture_core_and_boss_floor_require_precise_reads(
     assert auto_play.tower_battle_requires_precise_read('tower') is True
 
 
+def test_tower_seen_manufacture_core_persists_precise_reads(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    state_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(
+        'run_id: robot-run\n'
+        'stage: 深渊楼梯\n'
+        'floor: 22\n'
+        'battle:\n'
+        '  initial_hand:\n'
+        '    - 普通攻击\n'
+    )
+    image = Image.new('RGB', (360, 800), color='black')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='制造核心Ⅱ',
+            x=0.2,
+            y=0.63,
+            confidence=0.99,
+            clickability=1.8,
+            source='ocr',
+        )
+    ]
+
+    auto_play.update_tower_run_state('tower', image, buttons)
+
+    state = auto_play.load_tower_run_state('tower')
+    assert state['timing_sensitive_cards_seen'] == ['制造核心Ⅱ']
+    assert auto_play.tower_battle_requires_precise_read('tower') is True
+
+
 def test_tower_warrior_orders_setup_before_attacks_and_mana_sink(monkeypatch):
     auto_play = load_auto_play_module()
     monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '战士')

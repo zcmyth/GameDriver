@@ -5051,6 +5051,18 @@ def update_tower_run_state(
         if phase != 'unknown'
         else normalize_label(str(state.get('phase') or ''))
     )
+    timing_sensitive_cards_seen = list(
+        state.get('timing_sensitive_cards_seen') or []
+    )
+    for label in labels:
+        key = normalize_label(label)
+        if '制造核心' in key and not any(
+            '制造核心' in normalize_label(str(card))
+            for card in timing_sensitive_cards_seen
+        ):
+            timing_sensitive_cards_seen.append(label)
+    if timing_sensitive_cards_seen:
+        state['timing_sensitive_cards_seen'] = timing_sensitive_cards_seen
     visible_shop = tower_visible_purchasable_shop(buttons)
     if visible_shop:
         refresh_history = dict(state.get('shop_refresh_history') or {})
@@ -5445,7 +5457,11 @@ def tower_battle_requires_precise_read(game: str) -> bool:
         return False
     state = load_tower_run_state(game)
     core_text = ' '.join(
-        normalize_label(str(card)) for card in state.get('core_cards') or []
+        normalize_label(str(card))
+        for card in (
+            *(state.get('core_cards') or []),
+            *(state.get('timing_sensitive_cards_seen') or []),
+        )
     )
     battle = state.get('battle') or {}
     known_card_text = ' '.join(
