@@ -9946,6 +9946,47 @@ def test_tower_yolan_warrior_keeps_swiftness_for_draw_engine(monkeypatch):
     assert priorities['未来汽水'] > priorities['巨人协议']
 
 
+def test_tower_giant_warrior_takes_future_soda_over_reward_gold(monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '战士')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'stage': '深渊楼梯',
+            'profession': '战士',
+            'phase': 'card_reward',
+            'predecessor_treasure': '巨人之拳',
+            'core_cards': ['Tower card choice: 撞击'],
+        },
+    )
+    config = automation_config(auto_play, 'tower')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=x,
+            y=y,
+            confidence=0.98,
+            clickability=1.8,
+            source='ocr',
+        )
+        for label, x, y in (
+            ('选一张卡牌学习', 0.5, 0.31),
+            ('知无', 0.2, 0.48),
+            ('夺甲', 0.5, 0.48),
+            ('未来汽水', 0.8, 0.48),
+            ('放弃', 0.29, 0.70),
+            ('确定', 0.73, 0.70),
+        )
+    ]
+
+    choice = auto_play.tower_card_reward_candidate(config, buttons)
+
+    assert choice is not None
+    assert choice.x == 0.83
+    assert '未来汽水' in choice.label
+
+
 def test_tower_mage_reward_takes_energy_flying_lightning(monkeypatch):
     auto_play = load_auto_play_module()
     monkeypatch.setattr(
