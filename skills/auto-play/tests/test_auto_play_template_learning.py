@@ -9546,6 +9546,55 @@ def test_tower_warrior_orders_setup_before_attacks_and_mana_sink(monkeypatch):
     assert attack_gem > weakness > guard > attack > mana_sink
 
 
+def test_tower_weakness_strike_becomes_finisher_after_setup(monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '战士')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'profession': '战士',
+            'predecessor_treasure': '骑士狼牙棒',
+            'battle': {'weakness_applied': True},
+        },
+    )
+
+    assert auto_play.tower_combat_sequence_bonus(
+        'tower',
+        '弱点打击Ⅱ',
+    ) > auto_play.tower_combat_sequence_bonus('tower', '胜势')
+
+
+def test_tower_low_score_combat_action_does_not_request_llm(monkeypatch):
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {'phase': 'combat'},
+    )
+    end_turn = auto_play.ButtonCandidate(
+        label='结束第4回合',
+        x=0.5,
+        y=0.92,
+        confidence=0.99,
+        clickability=2.0,
+        source='ocr',
+        score=0.2,
+    )
+
+    decision = auto_play.decide_next_move(
+        [end_turn],
+        min_action_score=0.95,
+        ambiguity_margin=0.2,
+        ask_on_ambiguous=False,
+        automation_config=config,
+    )
+
+    assert decision.status == 'ready'
+    assert decision.recommended == end_turn
+
+
 def test_tower_mage_plays_quick_thinking_before_setup_cards(monkeypatch):
     auto_play = load_auto_play_module()
     monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '法师')

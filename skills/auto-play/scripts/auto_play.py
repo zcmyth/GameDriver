@@ -756,6 +756,7 @@ def tower_combat_sequence_bonus(game: str, label: str) -> float:
         else:
             battle = state.get('battle') or {}
             floor = int(state.get('floor') or 0)
+            weakness_applied = bool(battle.get('weakness_applied'))
             guard_bonus = (
                 11.0
                 if bool(battle.get('player_hp_critical'))
@@ -772,7 +773,7 @@ def tower_combat_sequence_bonus(game: str, label: str) -> float:
                 ('换血', 6.0),
                 ('弱点加倍', 3.0),
                 ('幽灵剑', 2.0),
-                ('弱点打击', -2.0),
+                ('弱点打击', 4.0 if weakness_applied else -2.0),
                 ('制造核心', -12.0),
             )
     else:
@@ -5162,6 +5163,10 @@ def update_tower_run_state(
                     battle['cold_applied'] = True
                 elif '电解冰' in clicked_key and battle.get('cold_applied'):
                     battle['cold_applied'] = False
+                if '发现弱点' in clicked_key:
+                    battle['weakness_applied'] = True
+                elif '弱点打击' in clicked_key:
+                    battle['weakness_applied'] = False
         if action_succeeded and clicked_key == '任务':
             state['trainer_task_checked_once'] = True
             state['trainer_task_checked_battle'] = int(
@@ -10270,6 +10275,12 @@ def score_buttons(
                 and is_defensive_or_setup_combat_card_label(button.label)
             ):
                 score -= 1.0
+            if combat_card_count <= 2 and '制造核心' in key:
+                score += 14.0
+                reason = (
+                    f'{reason} Use the all-mana core only after every other '
+                    'playable card has resolved.'
+                ).strip()
             if (
                 button.source == 'template'
                 and navigation_arrow_visible
@@ -10547,6 +10558,25 @@ def decide_next_move(
         candidates = viable_non_fallback or buttons
     top = candidates[0]
     if top.score < min_action_score:
+        tower_state = (
+            load_tower_run_state(automation_config.game)
+            if automation_config is not None
+            and normalize_label(automation_config.game) == 'tower'
+            else {}
+        )
+        if normalize_label(str(tower_state.get('phase') or '')) == 'combat' and (
+            is_end_turn_label(top.label)
+            or is_tower_combat_card_candidate(top, automation_config)
+        ):
+            return Decision(
+                status='ready',
+                reason=(
+                    'Tower combat has a deterministic local card or end-turn '
+                    'action; continue without requesting LLM vision.'
+                ),
+                recommended=top,
+                choices=buttons[:3],
+            )
         return Decision(
             status='needs_llm',
             reason=(
