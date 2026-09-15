@@ -142,6 +142,25 @@ NEVER_SELL_LABEL_KEYWORDS = (
     '卖出',
     '卖掉',
 )
+REAL_MONEY_PURCHASE_KEYWORDS = (
+    '充值',
+    '人民币',
+    'rmb',
+    '月卡',
+    '礼包',
+    '通行证',
+    '购买金币',
+    '购买水晶',
+    '￥',
+    '¥',
+)
+TOWER_PURCHASABLE_SHOP_LABELS = {
+    '金币商店',
+    '钱袋商店',
+    '水晶商店',
+    '神秘商店',
+    '神桃商店',
+}
 DEFAULT_TURN_HISTORY_LIMIT = 500
 DEFAULT_PERIODIC_OCR_TUNE_EVERY_TURNS = 50
 DEFAULT_PERIODIC_OCR_TUNE_ITERATIONS = 10
@@ -228,6 +247,7 @@ DIRECT_ATTACK_COMBAT_CARD_KEYWORDS = (
     '刃',
     '刺',
     '挥击',
+    '闪电',
     '归一',
     '重影',
     '撞击',
@@ -257,6 +277,7 @@ DEFENSIVE_OR_SETUP_COMBAT_CARD_LABELS = {
     '快速思考',
     '虚弱',
     '转身准备',
+    '绿舌头',
 }
 DEFENSIVE_OR_SETUP_COMBAT_CARD_KEYWORDS = (
     'shield',
@@ -601,12 +622,15 @@ def is_configured_combat_card_label(
         return True
     if automation_config is None:
         return False
-    return key in automation_config.combat_card_double_tap_labels
+    card_key = re.sub(r'[!！?？.,，。:：;；\[\]【】()（）]+$', '', key)
+    return card_key in automation_config.combat_card_double_tap_labels
 
 
 def is_direct_attack_combat_card_label(value: str) -> bool:
     key = normalize_label(value)
-    if any(keyword in key for keyword in SELF_DAMAGE_COMBAT_CARD_KEYWORDS):
+    if '攻击宝石' in key or any(
+        keyword in key for keyword in SELF_DAMAGE_COMBAT_CARD_KEYWORDS
+    ):
         return False
     if key in DIRECT_ATTACK_COMBAT_CARD_LABELS:
         return True
@@ -632,6 +656,7 @@ def is_tower_timing_sensitive_finisher_label(value: str) -> bool:
             '正念',
             '重整旗鼓',
             '逃生',
+            '绿舌头',
         }
     )
 
@@ -697,9 +722,9 @@ def tower_combat_sequence_bonus(game: str, label: str) -> float:
             )
         else:
             priorities = (
+                ('快速思考', 12.0),
                 ('寒冷晶石', 8.0),
                 ('寒冷宝石', 8.0),
-                ('快速思考', 7.0),
                 ('冷风', 6.5),
                 ('寒流', 6.5),
                 ('寒冰盾', 6.0),
@@ -710,13 +735,30 @@ def tower_combat_sequence_bonus(game: str, label: str) -> float:
                 ('火焰打击', -2.0),
             )
     elif profession == '战士':
-        priorities = (
-            ('换血', 6.0),
-            ('发现弱点', 5.0),
-            ('弱点加倍', 3.0),
-            ('幽灵剑', 2.0),
-            ('弱点打击', -2.0),
-        )
+        if '巨人之拳' in predecessor:
+            equipment_text = ' '.join(
+                normalize_label(str(item))
+                for item in (
+                    *(state.get('key_treasures') or []),
+                    *(state.get('shop_purchases') or []),
+                )
+            )
+            priorities = (
+                ('愤怒宝石', 12.0),
+                ('攻击宝石', 11.0),
+                ('迅捷', 10.0 if '魔法熊手' in equipment_text else 1.0),
+                ('撞击', 6.0),
+                ('神圣斩击', 4.0),
+                ('换血', 2.0),
+            )
+        else:
+            priorities = (
+                ('换血', 6.0),
+                ('发现弱点', 5.0),
+                ('弱点加倍', 3.0),
+                ('幽灵剑', 2.0),
+                ('弱点打击', -2.0),
+            )
     else:
         priorities = ()
     for pattern, bonus in priorities:
@@ -1451,13 +1493,10 @@ def tower_shop_empty_ocr_exit_candidate(
         return None
 
     state = load_tower_run_state(automation_config.game)
-    if normalize_label(str(state.get('last_room_action') or '')) not in {
-        '魔术商店',
-        '金币商店',
-        '钱袋商店',
-        '水晶商店',
-        '神秘商店',
-    }:
+    active_shop = normalize_label(
+        str(state.get('active_shop') or state.get('last_room_action') or '')
+    )
+    if active_shop not in (TOWER_PURCHASABLE_SHOP_LABELS | {'魔术商店'}):
         return None
     context_actions = {
         normalize_label(str(state.get('last_action') or '')),
@@ -1495,14 +1534,112 @@ def tower_shop_empty_ocr_exit_candidate(
     if cyan_ratio < 0.18 or yellow_ratio < 0.18:
         return None
 
+    refresh_count = int(state.get('shop_refresh_count') or 0)
+    refresh_limit = max(
+        2,
+        int((state.get('policy') or {}).get('shop_refresh_limit') or 0),
+    )
+    recent_keys = {
+        normalize_label(label) for label in (recent_actions or [])[-2:]
+    }
+    if (
+        active_shop in TOWER_PURCHASABLE_SHOP_LABELS
+        and refresh_count < refresh_limit
+        and '刷新商店' not in recent_keys
+    ):
+        return ButtonCandidate(
+            label='刷新商店',
+            x=0.14,
+            y=0.303,
+            confidence=0.97,
+            clickability=22.0,
+            source='vision',
+            reason=(
+                'Tower shop shelves are empty after a purchase; use one of the '
+                'two allowed in-run currency refreshes.'
+            ),
+        )
     return ButtonCandidate(
         label='返回',
         x=0.27,
         y=0.883,
         confidence=0.99,
-        clickability=5.0,
+        clickability=20.0,
         source='vision',
-        reason='Tower shop footer detected by paired cyan/yellow controls.',
+        reason='Tower shop refresh failed or reached its limit; return to the map.',
+    )
+
+
+def tower_task_reward_badge_candidate(
+    automation_config: GameAutomationConfig,
+    buttons: list[ButtonCandidate],
+    image: Image.Image | None,
+) -> ButtonCandidate | None:
+    if normalize_label(automation_config.game) != 'tower' or image is None:
+        return None
+    if load_tower_run_state(automation_config.game).get(
+        'skip_unsafe_trainer_reward'
+    ):
+        return None
+    labels = {normalize_label(button.label) for button in buttons}
+    if labels & {'招募', '旅馆', '商城', '福利', '邮件', '庄园'}:
+        return None
+    if '结束回合' in labels:
+        return None
+    task_button = next(
+        (
+            button
+            for button in buttons
+            if normalize_label(button.label) == '任务'
+            and button.source != 'template'
+            and button.x <= 0.20
+            and 0.48 <= button.y <= 0.60
+        ),
+        None,
+    )
+    if task_button is None:
+        return None
+    rgb = np.asarray(image.convert('RGB').resize((360, 800)))
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
+    if task_button.bbox is not None:
+        _, task_y1, task_x2, _ = task_button.bbox
+        badge_x1 = max(0, int((task_x2 + 0.005) * 360))
+        badge_x2 = min(360, int((task_x2 + 0.06) * 360))
+        badge_y1 = max(0, int((task_y1 - 0.025) * 800))
+        badge_y2 = min(800, int((task_y1 + 0.015) * 800))
+        badge = hsv[badge_y1:badge_y2, badge_x1:badge_x2]
+    else:
+        badge = hsv[415:450, 53:78]
+    if badge.size == 0:
+        return None
+    red_pixels = (
+        ((badge[:, :, 0] <= 10) | (badge[:, :, 0] >= 170))
+        & (badge[:, :, 1] >= 120)
+        & (badge[:, :, 2] >= 100)
+    )
+    has_red_badge = (
+        int(red_pixels.sum()) >= 25 and float(red_pixels.mean()) >= 0.02
+    )
+    state = load_tower_run_state(automation_config.game)
+    battle_number = int(state.get('battle_number') or 0)
+    if not has_red_badge and (
+        battle_number <= 0 or state.get('trainer_task_checked_once')
+    ):
+        return None
+    return ButtonCandidate(
+        label='任务',
+        x=task_button.x,
+        y=task_button.y,
+        confidence=max(task_button.confidence, 0.99),
+        clickability=max(task_button.clickability, 25.0 if has_red_badge else 14.0),
+        source='vision',
+        reason=(
+            'Tower trainer task reward badge is red; open 任务 now to activate '
+            'the completed talent reward.'
+            if has_red_badge
+            else 'Tower trainer task post-battle check; inspect 任务 once after '
+            'this battle so an unread talent reward cannot be missed.'
+        ),
     )
 
 
@@ -1511,11 +1648,19 @@ def configured_extra_candidates(
     buttons: list[ButtonCandidate],
     recent_actions: list[str] | None = None,
     image: Image.Image | None = None,
+    context_buttons: list[ButtonCandidate] | None = None,
 ) -> list[ButtonCandidate]:
     extras: list[ButtonCandidate] = []
     tower_revive = tower_ad_revive_candidate(automation_config, buttons)
     if tower_revive is not None:
         extras.append(tower_revive)
+    tower_task_reward = tower_task_reward_badge_candidate(
+        automation_config,
+        context_buttons if context_buttons is not None else buttons,
+        image,
+    )
+    if tower_task_reward is not None:
+        extras.append(tower_task_reward)
     repeated_swipe = configured_repeated_action_swipe_candidate(
         automation_config,
         buttons,
@@ -1994,6 +2139,82 @@ TOWER_COMBAT_CARD_SLOT_CENTERS = (
 )
 
 
+def tower_combat_hp_looks_critical(image: Image.Image) -> bool:
+    """Use the unobscured left edge of the combat HP bar as a cheap guard."""
+    rgb = np.asarray(image.convert('RGB').resize((360, 800)))
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
+    guard = hsv[356:363, 86:91]
+    if guard.size == 0:
+        return False
+    warm_fill = (
+        (guard[:, :, 0] <= 15)
+        & (guard[:, :, 1] > 100)
+        & (guard[:, :, 2] > 100)
+    )
+    return float(np.mean(warm_fill)) < 0.25
+
+
+def tower_combat_item_pouch_has_consumable(image: Image.Image) -> bool:
+    """Distinguish the pouch's zero counter from a positive item count."""
+    rgb = np.asarray(image.convert('RGB').resize((360, 800)))
+    gray = cv2.cvtColor(rgb[738:752, 284:304], cv2.COLOR_RGB2GRAY)
+    bright = np.uint8(gray > 210) * 255
+    bright = cv2.resize(bright, None, fx=4, fy=4, interpolation=cv2.INTER_NEAREST)
+    contours, hierarchy = cv2.findContours(
+        bright,
+        cv2.RETR_TREE,
+        cv2.CHAIN_APPROX_SIMPLE,
+    )
+    if hierarchy is None or not contours:
+        return False
+
+    parents = [
+        index
+        for index, relation in enumerate(hierarchy[0])
+        if relation[3] == -1 and cv2.contourArea(contours[index]) >= 100.0
+    ]
+    zero_holes = []
+    for index, relation in enumerate(hierarchy[0]):
+        parent_index = int(relation[3])
+        if parent_index < 0 or parent_index not in parents:
+            continue
+        _x, _y, _width, child_height = cv2.boundingRect(contours[index])
+        _px, _py, _pwidth, parent_height = cv2.boundingRect(
+            contours[parent_index]
+        )
+        if parent_height > 0 and child_height / parent_height >= 0.65:
+            zero_holes.append(index)
+    return not (len(parents) == 1 and bool(zero_holes))
+
+
+def tower_combat_emergency_item_candidates(
+    image: Image.Image,
+    automation_config: GameAutomationConfig,
+) -> list[ButtonCandidate]:
+    if normalize_label(automation_config.game) != 'tower':
+        return []
+    if not tower_combat_screen_visible(image):
+        return []
+    if not tower_combat_hp_looks_critical(image):
+        return []
+    if not tower_combat_item_pouch_has_consumable(image):
+        return []
+    return [
+        ButtonCandidate(
+            label='低血打开道具口袋',
+            x=0.768,
+            y=0.938,
+            confidence=0.99,
+            clickability=30.0,
+            source='vision',
+            reason=(
+                '战斗生命低于约30%，且道具计数不为0；优先使用回血或循环'
+                '消耗品，避免结束回合后死亡。'
+            ),
+        )
+    ]
+
+
 def tower_attack_number_card_candidates(
     image: Image.Image,
     automation_config: GameAutomationConfig,
@@ -2236,7 +2457,7 @@ def tower_combat_card_candidates(
             ButtonCandidate(
                 label=label,
                 x=(x + (box_width / 2)) / width,
-                y=(y + (box_height / 2)) / height,
+                y=(y + (box_height * 0.10)) / height,
                 confidence=0.96,
                 clickability=7.4,
                 source='vision',
@@ -2416,7 +2637,7 @@ TOWER_COMBAT_METADATA_LABELS = {
     '超越牌',
     '状态牌',
 }
-TOWER_PLAYABLE_CARD_CLICKABILITY = 1.7
+TOWER_PLAYABLE_CARD_CLICKABILITY = 1.55
 
 
 def is_tower_combat_card_candidate(
@@ -2521,6 +2742,7 @@ def configured_image_candidates(
             image,
             buttons,
         ),
+        *tower_combat_emergency_item_candidates(image, automation_config),
         *tower_map_exit_candidates(image, automation_config, buttons),
         *tower_combat_card_candidates(image, automation_config, buttons),
         *tower_map_room_icon_candidates(image, automation_config, buttons),
@@ -2710,6 +2932,12 @@ def tower_fast_combat_buttons(
         return []
     if not tower_combat_screen_visible(image):
         return []
+    emergency_items = tower_combat_emergency_item_candidates(
+        image,
+        automation_config,
+    )
+    if emergency_items:
+        return emergency_items
     return [
         ButtonCandidate(
             label='结束回合',
@@ -2745,6 +2973,23 @@ def tower_run_state_path_for(game: str) -> Path:
 
 def tower_daily_state_path_for(game: str) -> Path:
     return game_root_for(game) / 'daily_run.yaml'
+
+
+def tower_shop_refresh_key(
+    state: dict[str, Any],
+    shop_label: str | None = None,
+    position: Iterable[float] | None = None,
+) -> str:
+    shop_key = normalize_label(
+        str(shop_label or state.get('active_shop') or '').strip()
+    )
+    room_position = list(position or state.get('last_room_position') or [])
+    if shop_key not in TOWER_PURCHASABLE_SHOP_LABELS or len(room_position) != 2:
+        return ''
+    return (
+        f'{int(state.get("floor") or 0)}:{shop_key}:'
+        f'{float(room_position[0]):.3f}:{float(room_position[1]):.3f}'
+    )
 
 
 def load_tower_run_state(game: str) -> dict[str, Any]:
@@ -3240,6 +3485,116 @@ def tower_daily_policy_candidates(
         return []
 
     if phase in {'abyss', 'abyss_retry'}:
+        talking_stairs_reward = next(
+            (
+                button
+                for button in buttons
+                if '拿走' in normalize_label(button.label)
+                and any(
+                    blood in normalize_label(button.label)
+                    for blood in ('深澜龙血', '深渊龙血')
+                )
+            ),
+            None,
+        )
+        if '说话的楼梯' in labels and talking_stairs_reward is not None:
+            return [
+                replace(
+                    talking_stairs_reward,
+                    clickability=max(talking_stairs_reward.clickability, 25.0),
+                    reason=(
+                        '说话的楼梯固定提供深澜龙血；优先拿走保命消耗品，'
+                        '并压过透过弹窗误识别的旧房间模板。'
+                    ),
+                )
+            ]
+        trainer_reward_claim = next(
+            (
+                button
+                for button in buttons
+                if normalize_label(button.label) == '领取'
+            ),
+            None,
+        )
+        trainer_reward_panel_visible = (
+            '训练师任务' in labels
+            and any('还可以领取' in label for label in labels)
+        )
+        unsafe_trainer_reward = bool(
+            run_state.get('skip_unsafe_trainer_reward')
+        ) or any('敌方物攻增加100点' in label for label in labels)
+        if trainer_reward_panel_visible and unsafe_trainer_reward:
+            trainer_panel_exit = next(
+                (
+                    button
+                    for button in buttons
+                    if normalize_label(button.label) == '返回'
+                    and button.source != 'template'
+                ),
+                None,
+            )
+            if trainer_panel_exit is not None:
+                return [
+                    replace(
+                        trainer_panel_exit,
+                        clickability=max(trainer_panel_exit.clickability, 25.0),
+                        reason=(
+                            '已检查训练师红点，但奖励天赋会使敌方物攻增加100点；'
+                            '为保证深渊后手生存，跳过领取并返回。'
+                        ),
+                    )
+                ]
+        if trainer_reward_claim is not None and trainer_reward_panel_visible:
+            return [
+                replace(
+                    trainer_reward_claim,
+                    clickability=max(trainer_reward_claim.clickability, 25.0),
+                    reason='训练师任务已经完成；领取并激活对应天赋。',
+                )
+            ]
+        if trainer_reward_panel_visible:
+            trainer_panel_close = next(
+                (
+                    button
+                    for button in buttons
+                    if normalize_label(button.label) == '点击空白处关闭'
+                    and button.source != 'template'
+                ),
+                None,
+            )
+            if trainer_panel_close is not None:
+                return [
+                    replace(
+                        trainer_panel_close,
+                        clickability=max(trainer_panel_close.clickability, 25.0),
+                        reason=(
+                            '训练师任务面板没有可领取奖励；关闭遮罩后继续爬塔，'
+                            '不要点击透过遮罩误识别出的道路模板。'
+                        ),
+                    )
+                ]
+        trainer_task_reward = next(
+            (
+                button
+                for button in buttons
+                if any(
+                    marker in normalize_label(button.reason)
+                    for marker in (
+                        'tower trainer task reward badge',
+                        'tower trainer task post-battle check',
+                    )
+                )
+            ),
+            None,
+        )
+        if trainer_task_reward is not None:
+            return [
+                replace(
+                    trainer_task_reward,
+                    clickability=max(trainer_task_reward.clickability, 25.0),
+                    reason='训练师任务已完成；立即打开任务面板，领取并激活天赋奖励。',
+                )
+            ]
         card_fusion = next(
             (
                 button
@@ -3262,16 +3617,106 @@ def tower_daily_policy_candidates(
                     reason='同名牌融合确认页；完成无增牌数升级后继续深渊。',
                 )
             ]
-        last_room_key = normalize_label(str(run_state.get('last_room_action') or ''))
+        last_room_key = normalize_label(
+            str(
+                run_state.get('active_shop')
+                or run_state.get('last_room_action')
+                or ''
+            )
+        )
+        magic_shop_change_complete = bool(
+            run_state.get('magic_shop_change_complete')
+        )
         if (
-            last_room_key
-            in {'魔术商店', '金币商店', '钱袋商店', '水晶商店', '神秘商店'}
+            last_room_key == '魔术商店'
+            and magic_shop_change_complete
+            and '卡牌变化' in labels
+        ):
+            selected = choose(
+                {'放弃'},
+                '本魔术商店已经完成一次换牌；放弃重复变化，避免继续花费。',
+            )
+            if selected is not None:
+                return selected
+        if (
+            last_room_key == '魔术商店'
+            and {'魔术商店', '变化法阵'} <= labels
+        ):
+            if magic_shop_change_complete:
+                selected = choose(
+                    {'返回'},
+                    '本魔术商店已换过一张废牌；立即返回深渊地图。',
+                )
+                if selected is not None:
+                    return selected
+            return None
+        if (
+            last_room_key in TOWER_PURCHASABLE_SHOP_LABELS
             and last_room_key in labels
             and '返回' in labels
         ):
+            if tower_real_money_purchase_prompt_visible(labels):
+                selected = choose(
+                    {'取消', '返回'},
+                    '仅允许使用局内金币或水晶；退出真钱充值或礼包购买界面。',
+                )
+                return selected or []
+            pending_purchase = str(run_state.get('last_action') or '').strip()
+            if (
+                tower_shop_purchase_bonus(game, pending_purchase) > 0
+                and bool(labels & CONFIRM_LABELS)
+            ):
+                selected = choose(
+                    CONFIRM_LABELS,
+                    (
+                        f'已选中高价值商品“{pending_purchase}”；先确认购买，'
+                        '禁止刷新覆盖当前选择。'
+                    ),
+                )
+                if selected is not None:
+                    return selected
+            if any(
+                tower_shop_purchase_bonus(game, button.label) > 0
+                for button in buttons
+            ):
+                return None
+            refresh_count = int(run_state.get('shop_refresh_count') or 0)
+            refresh_limit = max(
+                2,
+                int((run_state.get('policy') or {}).get('shop_refresh_limit') or 0),
+            )
+            refresh_buttons = [
+                button
+                for button in buttons
+                if normalize_label(button.label).startswith('刷新')
+                or (
+                    normalize_label(button.label).startswith('免费')
+                    and '次' in normalize_label(button.label)
+                )
+            ]
+            if refresh_count < refresh_limit and refresh_buttons:
+                refresh = max(
+                    refresh_buttons,
+                    key=lambda button: (
+                        normalize_label(button.label).startswith('免费'),
+                        button.confidence,
+                    ),
+                )
+                return [
+                    replace(
+                        refresh,
+                        x=0.14,
+                        y=0.303,
+                        clickability=max(refresh.clickability, 22.0),
+                        reason=(
+                            f'本店尚无赚钱、加血或循环核心；使用第'
+                            f'{refresh_count + 1}/{refresh_limit}次刷新继续寻找。'
+                        ),
+                    )
+                ]
             selected = choose(
                 {'返回'},
-                '魔术商店换牌已经完成；返回深渊地图继续爬层。',
+                '已刷新两次仍无赚钱、加血或循环核心；保留资源并返回。',
             )
             if selected is not None:
                 return selected
@@ -3949,7 +4394,7 @@ TOWER_PROFESSION_TREASURE_HINTS = {
 }
 
 TOWER_PREDECESSOR_TREASURE_TARGETS = {
-    '战士': ('骑士狼牙棒', '曜蓝水晶'),
+    '战士': ('巨人之拳', '骑士狼牙棒', '曜蓝水晶'),
     '法师': ('电虫药水', '火焰草莓'),
     '猎人': ('远古魔法手套', '贵族手刀'),
     '旅行者': ('毒龙匕首',),
@@ -3961,6 +4406,8 @@ TOWER_PREDECESSOR_TREASURE_FALLBACKS = {
 
 TOWER_TREASURE_OCR_CORRECTIONS = {
     '花叭喇': '花喇叭',
+    '骑土手套': '骑士手套',
+    '骑土狼牙棒': '骑士狼牙棒',
 }
 
 TOWER_PREDECESSOR_REROLL_LIMIT = 20
@@ -4064,6 +4511,8 @@ def tower_predecessor_treasure_targets(
 
 def tower_deep_map_room_bonus(label: str) -> float:
     key = normalize_label(label)
+    if '不想遇到' in key and '训练师' in key:
+        return -20.0
     if '咒宝库' in key:
         return -10.0
     if '遗忘' in key or '通忘' in key:
@@ -4080,13 +4529,16 @@ def tower_deep_map_room_bonus(label: str) -> float:
         '训练师': 7.0,
         '卡牌遗忘': 8.0,
         '遗忘法阵': 8.0,
-        '休息点': 4.0,
+        '休息点': 5.0,
+        '金币哥布林': 5.5,
+        '水晶哥布': 5.5,
         '宝石牌包': 6.0,
         '职业牌包': 5.0,
-        '金币商店': 2.5,
+        '金币商店': 5.5,
         '魔术商店': 2.25,
-        '水晶商店': 1.75,
+        '水晶商店': 5.5,
         '神秘商店': 0.5,
+        '神桃商店': 0.5,
     }
     if key in bonuses:
         return bonuses[key]
@@ -4138,22 +4590,102 @@ def tower_prayer_build_should_stop(state: dict[str, Any]) -> bool:
     )
 
 
-def tower_shop_purchase_bonus(game: str, label: str) -> float:
+def tower_real_money_purchase_prompt_visible(labels: Iterable[str]) -> bool:
+    text = ' '.join(normalize_label(label) for label in labels)
+    return any(keyword in text for keyword in REAL_MONEY_PURCHASE_KEYWORDS)
+
+
+def tower_shop_purchase_profile(game: str, label: str) -> tuple[float, str]:
     state = load_tower_run_state(game)
     if normalize_label(str(state.get('stage') or '')) != '深渊楼梯':
-        return 0.0
-    if tower_run_profession(game) != '旅行者':
-        return 0.0
+        return 0.0, ''
     key = normalize_label(label)
-    priorities = (
-        ('唤回药水', 16.0),
-        ('宝石药水', 13.0),
-        ('过期药水', 11.0),
+    if any(keyword in key for keyword in REAL_MONEY_PURCHASE_KEYWORDS):
+        return 0.0, ''
+    purchased = {
+        normalize_label(str(item)) for item in state.get('shop_purchases') or []
+    }
+    if key in purchased:
+        return 0.0, ''
+
+    profession = tower_run_profession(game)
+    build_text = ' '.join(
+        normalize_label(str(value))
+        for value in (
+            state.get('predecessor_treasure') or '',
+            *(state.get('core_cards') or []),
+            *(state.get('key_treasures') or []),
+        )
     )
-    for pattern, bonus in priorities:
+    treasure_priorities = [
+        ('金丹砂', 45.0),
+        ('聚宝盆', 38.0),
+        ('矮人招财猫', 37.0),
+        ('实验眼睛', 36.0),
+        ('实验眼镜', 36.0),
+        ('贵族咖啡', 35.0),
+        ('机械龙蛋', 34.0),
+        ('巨人之眼', 33.0),
+        ('魔法熊手', 32.0),
+        ('女鹅套娃', 31.0),
+        ('时之沙漏', 30.0),
+        ('魔塔石像', 29.0),
+        ('魔法笔记', 28.0),
+        ('拐棍糖', 27.0),
+        ('贵族匕首', 26.0),
+        ('巨人泡泡糖', 24.0),
+        ('巨人布袋', 23.0),
+        ('巨人胡须', 22.0),
+        ('蝙蝠牙齿', 21.0),
+        ('矮人王宝石', 20.0),
+        ('超级金币', 19.0),
+        ('巨人手指', 18.0),
+        ('诅咒饭团', 17.0),
+    ]
+    if profession == '战士' and '巨人之拳' in build_text:
+        treasure_priorities = [
+            ('矮人王宝石', 42.0),
+            ('巨人面罩', 35.0),
+            ('巨人之眼', 34.0),
+            *treasure_priorities,
+        ]
+    if any(
+        marker in build_text
+        for marker in ('超越牌', '代号肉鸽', '海是那个味', '魔法面具', '宇宙面具')
+    ):
+        treasure_priorities.insert(0, ('幻龙蛋', 40.0))
+    for pattern, bonus in treasure_priorities:
         if normalize_label(pattern) in key:
-            return bonus
-    return 0.0
+            return bonus, 'treasure'
+
+    if '药水' in key:
+        consumable_priorities = [
+            ('巨人药水', 40.0),
+            ('迅捷药水', 32.0),
+            ('恢复药水', 30.0),
+            ('生命药水', 30.0),
+        ]
+        if profession == '旅行者':
+            consumable_priorities.extend(
+                (
+                    ('唤回药水', 26.0),
+                    ('宝石药水', 23.0),
+                    ('过期药水', 21.0),
+                )
+            )
+        for pattern, bonus in consumable_priorities:
+            if normalize_label(pattern) in key:
+                return bonus, 'consumable'
+        return 0.0, ''
+
+    for pattern, priority in tower_card_reward_priority_rules(game, profession):
+        if priority >= 20.0 and normalize_label(pattern) in key:
+            return priority, 'card'
+    return 0.0, ''
+
+
+def tower_shop_purchase_bonus(game: str, label: str) -> float:
+    return tower_shop_purchase_profile(game, label)[0]
 
 
 def tower_card_cull_bonus(game: str, label: str) -> float:
@@ -4190,6 +4722,18 @@ def tower_card_cull_bonus(game: str, label: str) -> float:
         )
     profession = tower_run_profession(game)
     profession_protected = {
+        '战士': (
+            '弱点打击',
+            '发现弱点',
+            '弱点加倍',
+            '迅捷',
+            '未来汽水',
+            '愤怒宝石',
+            '攻击宝石',
+            '神圣斩击',
+            '巨人协议',
+            '撞击',
+        ),
         '法师': (
             '快速思考',
             '小雷虫',
@@ -4211,6 +4755,14 @@ def tower_card_cull_bonus(game: str, label: str) -> float:
     ):
         return 0.0
     profession_priorities = {
+        '战士': (
+            ('举盾', 24.0),
+            ('普通攻击', 23.0),
+            ('劈砍', 22.0),
+            ('全力一击', 21.0),
+            ('全劲一击', 21.0),
+            ('胜势', 20.0),
+        ),
         '旅行者': (
             ('许愿', 20.0),
             ('代号肉鸽', 9.0),
@@ -4312,7 +4864,7 @@ def update_tower_run_state(
                 'never_sell': True,
                 'immortal_priority': True,
                 'always_take_immediate_fusion': True,
-                'shop_refresh_limit': 1,
+                'shop_refresh_limit': 2,
             },
         }
 
@@ -4409,6 +4961,12 @@ def update_tower_run_state(
                 label for label in labels if normalize_label(label) not in ignored
             )
         )[:30]
+    if (
+        '训练师任务' in {normalize_label(label) for label in labels}
+        and any(normalize_label(label) == '领取' for label in labels)
+        and any('敌方物攻增加100点' in normalize_label(label) for label in labels)
+    ):
+        state['skip_unsafe_trainer_reward'] = True
     predecessor_profession = tower_profession_from_text(
         [str(state.get('predecessor_treasure') or '')]
     )
@@ -4426,8 +4984,16 @@ def update_tower_run_state(
             daily_state['updated_at'] = now
             write_tower_daily_state(game, daily_state)
     awaiting_predecessor = bool(state.get('awaiting_predecessor_treasure'))
-    if state.get('stage') == '深渊楼梯' and phase == 'reward_detail' and (
-        awaiting_predecessor or '拿走前辈的宝物' in previous_action
+    current_floor = int(state.get('floor') or 0)
+    if current_floor > 1:
+        state['awaiting_predecessor_treasure'] = False
+        awaiting_predecessor = False
+    if (
+        state.get('stage') == '深渊楼梯'
+        and current_floor <= 1
+        and not state.get('predecessor_treasure')
+        and phase == 'reward_detail'
+        and (awaiting_predecessor or '拿走前辈的宝物' in previous_action)
     ):
         treasure = tower_predecessor_treasure_from_reward(buttons)
         if treasure:
@@ -4436,8 +5002,15 @@ def update_tower_run_state(
             if treasure not in treasures:
                 treasures.append(treasure)
             state['key_treasures'] = treasures
-            resolved_profession = profession or tower_run_profession(game)
             reroll_count = int(daily_state.get('predecessor_rerolls') or 0)
+            preferred_profession = str(
+                daily_state.get('preferred_abyss_profession') or ''
+            ).strip()
+            resolved_profession = (
+                profession
+                or tower_run_profession(game)
+                or preferred_profession
+            )
             is_target = tower_predecessor_treasure_is_target(
                 resolved_profession,
                 treasure,
@@ -4454,8 +5027,24 @@ def update_tower_run_state(
             write_tower_daily_state(game, daily_state)
             state['awaiting_predecessor_treasure'] = False
     if clicked_label:
+        policy = state.setdefault('policy', {})
+        policy['shop_refresh_limit'] = max(
+            2,
+            int(policy.get('shop_refresh_limit') or 0),
+        )
         state['last_action'] = clicked_label
         clicked_key = normalize_label(clicked_label)
+        refresh_history = dict(state.get('shop_refresh_history') or {})
+        active_refresh_key = str(state.get('active_shop_key') or '').strip()
+        if not active_refresh_key:
+            active_refresh_key = tower_shop_refresh_key(state)
+            if active_refresh_key:
+                state['active_shop_key'] = active_refresh_key
+                refresh_history.setdefault(
+                    active_refresh_key,
+                    int(state.get('shop_refresh_count') or 0),
+                )
+                state['shop_refresh_history'] = refresh_history
         clicked_candidate = next(
             (
                 button
@@ -4477,6 +5066,11 @@ def update_tower_run_state(
                     battle['cold_applied'] = True
                 elif '电解冰' in clicked_key and battle.get('cold_applied'):
                     battle['cold_applied'] = False
+        if action_succeeded and clicked_key == '任务':
+            state['trainer_task_checked_once'] = True
+            state['trainer_task_checked_battle'] = int(
+                state.get('battle_number') or 0
+            )
         if action_succeeded and (
             tower_deep_map_room_bonus(clicked_label) != 0
             or (
@@ -4485,11 +5079,93 @@ def update_tower_run_state(
             )
         ):
             state['last_room_action'] = clicked_label
+            if clicked_key in TOWER_PURCHASABLE_SHOP_LABELS:
+                state['active_shop'] = clicked_key
+                room_position = (
+                    [clicked_candidate.x, clicked_candidate.y]
+                    if clicked_candidate is not None
+                    else state.get('last_room_position') or []
+                )
+                active_refresh_key = tower_shop_refresh_key(
+                    state,
+                    clicked_key,
+                    room_position,
+                )
+                state['active_shop_key'] = active_refresh_key
+                state['shop_refresh_count'] = int(
+                    refresh_history.get(active_refresh_key, 0)
+                )
+                refresh_history.setdefault(active_refresh_key, 0)
+                state['shop_refresh_history'] = refresh_history
+            else:
+                state.pop('shop_refresh_count', None)
+                state.pop('active_shop', None)
+                state.pop('active_shop_key', None)
             if clicked_candidate is not None:
                 state['last_room_position'] = [
                     round(clicked_candidate.x, 6),
                     round(clicked_candidate.y, 6),
                 ]
+        if (
+            action_succeeded
+            and normalize_label(
+                str(
+                    state.get('active_shop')
+                    or state.get('last_room_action')
+                    or ''
+                )
+            )
+            in TOWER_PURCHASABLE_SHOP_LABELS
+            and (
+                clicked_key.startswith('刷新')
+                or (clicked_key.startswith('免费') and '次' in clicked_key)
+            )
+        ):
+            state['shop_refresh_count'] = int(
+                state.get('shop_refresh_count') or 0
+            ) + 1
+            active_refresh_key = str(state.get('active_shop_key') or '').strip()
+            if active_refresh_key:
+                refresh_history[active_refresh_key] = state['shop_refresh_count']
+                state['shop_refresh_history'] = refresh_history
+        if (
+            action_succeeded
+            and clicked_key == '变化'
+            and normalize_label(str(state.get('last_room_action') or ''))
+            == '魔术商店'
+        ):
+            state['magic_shop_change_complete'] = True
+        if (
+            action_succeeded
+            and clicked_key in CONFIRM_LABELS
+            and normalize_label(
+                str(
+                    state.get('active_shop')
+                    or state.get('last_room_action')
+                    or ''
+                )
+            )
+            in TOWER_PURCHASABLE_SHOP_LABELS
+        ):
+            purchase_bonus, purchase_kind = tower_shop_purchase_profile(
+                game,
+                previous_action,
+            )
+            if purchase_bonus > 0:
+                purchases = list(state.get('shop_purchases') or [])
+                if previous_action not in purchases:
+                    purchases.append(previous_action)
+                state['shop_purchases'] = purchases
+                if purchase_kind == 'card':
+                    cards = list(state.get('core_cards') or [])
+                    if previous_action not in cards:
+                        cards.append(previous_action)
+                    state['core_cards'] = cards
+                elif purchase_kind == 'treasure':
+                    treasures = list(state.get('key_treasures') or [])
+                    if previous_action not in treasures:
+                        treasures.append(previous_action)
+                    state['key_treasures'] = treasures
         if action_succeeded and clicked_key in {
             '复活（广告）',
             '看广告复活',
@@ -4534,8 +5210,12 @@ def update_tower_run_state(
         if (
             state.get('stage') == '深渊楼梯'
             and clicked_key == '拿走前辈的宝物'
+            and int(state.get('floor') or 0) <= 1
+            and not state.get('predecessor_treasure')
         ):
             state['awaiting_predecessor_treasure'] = True
+        if int(state.get('floor') or 0) > 1:
+            state['awaiting_predecessor_treasure'] = False
         if action_succeeded and normalize_label(clicked_label) in {
             '返回旅馆',
             'return to inn',
@@ -4545,6 +5225,7 @@ def update_tower_run_state(
             state['floor'] = int(state.get('floor') or 0) + 1
             state.pop('last_room_action', None)
             state.pop('last_room_position', None)
+            state.pop('magic_shop_change_complete', None)
     if tower_prayer_build_should_stop(state):
         state['reroll_predecessor'] = True
         state['stop_loss_reason'] = (
@@ -4623,6 +5304,7 @@ def tower_battle_requires_precise_read(game: str) -> bool:
     return (
         is_tower_timing_sensitive_finisher_label(core_text)
         or '电解冰' in core_text
+        or '快速思考' in core_text
     )
 
 
@@ -6368,6 +7050,11 @@ def tower_treasure_choice_candidate(
         and normalize_label(str(daily_state.get('phase') or ''))
         in {'abyss', 'abyss_retry'}
     )
+    preferred_profession = str(
+        daily_state.get('preferred_abyss_profession') or ''
+    ).strip()
+    if predecessor_panel and preferred_profession and not profession:
+        profession = preferred_profession
     predecessor_targets = (
         tower_predecessor_treasure_targets(
             automation_config.game,
@@ -6534,6 +7221,10 @@ def tower_card_reward_priority_rules(
 ) -> tuple[tuple[str, float], ...]:
     state = load_tower_run_state(game)
     predecessor = normalize_label(str(state.get('predecessor_treasure') or ''))
+    floor = int(state.get('floor') or 0)
+    selected_cards = ' '.join(
+        normalize_label(str(card)) for card in state.get('core_cards') or []
+    )
     common = (
         ('马上融合', 10.0),
         ('未来汽水', 9.0),
@@ -6602,6 +7293,24 @@ def tower_card_reward_priority_rules(
             ('照明弹', 20.0),
         )
     elif profession == '法师':
+        early_bridge = ()
+        if floor <= 6:
+            bridge_priorities = (
+                ('飞弹磁化', 30.0),
+                ('飞弹冻结', 29.0),
+                ('雷电连击', 28.0),
+                ('法术压制', 27.0),
+                ('法术手杖', 26.0),
+                ('能量储备', 22.0),
+                ('冰霜飞弹', 20.0),
+            )
+            early_bridge = tuple(
+                (
+                    pattern,
+                    10.0 if normalize_label(pattern) in selected_cards else priority,
+                )
+                for pattern, priority in bridge_priorities
+            )
         if '火焰草莓' in predecessor:
             focused = (
                 ('燃烧晶石', 40.0),
@@ -6624,6 +7333,7 @@ def tower_card_reward_priority_rules(
                 ('闪电晶石', 31.0),
                 ('过度解冻', 28.0),
                 ('百火', 26.0),
+                *early_bridge,
             )
         else:
             focused = (
@@ -6638,13 +7348,29 @@ def tower_card_reward_priority_rules(
                 ('闪电晶石', 32.0),
                 ('小雷虫', 31.0),
                 ('过度解冻', 30.0),
+                *early_bridge,
             )
     elif profession == '战士':
-        if '曜蓝水晶' in predecessor:
+        if '巨人之拳' in predecessor:
+            focused = (
+                ('愤怒宝石', 44.0),
+                ('撞击', 42.0),
+                ('神圣斩击', 40.0),
+                ('巨人协议', 38.0),
+                ('迅捷', 30.0),
+                ('回忆', 28.0),
+                ('无限攻击', 24.0),
+            )
+        elif '曜蓝水晶' in predecessor:
             focused = (
                 ('发现弱点', 38.0),
                 ('弱点加倍', 36.0),
                 ('弱点打击', 35.0),
+                ('迅捷', 34.0),
+                ('未来汽水', 33.0),
+                ('神圣斩击', 30.0),
+                ('巨人协议', 28.0),
+                ('撞击', 27.0),
                 ('代号肉鸽', 27.0),
                 ('海是那个味', 26.0),
             )
@@ -6656,6 +7382,9 @@ def tower_card_reward_priority_rules(
                 ('发现弱点', 37.0),
                 ('弱点打击', 36.0),
                 ('未来汽水', 34.0),
+                ('神圣斩击', 32.0),
+                ('巨人协议', 31.0),
+                ('撞击', 30.0),
                 ('回忆', 30.0),
                 ('献祭', 29.0),
             )
@@ -8794,14 +9523,7 @@ def score_buttons(
             or (
                 bool(
                     tower_button_keys
-                    & {
-                        '变化法阵',
-                        '魔术商店',
-                        '金币商店',
-                        '钱袋商店',
-                        '神秘商店',
-                        '水晶商店',
-                    }
+                    & (TOWER_PURCHASABLE_SHOP_LABELS | {'变化法阵', '魔术商店'})
                 )
                 and any(
                     normalize_label(button.label) in PLAIN_BACK_LABELS
@@ -8811,6 +9533,21 @@ def score_buttons(
             )
         )
     )
+    tower_failed_shop_items: set[str] = set()
+    if tower_shop_visible and recent_actions:
+        action_keys = [normalize_label(label) for label in recent_actions]
+        shop_keys = TOWER_PURCHASABLE_SHOP_LABELS
+        shop_start = max(
+            (index for index, key in enumerate(action_keys) if key in shop_keys),
+            default=-1,
+        )
+        shop_actions = action_keys[shop_start + 1 :]
+        tower_failed_shop_items = {
+            item
+            for item, confirmation in zip(shop_actions, shop_actions[1:])
+            if confirmation in CONFIRM_LABELS
+            and tower_shop_purchase_bonus(automation_config.game, item) > 0
+        }
     tower_card_change_visible = '卡牌变化' in tower_button_keys
     tower_recent_cull_selected = bool(
         automation_config is not None
@@ -9139,21 +9876,27 @@ def score_buttons(
                 score += 14.0
                 reason = f'{reason} Tower shop fusion confirmation.'.strip()
             elif key in CONFIRM_LABELS and selected_tower_shop_item_bonus > 0:
-                score += 14.0
+                score += 40.0
                 reason = (
-                    f'{reason} Confirm the selected consumable that strengthens '
-                    'the Traveler cycle without permanently bloating the deck.'
+                    f'{reason} Confirm the selected in-run gold or crystal '
+                    'purchase because it directly strengthens the current build.'
                 ).strip()
             elif key in PLAIN_BACK_LABELS:
                 score += 6.0
             elif tower_purchase_bonus > 0:
-                if key == latest_action_key:
+                if key in tower_failed_shop_items:
+                    score -= 40.0
+                    reason = (
+                        f'{reason} The previous confirmation left this shop '
+                        'unchanged, so treat this item as unaffordable.'
+                    ).strip()
+                elif key == latest_action_key:
                     score -= 5.0
                 else:
                     score += tower_purchase_bonus
                     reason = (
-                        f'{reason} Buy a consumable that bridges the Traveler '
-                        'cycle without adding a permanent card.'
+                        f'{reason} Spend in-run gold or crystals on a card, '
+                        'treasure, or consumable with direct build synergy.'
                     ).strip()
             else:
                 score -= 5.0
@@ -9298,6 +10041,7 @@ def score_buttons(
                 '钱袋商店': 2.0,
                 '水晶商店': 1.0,
                 '神秘商店': 0.5,
+                '神桃商店': 0.5,
                 '变化法阵': 1.0,
             }
             score -= tower_shop_route_penalties.get(key, 0.0)
@@ -9529,10 +10273,16 @@ def decide_next_move(
         if normalize_label(button.label) == 'visible next-floor stair room'
         or is_tower_next_floor_action(button.label)
     ]
+    tower_trainer_panel_visible = any(
+        normalize_label(button.label) == '训练师任务' for button in buttons
+    ) and any(
+        normalize_label(button.label) in {'选择', '领取'} for button in buttons
+    )
     strategic_build_rooms = [
         button
         for button in buttons
         if button not in tower_next_floor
+        and not tower_trainer_panel_visible
         and tower_deep_map_room_bonus(button.label) >= 5.0
         and button.score >= min_action_score
     ]
@@ -9555,6 +10305,25 @@ def decide_next_move(
                     reverse=True,
                 )[:3],
             )
+
+    if strategic_build_rooms:
+        top_strategic_room = max(
+            strategic_build_rooms,
+            key=lambda button: (button.score, button.confidence, button.clickability),
+        )
+        return Decision(
+            status='ready',
+            reason=(
+                'A high-value Tower build room is available; resolve it before '
+                'taking the route that leaves this floor.'
+            ),
+            recommended=top_strategic_room,
+            choices=sorted(
+                strategic_build_rooms,
+                key=lambda button: button.score,
+                reverse=True,
+            )[:3],
+        )
 
     fallback_labels = fallback_labels or set()
     viable_non_fallback = [
@@ -9669,7 +10438,7 @@ def click_button(args: argparse.Namespace, button: ButtonCandidate) -> None:
         return
     client.call_tool('click', {'x': button.x, 'y': button.y})
     if should_double_click_button(button, load_automation_config(args.game)):
-        time.sleep(0.15)
+        time.sleep(0.8 if normalize_label(args.game) == 'tower' else 0.15)
         client.call_tool('click', {'x': button.x, 'y': button.y})
 
 
@@ -9694,10 +10463,11 @@ def tower_fast_batch_follow_up(
     )
     if len(playable) < 2:
         return None
+    first_slot = playable[0]
     return ButtonCandidate(
         label='Visible playable card batch follow-up',
-        x=0.196,
-        y=0.594,
+        x=first_slot.x,
+        y=first_slot.y,
         confidence=0.95,
         clickability=7.0,
         source='vision',
@@ -9723,6 +10493,8 @@ def tower_trainer_task_bonus(
     ):
         return 0.0
     button_key = normalize_label(button.label)
+    if '不想遇到' in button_key and '训练师' in button_key:
+        return -30.0
     if button_key == '告别':
         choice_bonuses = [
             tower_trainer_task_bonus(
@@ -9773,10 +10545,24 @@ def tower_trainer_task_bonus(
         condition_bonus -= 6.0
     if '战斗胜利3次' in row_text:
         condition_bonus += 10.0
+    if re.search(r'击败\d+只普通怪', row_text):
+        condition_bonus += 12.0
     if '完成2层冒险' in row_text:
         condition_bonus += 6.0
+    if '获得100个金币' in row_text:
+        condition_bonus += 8.0
+    if '击败2只哥布林' in row_text:
+        condition_bonus += 4.0
     if '敌方物攻增加100点' in row_text:
         condition_bonus -= 6.0
+    if '欢乐时光' in row_text or '金币利息' in row_text:
+        return condition_bonus + 32.0
+    if '谢幕' in row_text or '掉落物' in row_text and '倍' in row_text:
+        return condition_bonus + 18.0
+    if '和弦' in row_text:
+        return condition_bonus + 12.0
+    if '超时空之手' in row_text:
+        return condition_bonus + 20.0
     profession = tower_run_profession(automation_config.game)
     if profession == '旅行者':
         if '牛脾气' in row_text:
@@ -9827,20 +10613,28 @@ def tower_trainer_task_bonus(
         electric_route = '电虫药水' in treasure_text
         fire_route = '火焰草莓' in treasure_text
         if '独孤求败' in row_text:
-            return condition_bonus + 22.0
+            return condition_bonus - 30.0
+        if '牛脾气' in row_text or '牛牌气' in row_text:
+            return condition_bonus + (28.0 if electric_route else 22.0)
         if '火纹' in row_text:
             if electric_route:
                 return condition_bonus - 18.0
             return condition_bonus + (24.0 if fire_route else 18.0)
         if '不朽之心' in row_text:
             return condition_bonus + (26.0 if electric_route else 18.0)
-        if '骑士之力' in row_text or '生命上限' in row_text:
+        if '能量转换' in row_text:
+            return condition_bonus + (30.0 if electric_route else 24.0)
+        if '变异血统' in row_text:
+            return condition_bonus - (12.0 if electric_route else 6.0)
+        if '骑士之力' in row_text:
             return condition_bonus + (18.0 if electric_route else 10.0)
+        if '身体强化' in row_text:
+            return condition_bonus + 14.0
         if '谢幕' in row_text:
             return condition_bonus + 10.0
     if profession == '战士' and '快速施法' in row_text:
         return condition_bonus + 18.0
-    if '闪避' in row_text or '猪手本能' in row_text:
+    if '闪避' in row_text or '猪手本能' in row_text or '猎手本能' in row_text:
         return condition_bonus + 8.0
     if '灵巧身法' in row_text:
         return condition_bonus + 6.0
@@ -9977,6 +10771,63 @@ def inspect_item_choices(
     confirm_buttons = [button for button in buttons if is_confirm_button(button)]
     if not confirm_buttons:
         return [], None
+    if any(normalize_label(button.label) == '道具口袋' for button in buttons):
+        healing_patterns = (
+            '深澜龙血',
+            '深渊龙血',
+            '恢复药水',
+            '生命药水',
+            '治疗药水',
+        )
+        cycle_patterns = ('迅捷药水', '唤回药水', '宝石药水')
+        item_buttons = [
+            button
+            for button in buttons
+            if button.source != 'template' and 0.54 <= button.y <= 0.78
+        ]
+        target = next(
+            (
+                button
+                for pattern in healing_patterns
+                for button in item_buttons
+                if pattern in normalize_label(button.label)
+            ),
+            None,
+        )
+        target = target or next(
+            (
+                button
+                for pattern in cycle_patterns
+                for button in item_buttons
+                if pattern in normalize_label(button.label)
+            ),
+            None,
+        )
+        if target is not None:
+            click_button(args, target)
+            time.sleep(args.item_inspection_interval)
+        visible_text = ' '.join(normalize_label(button.label) for button in buttons)
+        if target is not None or (
+            ('恢复' in visible_text and '生命' in visible_text)
+            or ('抽' in visible_text and '张牌' in visible_text)
+        ):
+            confirm = max(
+                confirm_buttons,
+                key=lambda button: (
+                    button.score,
+                    button.confidence,
+                    button.clickability,
+                ),
+            )
+            return [], Decision(
+                status='ready',
+                reason=(
+                    f'低血道具口袋优先选择{target.label if target else "当前消耗品"}'
+                    '并确认；回血优先于抽牌循环。'
+                ),
+                recommended=confirm,
+                choices=[button for button in (target, confirm) if button is not None],
+            )
     stair_choice = tower_stair_choice_candidate(automation_config, buttons)
     if stair_choice is not None:
         click_button(args, stair_choice)
@@ -11464,6 +12315,7 @@ def run_turn(args: argparse.Namespace) -> TurnResult:
             candidate_buttons,
             recent_actions=recent_actions,
             image=image,
+            context_buttons=detected_buttons,
         ),
     ]
     candidate_buttons = [

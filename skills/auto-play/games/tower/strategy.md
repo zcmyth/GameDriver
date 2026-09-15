@@ -7,15 +7,19 @@
 ## 深渊速刷核心
 - 硬门槛：生命优先堆到 250+，速度堆到 45+；低于门槛不提前跳层。成长宝物优先在 30 层前拿，30 层左右完成牌组后再跳层。
 - 稳定无限流原则：启动后非临时牌不超过 7 张。三选一没有本职业核心牌时点 `放弃` 领取 10 金币，不为单卡强度污染牌库；`马上融合` 仍可拿。
-- 开局必须先识别职业并刷对 `前辈的宝物`。旅行者首选 `毒龙匕首` 走直毒；连续 20 次真正重随仍未出现时，才接受 `花喇叭` 并立即切成纯祈愿，不得继续按毒流选牌。猎人接受 `远古魔法手套` / `贵族手刀`；法师先选 `电虫药水`，其次 `火焰草莓`；战士接受 `骑士狼牙棒` / `曜蓝水晶`。三选一要读取全部三列，目标在任意列都必须主动选中；同组出现多个目标时必须按写出的先后顺序选，不能同分后按屏幕位置取左。没有目标时先任选一件完成领取，在地图设置中 `返回旅馆`，关卡页点 `放弃冒险` 并确认，再重新进入深渊，确保随机结果真正刷新。
+- 开局必须先识别职业并刷对 `前辈的宝物`。旅行者首选 `毒龙匕首` 走直毒；连续 20 次真正重随仍未出现时，才接受 `花喇叭` 并立即切成纯祈愿，不得继续按毒流选牌。猎人接受 `远古魔法手套` / `贵族手刀`；法师先选 `电虫药水`，其次 `火焰草莓`；战士先选 `巨人之拳`，其次 `骑士狼牙棒` / `曜蓝水晶`。三选一要读取全部三列，目标在任意列都必须主动选中；同组出现多个目标时必须按写出的先后顺序选，不能同分后按屏幕位置取左。没有目标时先任选一件完成领取，在地图设置中 `返回旅馆`，关卡页点 `放弃冒险` 并确认，再重新进入深渊，确保随机结果真正刷新。
 - 深渊当天展示的角色与职业固定；职业必须以实际起手牌识别，不能靠状态偏好在局内强切。职业偏好只负责跨重开筛选同一职业的前辈宝物，实战牌面一旦识别，应覆盖偏好。
+- 左下角 `任务` 出现红色数字徽标时，表示训练师任务奖励已可领取：立即打开任务并核对奖励天赋。通常在面板内点 `领取`，再关闭“恭喜获得”和任务面板；只打开面板不算激活天赋。但 `独孤求败` 会让敌方物攻增加 100，深渊冲层必须只检查、不领取，并记住本局跳过该红点，避免后手生存被破坏。
 - 旅行者根据启动宝物二选一，禁止混流。拿到 `毒龙匕首` 走七牌直毒：`无限宝石`、`剧毒晶石`、`黑神话`、`烈性毒药`、`涂毒小刀/毒药攻击`、`献祭`、`安乐毒药`，优先 `植物精华`，然后才是 `牛脾气/毒性思考`。战斗顺序为装备宝石 -> 回费过牌 -> 叠毒 -> `烈性毒药` 翻倍 -> `安乐毒药` 触发、回血并触发 `黑神话`。
 - 拿到 `花喇叭` 或 `旅行者手册` 则走七牌纯祈愿：`无限宝石`、`天使`、`救赎`、`奉献`、`黑神话`、`献祭/未来汽水`、`回忆`。`花喇叭` 开战直接提供 5 层祈愿，先装备抽牌与回费宝石，再用 `天使` 指数放大，`救赎` 转为伤害与回复，`奉献` 的回复再触发 `黑神话` 补爆发。`牛脾气` 是首要天赋，用来保留原本会移除的 `天使`；`植物精华/毒性思考` 与本分支无关。每个功能槽只拿一张，升星优先 `天使`，然后 `救赎`。
 - 旅行者尚未成型时的房间优先级：`卡牌遗忘` > `训练师` > `宝石牌包` > `职业牌包` > 生存/商店房。直毒训练师找 `植物精华/牛脾气/毒性思考`；纯祈愿只把 `牛脾气` 当硬核心，`不朽之心`可用于续航。
 - 猎人速刷：`捕猎陷阱` 多多益善，`大力射击` 不超过陷阱的三分之一，`猎人嗅觉` 1-3 张；核心宝物 `魔法面具` + `火龙蛋` + `实验眼镜`，启动器从 `快速施法` / `双枪` / `魔法熊手` 三选一。7 月瞬发调整后用少量 `瞄准` 添加精准来加快破盾和斩杀；不要拿强攻宝石、虚无宝石或大量正面状态组件，它们会增加结算动画并拖慢速刷。2026-08 玩家实测连续三局约 25 分钟到 120 层，2026-09 又有新手第三天按这套通关的记录；职业可选时优先级高于旅行者。
-- 法师速刷：首选 `电虫药水`，其每累计 5 层电击抽牌能同时补循环与输出。最新冰转电成型表为 `寒冷晶石×1 + 寒流×1 + 冷风×1 + 雷龙×1 + 电解冰×1 + 快速思考×2 + 小雷虫×2`；前三者先建立寒冷生成端，`电解冰` 转电击，`电虫药水` 再把电击换成过牌，`雷龙` 负责破嘲讽和补伤。`寒冰盾` 可作成型前的生存与寒冷过渡牌，`闪电晶石` 只是补强，不应挤掉上述核心槽位。只拿到 `电解冰` 而没有寒冷来源时，它暂时是死牌，奖励必须优先补生成端。免费魔术变牌出现 `路人甲` 时优先保留：实测可回复 2 生命、1 法力并抽 1，使用后移除，能同时补续航与压缩当回合牌库；`恢复宝石` 实测每次胜利回复 6 生命。遗忘房优先删除 `虚弱`、`能量飞弹`、`雷电飞弹`等基础杂牌，不删 `雷龙` 与上述寒冷、电击、抽牌和回血组件。拿到 `火焰草莓` 时改用公开验证的三卡极简火法，只留 `燃烧晶石` + `太阳盾` + `火焰打击`，依次使用后直接结算；它比寒冷转火长链更容易成型，也减少自动驾驶操作。
+- 法师速刷：首选 `电虫药水`，其每累计 5 层电击抽牌能同时补循环与输出。最新冰转电成型表为 `寒冷晶石×1 + 寒流×1 + 冷风×1 + 雷龙×1 + 电解冰×1 + 快速思考×2 + 小雷虫×2`；前三者先建立寒冷生成端，`电解冰` 转电击，`电虫药水` 再把电击换成过牌，`雷龙` 负责破嘲讽和补伤。实战出牌时 `快速思考` 要趁手牌最多时先打；低血斩杀窗内优先把回复的法力交给 `雷龙/雷电飞弹`，不先打只增益后续回合的 `闪电晶石`。`寒冰盾` 可作成型前的生存与寒冷过渡牌，`闪电晶石` 只是补强，不应挤掉上述核心槽位。只拿到 `电解冰` 而没有寒冷来源时，它暂时是死牌，奖励必须优先补生成端。前 6 层核心缺失时允许拿一张过渡火力，优先 `飞弹磁化`、`飞弹冻结`、`雷电连击`、`法术压制`、`法术手杖`；同名只拿一次，核心成型后再从遗忘房或魔术商店清掉。免费魔术变牌出现 `路人甲` 时优先保留：实测可回复 2 生命、1 法力并抽 1，使用后移除，能同时补续航与压缩当回合牌库；`恢复宝石` 实测每次胜利回复 6 生命。遗忘房优先删除 `虚弱`、`能量飞弹`、`雷电飞弹`等基础杂牌，不删 `雷龙` 与上述寒冷、电击、抽牌和回血组件。魔术商店只做免费换牌，不出售；金币与水晶商店仍可按当前构筑购买核心。拿到 `火焰草莓` 时改用公开验证的三卡极简火法，只留 `燃烧晶石` + `太阳盾` + `火焰打击`，依次使用后直接结算；它比寒冷转火长链更容易成型，也减少自动驾驶操作。
 - `巨人协议` 是跨层容错件，不是输出核心；实战中一级可把 60 生命上限抬到 160，应该在抽到时尽早打出，避免低血才见牌来不及救场。它仍需配合休息/回血和本职业终结链，不能因为上限变厚就放弃爆发组件。
 - 战士速刷：低要求默认走 2026-09 新公开的易伤无限链，`宝石手套` 开局安装 `超时空宝石`，用 `迅捷` 2-3 张过牌、`发现弱点` 2-3 张叠易伤、`弱点打击` 1 张结算，卡手时用 `未来汽水` 回蓝；宝物 `拐棍糖` 同时回蓝、抽牌、回血，`幻龙蛋` 复制超越牌防止断环。刷到 `曜蓝水晶` 可加入 `弱点加倍`，刷到完整 `魔法熊手/快速施法 + 女鹅套娃` 引擎时才考虑旧隐刀 `幽灵剑 + 换血`。
+- 当天固定为普通/机器人奇莫且刷到 `巨人之拳` 时，改走更低门槛的血量物攻链：奖励优先 `愤怒宝石 > 撞击 > 神圣斩击 > 巨人协议 > 迅捷 > 无限攻击`。`无限攻击` 只需 1 法力并会在单场战斗中每次使用给牌组内同名牌加 2 伤害，是核心未齐时可靠的自成长输出，不能再为 10 金币直接丢掉。先装备愤怒宝石，再用巨人协议抬高生命上限；撞击按生命上限放大伤害，神圣斩击负责斩杀并永久加血。魔术商店与遗忘房持续清理基础防御牌和低效攻击，保住愤怒宝石抽取物攻牌的连续性。
+- 局内金币和水晶可以购买，但必须按构筑联动消费，绝不进入真钱充值。健康状态下水晶商店优先于普通休息点；进店先找赚钱、永久生命/回血、抽牌回蓝与自动装备宝石，巨人战士重点买 `矮人王宝石`、`巨人之眼`、`巨人面罩`，没有超越牌联动时不买昂贵的 `幻龙蛋`。没有核心件可刷新 1-2 次，免费刷新优先；两次仍无核心就返回。金币商店只买本职业核心牌，且永不出售任何牌、宝物、装备或角色。
+- 训练师任务优先选不塞永久杂牌、条件可自然完成且奖励增强经济或循环的项。`超时空之手` 只需击败 3 只普通怪，洗牌时生成临时宝石，能补 `魔法熊手` 与宝石触发链；优先于告别。要求直接获得多张技能牌或多张一级卡牌的任务会污染短循环，继续跳过。
 - 有红/橙面具时才切宇宙厚牌：法师保留并升满 `火焰连击/冰霜连击/闪电连击` 与 `雷龙` 中至少一条法术输出，其余法术牌和防御牌删除；随后大量拿牌但不升级，用面具按抽牌堆牌数造成两倍效果伤害。没有面具时禁止为了“宇宙”盲目撑厚。
 - 通用必拿宝物：`实验眼睛`、`机械龙蛋`；早期可拿 `诅咒饭团`、`巨人泡泡糖`。不要拿 `宇宙十字架`，避免 123 层梦境零复制后反制本方。
 - 121-123 层预留：`驱散药水` 1、`肉鸽药水` 1、`易伤药水` 1、`暴击药水` 1、元素药水 5+、`咖啡` 3；无攻击牌再留炸弹 3。123 层先用无用道具破三次模仿，再上肉鸽与负面印记。
@@ -193,6 +197,16 @@
 - 卡牌遗忘
 - 设置
 - 获得2点护盾，对敌方添加1层透支，移除
+- 训练师任务
+- 还可以领取2个任务
+- 还可以领取3个任务
+- 回忆
+- 迅捷药水
+- 免费1次
+- 魔法熊手
+- 实验眼镜
+- 魔法笔记
+- 水晶哥布林
 
 ## Fallback Buttons
 - Next Room
@@ -229,8 +243,10 @@
 - Prefer resume adventure when a previous tower fight can be continued.
 - On a defeat screen (`游戏失败`), click **返回旅馆** / **Return to Inn** so the
   next run can start from the inn instead of tapping stat labels.
-- Daily-task runs may recruit from the inn after the Abyss Stairs attempt. Never
-  sell or discard owned cards, treasures, equipment, collectibles, or characters.
+- Daily-task runs may recruit from the inn after the Abyss Stairs attempt. In-run
+  gold and crystals may buy build-critical cards, treasures, and consumables and
+  may refresh each shop once or twice. Never make real-money purchases or sell or
+  discard owned cards, treasures, equipment, collectibles, or characters.
 - Prefer strength-building actions before navigation arrows: weapons, treasure, chest rooms, backpack/utility rooms, scroll/card rooms, combat cards, merge/upgrade actions, and reward pickups can improve the character.
 - Use arrow/path controls only when there is no visible fight, reward, room choice, equipment, treasure, card, chest, backpack, merge, pickup, confirm-after-selection, or other strength-building action available.
 - When choosing between items/cards/treasures, tap each option first to reveal and OCR its description, remember the description, then select the best option and confirm it.
@@ -534,8 +550,9 @@
 - 不要清空商店。只拿能直接完成爆发循环、提高续航，或让当前核心联动升级的少量牌。
 - 不灭级宝物或物品最高优先；遇到时优先拿取，并在资源允许时优先激活或升级。
 - 能融合或升级当前核心牌、核心宝物时优先升级；不要为了“以后可能有用”扩充无联动卡牌。
-- 刷新是有限资源：单个商店默认最多刷新一次，金币或水晶紧张时不刷新；看见明确核心升级缺口时才刷新。
+- 刷新是有限资源：单个商店最多刷新 1-2 次，先用免费刷新；只寻找赚钱、加血、回血、抽牌、回蓝与当前构筑联动件，两次仍没有就离开。
 - 每次战斗出牌后手牌会重排，必须重新截图识别；不要连续点击旧坐标。
+- 战斗生命低于约 30% 且道具口袋不为空时，先开道具口袋；优先使用回血消耗品，若没有回血则用抽牌消耗品争取当回合斩杀。有 `实验眼镜` 时，`深澜龙血` 的 10% 最大生命回复会结算两次。
 - 每日顺序由专门流程控制：先挑战深渊楼梯，再在旅馆有次数时招募，最后让刚招募的角色挑战尖塔木屋。通用按钮评分不得让招募抢在深渊楼梯之前。
 - 选择卡牌时优先形成一个短链：稳定触发/抽牌或回费、爆发终结、必要回血。没有直接协同时宁可放弃奖励，避免牌组越来越慢。
 - 地图上的“当前层数”和“剩余冒险事件”只是状态文字；必须选具体房间图标，不得点击计数文字。
@@ -601,6 +618,9 @@
 ## Item Choice Priorities
 - Permanent stat changes are highest priority.
 - Coin/gold gain is high priority, especially if it repeats per battle.
+- On deep-floor maps, visit gold/crystal goblins and purchasable shops before
+  ordinary combat. Prefer healing/max HP next, then draw, mana, and cycle; allow
+  at most two shop refreshes before moving on.
 - Attack, damage, defense, HP/health, crit, and other stat increases are high priority when permanent or repeated per battle.
 - Temporary one-battle effects are lower priority than permanent growth.
 - Do not treat **消耗水晶** / crystal cost as bad by itself. Water crystals are
@@ -634,6 +654,10 @@
   HP by `600`. Use immediately if drawn in a boss or dangerous long fight.
 - **净化药水**: shop card, cost 0, consumable; clears all own mark effects without
   triggering marks. Save/use it when the enemy applies dangerous debuffs.
+- **深澜龙血**: consumable; restores 10% max HP. With **实验眼镜**, the
+  effect repeats once; a live floor-20 use restored 44 HP at 225 max HP.
+- **迅捷药水**: consumable; draws 6 cards. Use as a critical-health burst
+  fallback after healing, or when the extra hand can end the battle immediately.
 - **骑士盾牌**: treasure; first combat round starts with `6` shield. Good but
   less important than offensive physical-scaling treasures.
 - **赤铁巨斧III**: crystal-shop equipment; `物攻 +5`, `暴击 +3`. Good buy.
