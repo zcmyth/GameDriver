@@ -4673,6 +4673,24 @@ def tower_real_money_purchase_prompt_visible(labels: Iterable[str]) -> bool:
     return any(keyword in text for keyword in REAL_MONEY_PURCHASE_KEYWORDS)
 
 
+def tower_visible_purchasable_shop(
+    buttons: Iterable[ButtonCandidate],
+) -> str:
+    visible = [button for button in buttons if button.source != 'template']
+    if not any(
+        normalize_label(button.label) in PLAIN_BACK_LABELS for button in visible
+    ):
+        return ''
+    shops = [
+        button
+        for button in visible
+        if normalize_label(button.label) in TOWER_PURCHASABLE_SHOP_LABELS
+    ]
+    if not shops:
+        return ''
+    return normalize_label(max(shops, key=lambda button: button.confidence).label)
+
+
 def tower_shop_purchase_profile(game: str, label: str) -> tuple[float, str]:
     state = load_tower_run_state(game)
     if normalize_label(str(state.get('stage') or '')) != '深渊楼梯':
@@ -5033,6 +5051,18 @@ def update_tower_run_state(
         if phase != 'unknown'
         else normalize_label(str(state.get('phase') or ''))
     )
+    visible_shop = tower_visible_purchasable_shop(buttons)
+    if visible_shop:
+        refresh_history = dict(state.get('shop_refresh_history') or {})
+        active_refresh_key = tower_shop_refresh_key(state, visible_shop)
+        state['last_room_action'] = visible_shop
+        state['active_shop'] = visible_shop
+        state['active_shop_key'] = active_refresh_key
+        state['shop_refresh_count'] = int(
+            refresh_history.get(active_refresh_key, 0)
+        )
+        refresh_history.setdefault(active_refresh_key, 0)
+        state['shop_refresh_history'] = refresh_history
     if phase == 'combat':
         state['awaiting_route_after_reward'] = False
         battle = state.get('battle')
@@ -5236,6 +5266,21 @@ def update_tower_run_state(
             == '魔术商店'
         ):
             state['magic_shop_change_complete'] = True
+        if (
+            action_succeeded
+            and clicked_key in PLAIN_BACK_LABELS
+            and normalize_label(str(state.get('active_shop') or ''))
+            in TOWER_PURCHASABLE_SHOP_LABELS
+        ):
+            completed_shop_keys = list(state.get('completed_shop_keys') or [])
+            completed_key = tower_shop_refresh_key(state)
+            if completed_key and completed_key not in completed_shop_keys:
+                completed_shop_keys.append(completed_key)
+            state['completed_shop_keys'] = completed_shop_keys
+            state['last_room_action'] = state['active_shop']
+            state.pop('shop_refresh_count', None)
+            state.pop('active_shop', None)
+            state.pop('active_shop_key', None)
         if (
             action_succeeded
             and clicked_key in CONFIRM_LABELS
@@ -9551,6 +9596,7 @@ def score_buttons(
     tower_last_room_position: list[Any] = []
     tower_awaiting_route_after_reward = False
     tower_run_state: dict[str, Any] = {}
+    tower_completed_shop_labels: set[str] = set()
     if (
         automation_config is not None
         and normalize_label(automation_config.game) == 'tower'
@@ -9565,6 +9611,12 @@ def score_buttons(
         tower_awaiting_route_after_reward = bool(
             tower_run_state.get('awaiting_route_after_reward')
         )
+        current_floor_prefix = f'{int(tower_run_state.get("floor") or 0)}:'
+        tower_completed_shop_labels = {
+            normalize_label(str(value).removeprefix(current_floor_prefix))
+            for value in tower_run_state.get('completed_shop_keys') or []
+            if str(value).startswith(current_floor_prefix)
+        }
     selected_tower_shop_item_bonus = (
         tower_shop_purchase_bonus(automation_config.game, latest_action_key)
         if automation_config is not None
@@ -9667,6 +9719,12 @@ def score_buttons(
         or bool(tower_button_keys & {'当前所在层数', '全服最高层数'})
         or any(key.startswith('当前层数') for key in tower_button_keys)
     )
+    tower_completed_shop_buttons = [
+        button
+        for button in buttons
+        if button.source != 'template'
+        and normalize_label(button.label) in tower_completed_shop_labels
+    ]
     tower_card_pickup_visible = (
         automation_config is not None
         and normalize_label(automation_config.game) == 'tower'
@@ -10223,6 +10281,29 @@ def score_buttons(
                 score += tower_deep_map_room_bonus(button.label)
                 if is_tower_status_fraction_label(button.label):
                     score -= 8.0
+                near_completed_shop = any(
+                    (
+                        (button.x - completed.x) ** 2
+                        + (button.y - completed.y) ** 2
+                    )
+                    < 0.15**2
+                    for completed in tower_completed_shop_buttons
+                )
+                if key in tower_completed_shop_labels:
+                    score -= 20.0
+                    reason = (
+                        f'{reason} This Tower shop is already complete on the '
+                        'current floor.'
+                    ).strip()
+                elif near_completed_shop and (
+                    is_navigation_arrow_label(button.label, automation_config)
+                    or is_tower_room_vision_candidate(button)
+                ):
+                    score -= 20.0
+                    reason = (
+                        f'{reason} This entrance is attached to a completed '
+                        'Tower shop.'
+                    ).strip()
         if key in current_room_labels and navigation_arrow_visible and not end_visible:
             score -= 1.75
         if (

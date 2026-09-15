@@ -10314,6 +10314,89 @@ def test_tower_reentering_same_shop_preserves_refresh_count(tmp_path, monkeypatc
     assert state['shop_refresh_count'] == 2
 
 
+def test_tower_shop_panel_recovers_context_after_entering_through_arrow(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    state_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(
+        'run_id: arrow-shop\n'
+        'stage: 深渊楼梯\n'
+        'phase: climbing_map\n'
+        'floor: 20\n'
+        'last_room_action: Visible current room icon\n'
+    )
+    image = Image.new('RGB', (360, 800), color='black')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=x,
+            y=y,
+            confidence=0.99,
+            clickability=1.8,
+            source='ocr',
+        )
+        for label, x, y in (
+            ('金币商店', 0.50, 0.34),
+            ('免费1次', 0.15, 0.28),
+            ('返回', 0.27, 0.88),
+        )
+    ]
+
+    auto_play.update_tower_run_state('tower', image, buttons)
+
+    state = auto_play.load_tower_run_state('tower')
+    assert state['last_room_action'] == '金币商店'
+    assert state['active_shop'] == '金币商店'
+    assert state['active_shop_key'] == '20:金币商店'
+    assert state['shop_refresh_count'] == 0
+
+
+def test_tower_return_marks_inferred_shop_complete(tmp_path, monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    state_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(
+        'run_id: arrow-shop\n'
+        'stage: 深渊楼梯\n'
+        'phase: climbing_map\n'
+        'floor: 20\n'
+    )
+    image = Image.new('RGB', (360, 800), color='black')
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=x,
+            y=y,
+            confidence=0.99,
+            clickability=1.8,
+            source='ocr',
+        )
+        for label, x, y in (
+            ('金币商店', 0.50, 0.34),
+            ('免费1次', 0.15, 0.28),
+            ('返回', 0.27, 0.88),
+        )
+    ]
+
+    auto_play.update_tower_run_state(
+        'tower',
+        image,
+        buttons,
+        clicked_label='返回',
+    )
+
+    state = auto_play.load_tower_run_state('tower')
+    assert state['completed_shop_keys'] == ['20:金币商店']
+    assert state['last_room_action'] == '金币商店'
+    assert 'active_shop' not in state
+    assert 'active_shop_key' not in state
+
+
 def test_tower_shop_refresh_history_merges_coordinate_drift(
     tmp_path,
     monkeypatch,
@@ -14913,6 +14996,58 @@ def test_tower_leaves_persisted_completed_shop_when_recent_history_expired(
 
     assert decision.recommended.label == '上方道路'
     assert 'Leave recently completed Tower room' in decision.recommended.reason
+
+
+def test_tower_map_avoids_arrow_attached_to_completed_shop(monkeypatch):
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'stage': '深渊楼梯',
+            'phase': 'climbing_map',
+            'floor': 20,
+            'last_room_action': '金币商店',
+            'completed_shop_keys': ['20:金币商店'],
+        },
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='金币商店',
+            x=0.272,
+            y=0.688,
+            confidence=0.99,
+            clickability=1.6,
+            source='ocr',
+        ),
+        auto_play.ButtonCandidate(
+            label='左侧道路',
+            x=0.192,
+            y=0.733,
+            confidence=0.99,
+            clickability=7.0,
+            source='vision',
+        ),
+        auto_play.ButtonCandidate(
+            label='上方道路',
+            x=0.510,
+            y=0.700,
+            confidence=0.86,
+            clickability=1.0,
+            source='template',
+        ),
+    ]
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+
+    assert scored[0].label == '上方道路'
+    left = next(button for button in scored if button.label == '左侧道路')
+    assert 'attached to a completed Tower shop' in left.reason
 
 
 def test_tower_prefers_mystery_shop_when_only_shop_routes_remain():
