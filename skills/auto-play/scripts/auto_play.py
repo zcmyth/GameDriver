@@ -6057,6 +6057,7 @@ def should_remember_ineffective_button(
         and normalize_label(automation_config.game) == 'tower'
         and (
             tower_shop_purchase_bonus(automation_config.game, button.label) > 0
+            or tower_deep_map_room_bonus(button.label) != 0
             or key.startswith('刷新')
             or (key.startswith('免费') and '次' in key)
         )

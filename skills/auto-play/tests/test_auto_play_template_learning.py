@@ -10081,7 +10081,7 @@ def test_tower_does_not_globally_mark_shop_choices_or_refresh_ineffective(
         strategy_updated=False,
     )
 
-    for label in ('巨人药水', '刷新●20', '免费1次'):
+    for label in ('巨人药水', '金币哥布林', '刷新●20', '免费1次'):
         button = auto_play.ButtonCandidate(
             label=label,
             x=0.2,
