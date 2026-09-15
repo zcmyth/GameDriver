@@ -3012,20 +3012,51 @@ def tower_shop_refresh_key(
     shop_key = normalize_label(
         str(shop_label or state.get('active_shop') or '').strip()
     )
-    room_position = list(position or state.get('last_room_position') or [])
-    if shop_key not in TOWER_PURCHASABLE_SHOP_LABELS or len(room_position) != 2:
+    if shop_key not in TOWER_PURCHASABLE_SHOP_LABELS:
         return ''
-    return (
-        f'{int(state.get("floor") or 0)}:{shop_key}:'
-        f'{float(room_position[0]):.3f}:{float(room_position[1]):.3f}'
-    )
+    return f'{int(state.get("floor") or 0)}:{shop_key}'
+
+
+def normalize_tower_shop_refresh_state(state: dict[str, Any]) -> None:
+    history = dict(state.get('shop_refresh_history') or {})
+    if not history:
+        return
+
+    canonical_counts: dict[str, int] = {}
+    legacy_counts: dict[str, int] = {}
+    for raw_key, raw_count in history.items():
+        parts = str(raw_key).split(':')
+        if len(parts) < 2:
+            continue
+        canonical_key = f'{parts[0]}:{parts[1]}'
+        count = max(0, int(raw_count or 0))
+        target = canonical_counts if len(parts) == 2 else legacy_counts
+        target[canonical_key] = target.get(canonical_key, 0) + count
+
+    normalized = {
+        key: max(count, legacy_counts.get(key, 0))
+        for key, count in canonical_counts.items()
+    }
+    for key, count in legacy_counts.items():
+        normalized.setdefault(key, count)
+    state['shop_refresh_history'] = normalized
+
+    active_key = tower_shop_refresh_key(state)
+    if active_key:
+        state['active_shop_key'] = active_key
+        state['shop_refresh_count'] = max(
+            int(state.get('shop_refresh_count') or 0),
+            normalized.get(active_key, 0),
+        )
 
 
 def load_tower_run_state(game: str) -> dict[str, Any]:
     path = tower_run_state_path_for(game)
     if not path.exists():
         return {}
-    return safe_load_yaml_mapping(path)
+    state = safe_load_yaml_mapping(path)
+    normalize_tower_shop_refresh_state(state)
+    return state
 
 
 def load_tower_daily_state(game: str) -> dict[str, Any]:

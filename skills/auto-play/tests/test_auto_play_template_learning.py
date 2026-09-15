@@ -10216,8 +10216,33 @@ def test_tower_reentering_same_shop_preserves_refresh_count(tmp_path, monkeypatc
     )
 
     state = auto_play.load_tower_run_state('tower')
-    assert state['active_shop_key'] == '20:金币商店:0.272:0.689'
+    assert state['active_shop_key'] == '20:金币商店'
     assert state['shop_refresh_count'] == 2
+
+
+def test_tower_shop_refresh_history_merges_coordinate_drift(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    state_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(
+        'stage: 深渊楼梯\n'
+        'floor: 17\n'
+        'active_shop: 金币商店\n'
+        'shop_refresh_count: 0\n'
+        'shop_refresh_history:\n'
+        "  '17:金币商店:0.271:0.689': 2\n"
+        "  '17:金币商店:0.272:0.688': 2\n"
+    )
+
+    state = auto_play.load_tower_run_state('tower')
+
+    assert state['shop_refresh_history'] == {'17:金币商店': 4}
+    assert state['active_shop_key'] == '17:金币商店'
+    assert state['shop_refresh_count'] == 4
 
 
 def test_tower_empty_shop_uses_visual_refresh_then_returns(
