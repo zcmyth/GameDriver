@@ -3969,6 +3969,13 @@ def tower_daily_policy_candidates(
             failed_refresh = normalize_label(
                 str(run_state.get('last_failed_action') or '')
             )
+            if failed_refresh.startswith('刷新'):
+                selected = choose(
+                    {'返回'},
+                    '付费刷新未能推进，通常是局内货币不足；立即返回，避免OCR变体重复点击。',
+                )
+                if selected is not None:
+                    return selected
             refresh_buttons = [
                 button
                 for button in refresh_buttons

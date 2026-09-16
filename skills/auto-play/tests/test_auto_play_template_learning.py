@@ -10965,6 +10965,52 @@ def test_tower_shop_returns_after_paid_refresh_cannot_progress(
     assert selected[0].label == '返回'
 
 
+def test_tower_shop_returns_after_failed_paid_refresh_ocr_variant(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    state_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(
+        'run_id: giant-run\n'
+        'stage: 深渊楼梯\n'
+        'floor: 14\n'
+        'active_shop: 金币商店\n'
+        'last_room_action: 金币商店\n'
+        'last_action: 刷新●10\n'
+        'last_failed_action: 刷新●10\n'
+        'shop_refresh_count: 1\n'
+        'policy:\n'
+        '  shop_refresh_limit: 2\n'
+    )
+    auto_play.write_tower_daily_state(
+        'tower',
+        {'date': '2026-09-15', 'phase': 'abyss'},
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=x,
+            y=y,
+            confidence=0.99,
+            clickability=1.8,
+            source='ocr',
+        )
+        for label, x, y in (
+            ('金币商店', 0.5, 0.34),
+            ('刷新1', 0.14, 0.30),
+            ('返回', 0.27, 0.88),
+        )
+    ]
+
+    selected = auto_play.tower_daily_policy_candidates('tower', buttons)
+
+    assert selected is not None
+    assert selected[0].label == '返回'
+
+
 def test_tower_shop_sparkle_is_claimed_before_shopping(monkeypatch):
     auto_play = load_auto_play_module()
     config = automation_config(auto_play, 'tower')
