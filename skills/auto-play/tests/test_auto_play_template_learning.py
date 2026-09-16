@@ -9537,6 +9537,28 @@ def test_tower_giant_warrior_sets_up_attack_gem_and_bear_hand_first(
     assert not auto_play.is_direct_attack_combat_card_label('攻击宝石')
 
 
+def test_tower_giant_warrior_prioritizes_guarded_draw_at_critical_health(
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '战士')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'profession': '战士',
+            'predecessor_treasure': '巨人之拳',
+            'floor': 16,
+            'battle': {'player_hp_critical': True},
+        },
+    )
+
+    guard = auto_play.tower_combat_sequence_bonus('tower', '守势')
+    collision = auto_play.tower_combat_sequence_bonus('tower', '撞击')
+
+    assert guard > collision
+
+
 def test_tower_warrior_plays_engine_and_draw_cards_before_plain_attacks(
     monkeypatch,
 ):
@@ -10519,6 +10541,7 @@ def test_tower_giant_warrior_keeps_infinite_attack_as_growth_bridge(monkeypatch)
 
     priorities = dict(auto_play.tower_card_reward_priority_rules('tower', '战士'))
 
+    assert priorities['守势'] > priorities['迅捷']
     assert priorities['无限攻击'] > 14.0
 
 
@@ -10635,6 +10658,60 @@ def test_tower_shop_refreshes_twice_then_returns(tmp_path, monkeypatch):
 
     assert finished is not None
     assert finished[0].label == '返回'
+
+
+def test_tower_shop_recovers_refresh_count_from_visible_text(
+    tmp_path,
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    state_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(
+        'run_id: resumed-run\n'
+        'stage: 深渊楼梯\n'
+        'floor: 10\n'
+        'active_shop: 水晶商店\n'
+        'shop_refresh_count: 0\n'
+        'shop_refresh_history:\n'
+        '  10:水晶商店: 0\n'
+        'policy:\n'
+        '  shop_refresh_limit: 2\n'
+    )
+    auto_play.write_tower_daily_state(
+        'tower',
+        {'date': '2026-09-15', 'phase': 'abyss'},
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=x,
+            y=y,
+            confidence=0.99,
+            clickability=1.8,
+            source='ocr',
+        )
+        for label, x, y in (
+            ('水晶商店', 0.50, 0.34),
+            ('已刷新2次', 0.14, 0.27),
+            ('刷新20', 0.14, 0.30),
+            ('返回', 0.27, 0.88),
+        )
+    ]
+
+    auto_play.update_tower_run_state(
+        'tower',
+        Image.new('RGB', (360, 800), color='black'),
+        buttons,
+    )
+
+    state = auto_play.load_tower_run_state('tower')
+    assert state['shop_refresh_count'] == 2
+    assert state['shop_refresh_history']['10:水晶商店'] == 2
+    selected = auto_play.tower_daily_policy_candidates('tower', buttons)
+    assert selected is not None
+    assert selected[0].label == '返回'
 
 
 def test_tower_shop_returns_after_paid_refresh_cannot_progress(
@@ -15677,10 +15754,23 @@ def test_tower_prebattle_does_not_treat_enemy_name_as_map_room():
         button for button in scored if button.label == '护盾·金币哥布林'
     )
     assert enemy.score < scored[0].score
+    decision = auto_play.decide_next_move(
+        scored,
+        min_action_score=0.5,
+        ambiguity_margin=0.25,
+        ask_on_ambiguous=False,
+        automation_config=config,
+    )
+    assert decision.recommended.label == '战斗'
+    assert 'prebattle panel' in decision.reason
 
 
-def test_tower_prefers_mystery_shop_when_only_shop_routes_remain():
+def test_tower_prefers_mystery_shop_when_only_shop_routes_remain(
+    tmp_path,
+    monkeypatch,
+):
     auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
     config = automation_config(auto_play, 'tower')
     buttons = [
         auto_play.ButtonCandidate(

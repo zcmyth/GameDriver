@@ -753,10 +753,18 @@ def tower_combat_sequence_bonus(game: str, label: str) -> float:
                     *(state.get('shop_purchases') or []),
                 )
             )
+            battle_state = state.get('battle') or {}
+            floor = int(state.get('floor') or 0)
+            guard_bonus = (
+                13.0
+                if bool(battle_state.get('player_hp_critical'))
+                else 10.0 if floor > 0 and floor % 10 == 0 else 7.0
+            )
             priorities = (
                 ('愤怒宝石', 12.0),
                 ('攻击宝石', 11.0),
                 ('迅捷', 10.0 if '魔法熊手' in equipment_text else 1.0),
+                ('守势', guard_bonus),
                 ('撞击', 6.0),
                 ('神圣斩击', 4.0),
                 ('换血', 2.0),
@@ -3082,6 +3090,16 @@ def tower_shop_refresh_key(
     return f'{int(state.get("floor") or 0)}:{shop_key}'
 
 
+def tower_visible_shop_refresh_count(labels: Iterable[str]) -> int | None:
+    counts: list[int] = []
+    for label in labels:
+        key = normalize_label(str(label))
+        match = re.search(r'(?:已|巳)?刷新\s*(\d+)\s*次', key)
+        if match:
+            counts.append(int(match.group(1)))
+    return max(counts) if counts else None
+
+
 def normalize_tower_shop_refresh_state(state: dict[str, Any]) -> None:
     history = dict(state.get('shop_refresh_history') or {})
     if not history:
@@ -5174,6 +5192,28 @@ def update_tower_run_state(
         )
         refresh_history.setdefault(active_refresh_key, 0)
         state['shop_refresh_history'] = refresh_history
+    visible_refresh_count = tower_visible_shop_refresh_count(labels)
+    active_refresh_shop = normalize_label(
+        str(visible_shop or state.get('active_shop') or '')
+    )
+    if (
+        visible_refresh_count is not None
+        and active_refresh_shop in TOWER_PURCHASABLE_SHOP_LABELS
+    ):
+        refresh_history = dict(state.get('shop_refresh_history') or {})
+        active_refresh_key = tower_shop_refresh_key(state, active_refresh_shop)
+        current_refresh_count = int(state.get('shop_refresh_count') or 0)
+        observed_refresh_count = max(
+            current_refresh_count,
+            refresh_history.get(active_refresh_key, 0),
+            visible_refresh_count,
+        )
+        state['active_shop'] = active_refresh_shop
+        state['active_shop_key'] = active_refresh_key
+        state['shop_refresh_count'] = observed_refresh_count
+        if active_refresh_key:
+            refresh_history[active_refresh_key] = observed_refresh_count
+            state['shop_refresh_history'] = refresh_history
     if phase == 'combat':
         state['awaiting_route_after_reward'] = False
         battle = state.get('battle')
@@ -7651,6 +7691,7 @@ def tower_card_reward_priority_rules(
                 ('未来汽水', 41.0),
                 ('神圣斩击', 40.0),
                 ('巨人协议', 38.0),
+                ('守势', 36.0),
                 ('迅捷', 30.0),
                 ('回忆', 28.0),
                 ('无限攻击', 24.0),
@@ -10733,6 +10774,44 @@ def decide_next_move(
             choices=[waiting],
         )
 
+    tower_prebattle_visible = bool(
+        automation_config is not None
+        and normalize_label(automation_config.game) == 'tower'
+        and any(
+            '即将发起战斗' in normalize_label(button.label)
+            for button in buttons
+        )
+    )
+    if tower_prebattle_visible:
+        battle_buttons = [
+            button
+            for button in buttons
+            if normalize_label(button.label) == '战斗'
+            and button.score >= min_action_score
+        ]
+        if battle_buttons:
+            battle = max(
+                battle_buttons,
+                key=lambda button: (
+                    button.score,
+                    button.confidence,
+                    button.clickability,
+                ),
+            )
+            return Decision(
+                status='ready',
+                reason=(
+                    'The Tower prebattle panel is open; launch the fight instead '
+                    'of probing the enemy name or build-room label.'
+                ),
+                recommended=battle,
+                choices=sorted(
+                    battle_buttons,
+                    key=lambda button: button.score,
+                    reverse=True,
+                )[:3],
+            )
+
     tower_next_floor = [
         button
         for button in buttons
@@ -11308,7 +11387,7 @@ def inspect_item_choices(
                 status='ready',
                 reason=(
                     f'低血道具口袋优先选择{target.label if target else "当前消耗品"}'
-                    '并确认；回血优先于抽牌循环。'
+                    '并确认；回血优先，无回血时用循环或回收争取本回合斩杀。'
                 ),
                 recommended=confirm,
                 choices=[button for button in (target, confirm) if button is not None],
