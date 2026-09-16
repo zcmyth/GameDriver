@@ -636,6 +636,9 @@
 - On deep-floor maps, visit gold/crystal goblins and purchasable shops before
   ordinary combat. Prefer healing/max HP next, then draw, mana, and cycle; allow
   at most two shop refreshes before moving on.
+- Every shop can show a sparkling free-reward prop in its upper-right background.
+  Claim that sparkle for gold or crystals before buying, refreshing, changing a
+  card, or leaving; check again whenever entering a different shop.
 - Attack, damage, defense, HP/health, crit, and other stat increases are high priority when permanent or repeated per battle.
 - Temporary one-battle effects are lower priority than permanent growth.
 - Do not treat **消耗水晶** / crystal cost as bad by itself. Water crystals are
@@ -690,6 +693,9 @@
   physical attack increases. Strong offensive treasure.
 - **愤怒宝石**: observed effect draws a physical attack from the draw pile when
   using a physical attack card. Good if active before a multi-attack turn.
+- **防具加固**: doubles current shield and then removes itself. Preserve it until
+  **举盾**, **守势**, or **启动防守** has visibly succeeded; if both are in hand,
+  always build shield first. Never spend it on zero shield.
 - **怒火**, **舍命一击**, **舍命防守**, and **换血** can cost HP or imply
   self-damage. Avoid them unless healthy and they clearly create lethal damage.
 

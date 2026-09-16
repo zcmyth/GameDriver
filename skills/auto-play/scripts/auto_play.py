@@ -161,6 +161,7 @@ TOWER_PURCHASABLE_SHOP_LABELS = {
     '神秘商店',
     '神桃商店',
 }
+TOWER_SHOP_SPARKLE_LABEL = '领取商店闪光奖励'
 DEFAULT_TURN_HISTORY_LIMIT = 500
 DEFAULT_PERIODIC_OCR_TUNE_EVERY_TURNS = 50
 DEFAULT_PERIODIC_OCR_TUNE_ITERATIONS = 10
@@ -1606,6 +1607,75 @@ def tower_shop_empty_ocr_exit_candidate(
     )
 
 
+def tower_shop_sparkle_candidate(
+    automation_config: GameAutomationConfig,
+    buttons: list[ButtonCandidate],
+    image: Image.Image | None,
+) -> ButtonCandidate | None:
+    if normalize_label(automation_config.game) != 'tower' or image is None:
+        return None
+
+    labels = {normalize_label(button.label) for button in buttons}
+    shop_labels = TOWER_PURCHASABLE_SHOP_LABELS | {'魔术商店'}
+    visible_shop = next((label for label in shop_labels if label in labels), '')
+    if not visible_shop:
+        return None
+
+    state = load_tower_run_state(automation_config.game)
+    shop_key = tower_shop_refresh_key(state, visible_shop) or (
+        f'{int(state.get("floor") or 0)}:{visible_shop}'
+    )
+    claimed_keys = {
+        str(value) for value in state.get('claimed_shop_sparkle_keys') or []
+    }
+    if shop_key and shop_key in claimed_keys:
+        return None
+
+    rgb = np.asarray(image.convert('RGB').resize((360, 800)))
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
+    hue, saturation, value = cv2.split(hsv)
+    yy, xx = np.indices(value.shape)
+    upper_right = (
+        (xx >= 225)
+        & (xx <= 355)
+        & (yy >= 90)
+        & (yy <= 275)
+    )
+    yellow_glow = (
+        (hue >= 10)
+        & (hue <= 45)
+        & (saturation >= 75)
+        & (value >= 155)
+    )
+    white_glint = (saturation <= 100) & (value >= 205)
+    sparkle_pixels = upper_right & (yellow_glow | white_glint)
+    if int(sparkle_pixels.sum()) < 90:
+        return None
+
+    heat = cv2.GaussianBlur(
+        sparkle_pixels.astype(np.float32),
+        (41, 41),
+        0,
+    )
+    peak_y, peak_x = np.unravel_index(int(np.argmax(heat)), heat.shape)
+    peak_strength = float(heat[peak_y, peak_x])
+    if peak_strength < 0.08:
+        return None
+
+    return ButtonCandidate(
+        label=TOWER_SHOP_SPARKLE_LABEL,
+        x=float(peak_x) / 360.0,
+        y=float(peak_y) / 800.0,
+        confidence=min(0.99, 0.88 + peak_strength * 0.1),
+        clickability=30.0,
+        source='vision',
+        reason=(
+            '商店右上背景出现可领取的闪光点；先拿免费金币或水晶，'
+            '再购买、刷新或离店。'
+        ),
+    )
+
+
 def tower_task_reward_badge_candidate(
     automation_config: GameAutomationConfig,
     buttons: list[ButtonCandidate],
@@ -1690,6 +1760,13 @@ def configured_extra_candidates(
     tower_revive = tower_ad_revive_candidate(automation_config, buttons)
     if tower_revive is not None:
         extras.append(tower_revive)
+    tower_shop_sparkle = tower_shop_sparkle_candidate(
+        automation_config,
+        context_buttons if context_buttons is not None else buttons,
+        image,
+    )
+    if tower_shop_sparkle is not None:
+        extras.append(tower_shop_sparkle)
     tower_task_reward = tower_task_reward_badge_candidate(
         automation_config,
         context_buttons if context_buttons is not None else buttons,
@@ -3535,6 +3612,26 @@ def tower_daily_policy_candidates(
         return []
 
     run_state = load_tower_run_state(game)
+    shop_sparkle = next(
+        (
+            button
+            for button in buttons
+            if normalize_label(button.label)
+            == normalize_label(TOWER_SHOP_SPARKLE_LABEL)
+        ),
+        None,
+    )
+    if shop_sparkle is not None:
+        return [
+            replace(
+                shop_sparkle,
+                clickability=max(shop_sparkle.clickability, 30.0),
+                reason=(
+                    '商店右上有免费闪光奖励；先领取金币或水晶，'
+                    '再购买、刷新或离店。'
+                ),
+            )
+        ]
     active_abyss_phases = {
         'initial_setup',
         'climbing_map',
@@ -5392,6 +5489,31 @@ def update_tower_run_state(
                     round(clicked_candidate.x, 6),
                     round(clicked_candidate.y, 6),
                 ]
+        if (
+            action_succeeded
+            and clicked_key == normalize_label(TOWER_SHOP_SPARKLE_LABEL)
+        ):
+            sparkle_key = str(state.get('active_shop_key') or '').strip()
+            if not sparkle_key:
+                sparkle_key = tower_shop_refresh_key(state)
+            if not sparkle_key:
+                sparkle_shop = normalize_label(
+                    str(
+                        state.get('active_shop')
+                        or state.get('last_room_action')
+                        or ''
+                    )
+                )
+                if sparkle_shop:
+                    sparkle_key = (
+                        f'{int(state.get("floor") or 0)}:{sparkle_shop}'
+                    )
+            claimed_sparkle_keys = list(
+                state.get('claimed_shop_sparkle_keys') or []
+            )
+            if sparkle_key and sparkle_key not in claimed_sparkle_keys:
+                claimed_sparkle_keys.append(sparkle_key)
+            state['claimed_shop_sparkle_keys'] = claimed_sparkle_keys
         if (
             action_succeeded
             and normalize_label(
@@ -9740,6 +9862,7 @@ def score_buttons(
     memory: dict[str, Any],
     automation_config: GameAutomationConfig | None = None,
     recent_actions: list[str] | None = None,
+    recent_successful_actions: list[str] | None = None,
 ) -> list[ButtonCandidate]:
     preferred = {normalize_label(item) for item in memory['preferred']}
     avoid = {normalize_label(item) for item in memory['avoid']}
@@ -9758,6 +9881,14 @@ def score_buttons(
         normalize_label(label) for label in (recent_actions or []) if label
     }
     latest_action_key = normalize_label((recent_actions or [''])[-1])
+    successful_actions = (
+        recent_successful_actions
+        if recent_successful_actions is not None
+        else recent_actions
+    )
+    latest_successful_action_key = normalize_label(
+        (successful_actions or [''])[-1]
+    )
     tower_last_named_room_key = ''
     tower_last_room_position: list[Any] = []
     tower_awaiting_route_after_reward = False
@@ -9848,15 +9979,23 @@ def score_buttons(
             for button in non_end_buttons
         )
     )
+    tower_shield_builder_labels = ('举盾', '守势', '胜势', '启动防守')
     tower_basic_shield_visible = any(
         is_tower_playable_combat_card_candidate(button, automation_config)
-        and '举盾' in normalize_label(button.label)
+        and any(
+            label in normalize_label(button.label)
+            for label in tower_shield_builder_labels
+        )
         for button in non_end_buttons
     )
     tower_shield_multiplier_visible = any(
         is_tower_playable_combat_card_candidate(button, automation_config)
         and '防具加固' in normalize_label(button.label)
         for button in non_end_buttons
+    )
+    tower_recent_shield_builder = any(
+        label in latest_successful_action_key
+        for label in tower_shield_builder_labels
     )
     playable_combat_card_visible = combat_card_count > 0
     direct_attack_combat_card_visible = end_visible and any(
@@ -10148,6 +10287,12 @@ def score_buttons(
         reason = button.reason
         is_defeat_recovery = key in defeat_recovery_labels
         score = button.confidence + (0.4 * button.clickability)
+        if key == normalize_label(TOWER_SHOP_SPARKLE_LABEL):
+            score += 80.0
+            reason = (
+                f'{reason} Claim the free shop sparkle before every purchase, '
+                'refresh, or exit.'
+            ).strip()
         score += tower_trainer_task_bonus(button, buttons, automation_config)
         score += tower_card_upgrade_bonus(button, buttons, automation_config)
         if tower_talking_stairs_visible:
@@ -10574,14 +10719,30 @@ def score_buttons(
                     f'{reason} Use remaining all-mana cores only after every '
                     'other playable card has resolved.'
                 ).strip()
-            if tower_basic_shield_visible and tower_shield_multiplier_visible:
-                if '举盾' in key:
+            if tower_shield_multiplier_visible:
+                is_shield_builder = any(
+                    label in key for label in tower_shield_builder_labels
+                )
+                if tower_basic_shield_visible and is_shield_builder:
                     score += 8.0
                     reason = (
                         f'{reason} Build shield before doubling it.'
                     ).strip()
                 elif '防具加固' in key:
-                    score -= 8.0
+                    if tower_basic_shield_visible:
+                        score -= 12.0
+                    elif tower_recent_shield_builder:
+                        score += 8.0
+                        reason = (
+                            f'{reason} Double shield created by the previous '
+                            'verified card play.'
+                        ).strip()
+                    else:
+                        score -= 12.0
+                        reason = (
+                            f'{reason} Preserve 防具加固 until a shield '
+                            'builder succeeds.'
+                        ).strip()
             if (
                 button.source == 'template'
                 and navigation_arrow_visible
@@ -11673,12 +11834,21 @@ def recent_turn_dirs(root: Path, limit: int) -> list[Path]:
     return turn_dirs[-limit:]
 
 
-def action_label_from_metadata(turn_dir: Path) -> str | None:
+def action_label_from_metadata(
+    turn_dir: Path,
+    *,
+    require_changed: bool = False,
+) -> str | None:
     metadata_path = turn_dir / 'metadata.yaml'
     if not metadata_path.exists():
         return None
     payload = yaml.safe_load(metadata_path.read_text()) or {}
-    action = (payload.get('worklog') or {}).get('action_taken') or {}
+    worklog = payload.get('worklog') or {}
+    if require_changed:
+        verification = worklog.get('state_verification') or {}
+        if normalize_label(str(verification.get('status') or '')) != 'changed':
+            return None
+    action = worklog.get('action_taken') or {}
     label = str(action.get('label') or '').strip()
     return label or None
 
@@ -11688,6 +11858,20 @@ def recent_action_labels(root: Path, limit: int) -> list[str]:
         label
         for turn_dir in recent_turn_dirs(root, limit * 4)
         if (label := action_label_from_metadata(turn_dir))
+    ]
+    return labels[-limit:]
+
+
+def recent_successful_action_labels(root: Path, limit: int) -> list[str]:
+    labels = [
+        label
+        for turn_dir in recent_turn_dirs(root, limit * 4)
+        if (
+            label := action_label_from_metadata(
+                turn_dir,
+                require_changed=True,
+            )
+        )
     ]
     return labels[-limit:]
 
@@ -12905,6 +13089,10 @@ def run_turn(args: argparse.Namespace) -> TurnResult:
         candidate_buttons,
     )
     recent_actions = recent_action_labels(turns_root(args), 6)
+    recent_successful_actions = recent_successful_action_labels(
+        turns_root(args),
+        6,
+    )
     candidate_buttons = [
         *candidate_buttons,
         *configured_extra_candidates(
@@ -13037,6 +13225,7 @@ def run_turn(args: argparse.Namespace) -> TurnResult:
         memory,
         automation_config,
         recent_actions=recent_actions,
+        recent_successful_actions=recent_successful_actions,
     )
     daily_state = (
         load_tower_daily_state(args.game)

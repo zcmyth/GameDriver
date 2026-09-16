@@ -9945,7 +9945,94 @@ def test_tower_builds_shield_before_doubling_it(monkeypatch):
     assert scored[0].label == 'Visible playable card: 举盾'
     multiplier = next(button for button in scored if '防具加固' in button.label)
     core = next(button for button in scored if '制造核心' in button.label)
-    assert scored[0].score > multiplier.score > core.score
+    assert scored[0].score > multiplier.score
+    assert multiplier.score <= core.score
+
+
+def test_tower_preserves_shield_multiplier_without_verified_shield(monkeypatch):
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '战士')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'stage': '深渊楼梯',
+            'profession': '战士',
+            'predecessor_treasure': '巨人之拳',
+        },
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label=label,
+            x=x,
+            y=y,
+            confidence=0.96,
+            clickability=7.4 if y < 0.9 else 2.0,
+            source='vision' if y < 0.9 else 'ocr',
+        )
+        for label, x, y in (
+            ('Visible playable card: 防具加固！', 0.20, 0.53),
+            ('Visible playable card: 普通攻击', 0.50, 0.53),
+            ('结束第1回合', 0.50, 0.92),
+        )
+    ]
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+        recent_actions=['Visible playable card: 举盾'],
+        recent_successful_actions=['Visible playable card: 无限攻击'],
+    )
+
+    attack = next(button for button in scored if '普通攻击' in button.label)
+    multiplier = next(button for button in scored if '防具加固' in button.label)
+    assert scored[0] == attack
+    assert multiplier.score < 0
+
+
+def test_tower_uses_shield_multiplier_after_verified_shield(monkeypatch):
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '战士')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'stage': '深渊楼梯',
+            'profession': '战士',
+            'predecessor_treasure': '巨人之拳',
+        },
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='Visible playable card: 防具加固！',
+            x=0.20,
+            y=0.53,
+            confidence=0.96,
+            clickability=7.4,
+            source='vision',
+        ),
+        auto_play.ButtonCandidate(
+            label='结束第1回合',
+            x=0.50,
+            y=0.92,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        ),
+    ]
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+        recent_actions=['Visible playable card: 举盾'],
+        recent_successful_actions=['Visible playable card: 举盾'],
+    )
+
+    assert scored[0].label == 'Visible playable card: 防具加固！'
 
 
 def test_tower_manufacture_core_is_played_when_only_duplicate_cores_remain(
@@ -10783,6 +10870,110 @@ def test_tower_shop_returns_after_paid_refresh_cannot_progress(
 
     assert selected is not None
     assert selected[0].label == '返回'
+
+
+def test_tower_shop_sparkle_is_claimed_before_shopping(monkeypatch):
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'stage': '深渊楼梯',
+            'floor': 8,
+            'active_shop': '金币商店',
+        },
+    )
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_daily_state',
+        lambda _game: {'phase': 'abyss'},
+    )
+    image = Image.new('RGB', (360, 800), color='black')
+    draw = ImageDraw.Draw(image)
+    draw.ellipse((270, 180, 325, 245), fill=(255, 210, 45))
+    draw.ellipse((282, 192, 307, 220), fill=(255, 255, 235))
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='金币商店',
+            x=0.5,
+            y=0.34,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        )
+    ]
+
+    sparkle = auto_play.tower_shop_sparkle_candidate(config, buttons, image)
+
+    assert sparkle is not None
+    assert sparkle.label == auto_play.TOWER_SHOP_SPARKLE_LABEL
+    assert 0.72 <= sparkle.x <= 0.91
+    assert 0.20 <= sparkle.y <= 0.31
+    scored = auto_play.score_buttons(
+        [
+            sparkle,
+            auto_play.ButtonCandidate(
+                label='神圣斩击',
+                x=0.2,
+                y=0.5,
+                confidence=0.99,
+                clickability=2.0,
+                source='ocr',
+            ),
+        ],
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+    )
+    assert scored[0].label == auto_play.TOWER_SHOP_SPARKLE_LABEL
+    daily = auto_play.tower_daily_policy_candidates(
+        'tower',
+        [
+            sparkle,
+            auto_play.ButtonCandidate(
+                label='刷新●10',
+                x=0.14,
+                y=0.30,
+                confidence=0.99,
+                clickability=22.0,
+                source='ocr',
+            ),
+        ],
+    )
+    assert daily is not None
+    assert daily[0].label == auto_play.TOWER_SHOP_SPARKLE_LABEL
+
+
+def test_tower_shop_sparkle_is_only_claimed_once(monkeypatch):
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'stage': '深渊楼梯',
+            'floor': 8,
+            'active_shop': '金币商店',
+            'claimed_shop_sparkle_keys': ['8:金币商店'],
+        },
+    )
+    image = Image.new('RGB', (360, 800), color=(255, 220, 70))
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='金币商店',
+            x=0.5,
+            y=0.34,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        )
+    ]
+
+    assert auto_play.tower_shop_sparkle_candidate(
+        config,
+        buttons,
+        image,
+    ) is None
 
 
 def test_tower_does_not_globally_mark_shop_choices_or_refresh_ineffective(
