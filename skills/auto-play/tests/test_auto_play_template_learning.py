@@ -9559,6 +9559,28 @@ def test_tower_giant_warrior_prioritizes_guarded_draw_at_critical_health(
     assert guard > collision
 
 
+def test_tower_giant_warrior_uses_disposable_guard_before_plain_attacks(
+    monkeypatch,
+):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '战士')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'profession': '战士',
+            'predecessor_treasure': '巨人之拳',
+            'floor': 6,
+            'battle': {'player_hp_critical': False},
+        },
+    )
+
+    guard = auto_play.tower_combat_sequence_bonus('tower', '启动防守')
+    collision = auto_play.tower_combat_sequence_bonus('tower', '撞击')
+
+    assert guard > collision
+
+
 def test_tower_warrior_plays_engine_and_draw_cards_before_plain_attacks(
     monkeypatch,
 ):
@@ -10542,6 +10564,7 @@ def test_tower_giant_warrior_keeps_infinite_attack_as_growth_bridge(monkeypatch)
     priorities = dict(auto_play.tower_card_reward_priority_rules('tower', '战士'))
 
     assert priorities['守势'] > priorities['迅捷']
+    assert priorities['启动防守'] > priorities['迅捷']
     assert priorities['无限攻击'] > 14.0
 
 

@@ -765,6 +765,10 @@ def tower_combat_sequence_bonus(game: str, label: str) -> float:
                 ('攻击宝石', 11.0),
                 ('迅捷', 10.0 if '魔法熊手' in equipment_text else 1.0),
                 ('守势', guard_bonus),
+                (
+                    '启动防守',
+                    12.0 if bool(battle_state.get('player_hp_critical')) else 8.0,
+                ),
                 ('撞击', 6.0),
                 ('神圣斩击', 4.0),
                 ('换血', 2.0),
@@ -7692,6 +7696,7 @@ def tower_card_reward_priority_rules(
                 ('神圣斩击', 40.0),
                 ('巨人协议', 38.0),
                 ('守势', 36.0),
+                ('启动防守', 34.0),
                 ('迅捷', 30.0),
                 ('回忆', 28.0),
                 ('无限攻击', 24.0),
