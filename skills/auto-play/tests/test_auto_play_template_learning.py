@@ -9679,6 +9679,52 @@ def test_tower_mage_tracks_cold_before_allowing_electrolysis(
     assert state['battle']['cold_applied'] is False
 
 
+def test_tower_tracks_shield_builder_until_end_of_turn(tmp_path, monkeypatch):
+    auto_play = load_auto_play_module()
+    monkeypatch.setattr(auto_play, 'local_root', lambda: tmp_path)
+    state_path = tmp_path / 'games' / 'tower' / 'active_run.yaml'
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(
+        'run_id: deep-run\n'
+        'stage: 深渊楼梯\n'
+        'phase: combat\n'
+        'profession: 战士\n'
+        'battle:\n'
+        '  battle_id: deep-run-b001\n'
+    )
+    image = Image.new('RGB', (360, 800), color='black')
+
+    auto_play.update_tower_run_state(
+        'tower',
+        image,
+        [],
+        clicked_label='Visible playable card: 启动防守',
+        action_succeeded=True,
+    )
+    state = auto_play.load_tower_run_state('tower')
+    assert state['battle']['shield_built_this_turn'] is True
+
+    auto_play.update_tower_run_state(
+        'tower',
+        image,
+        [],
+        clicked_label='Visible playable card: 迅捷',
+        action_succeeded=True,
+    )
+    state = auto_play.load_tower_run_state('tower')
+    assert state['battle']['shield_built_this_turn'] is True
+
+    auto_play.update_tower_run_state(
+        'tower',
+        image,
+        [],
+        clicked_label='结束第1回合',
+        action_succeeded=True,
+    )
+    state = auto_play.load_tower_run_state('tower')
+    assert state['battle']['shield_built_this_turn'] is False
+
+
 def test_tower_electrolysis_build_requires_per_action_local_ocr(
     tmp_path,
     monkeypatch,
@@ -10030,6 +10076,53 @@ def test_tower_uses_shield_multiplier_after_verified_shield(monkeypatch):
         automation_config=config,
         recent_actions=['Visible playable card: 举盾'],
         recent_successful_actions=['Visible playable card: 举盾'],
+    )
+
+    assert scored[0].label == 'Visible playable card: 防具加固！'
+
+
+def test_tower_uses_shield_multiplier_after_intervening_card(monkeypatch):
+    auto_play = load_auto_play_module()
+    config = automation_config(auto_play, 'tower')
+    monkeypatch.setattr(auto_play, 'tower_run_profession', lambda _game: '战士')
+    monkeypatch.setattr(
+        auto_play,
+        'load_tower_run_state',
+        lambda _game: {
+            'stage': '深渊楼梯',
+            'profession': '战士',
+            'predecessor_treasure': '巨人之拳',
+            'battle': {'shield_built_this_turn': True},
+        },
+    )
+    buttons = [
+        auto_play.ButtonCandidate(
+            label='Visible playable card: 防具加固！',
+            x=0.20,
+            y=0.53,
+            confidence=0.96,
+            clickability=7.4,
+            source='vision',
+        ),
+        auto_play.ButtonCandidate(
+            label='结束第1回合',
+            x=0.50,
+            y=0.92,
+            confidence=0.99,
+            clickability=2.0,
+            source='ocr',
+        ),
+    ]
+
+    scored = auto_play.score_buttons(
+        buttons,
+        memory={'preferred': [], 'avoid': [], 'ineffective': []},
+        automation_config=config,
+        recent_actions=['Visible playable card: 启动防守', '迅捷'],
+        recent_successful_actions=[
+            'Visible playable card: 启动防守',
+            '迅捷',
+        ],
     )
 
     assert scored[0].label == 'Visible playable card: 防具加固！'

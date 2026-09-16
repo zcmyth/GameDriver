@@ -5429,6 +5429,11 @@ def update_tower_run_state(
         if action_succeeded and effective_phase == 'combat':
             battle = state.get('battle')
             if isinstance(battle, dict):
+                shield_builders = ('举盾', '守势', '胜势', '启动防守')
+                if any(builder in clicked_key for builder in shield_builders):
+                    battle['shield_built_this_turn'] = True
+                elif clicked_key and is_end_turn_label(clicked_key):
+                    battle['shield_built_this_turn'] = False
                 if clicked_key and is_end_turn_label(clicked_key) and battle.get(
                     'enemy_sacred_finisher_range'
                 ):
@@ -9894,6 +9899,7 @@ def score_buttons(
     tower_awaiting_route_after_reward = False
     tower_run_state: dict[str, Any] = {}
     tower_completed_shop_labels: set[str] = set()
+    tower_shield_built_this_turn = False
     if (
         automation_config is not None
         and normalize_label(automation_config.game) == 'tower'
@@ -9908,6 +9914,11 @@ def score_buttons(
         tower_awaiting_route_after_reward = bool(
             tower_run_state.get('awaiting_route_after_reward')
         )
+        tower_battle = tower_run_state.get('battle')
+        if isinstance(tower_battle, dict):
+            tower_shield_built_this_turn = bool(
+                tower_battle.get('shield_built_this_turn')
+            )
         current_floor_prefix = f'{int(tower_run_state.get("floor") or 0)}:'
         tower_completed_shop_labels = {
             normalize_label(str(value).removeprefix(current_floor_prefix))
@@ -10731,11 +10742,14 @@ def score_buttons(
                 elif '防具加固' in key:
                     if tower_basic_shield_visible:
                         score -= 12.0
-                    elif tower_recent_shield_builder:
+                    elif (
+                        tower_recent_shield_builder
+                        or tower_shield_built_this_turn
+                    ):
                         score += 8.0
                         reason = (
-                            f'{reason} Double shield created by the previous '
-                            'verified card play.'
+                            f'{reason} Double shield created by a verified card '
+                            'play in the current turn.'
                         ).strip()
                     else:
                         score -= 12.0
